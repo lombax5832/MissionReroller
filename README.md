@@ -1,7 +1,15 @@
 # Mission Reroller — development only
 
-**Next in-game test: [v0.20.0 docked dialog](docs/DOCKED_DIALOG_TEST.md).**
-Not yet validated in game; only offline tests were run. The dialog is a panel
+**Next in-game test: [v0.20.1 quiet data gaps](docs/DOCKED_DIALOG_TEST.md).**
+Not yet validated in game; only offline tests were run. A brief gap in the
+planet data no longer dims the dialog, changes its status or blocks clicks.
+REROLL OPERATIONS pressed during a gap waits and starts on fresh data. The
+dialog changes only when the returned data differs. A gap of 1.5 seconds or
+more is still reported.
+
+**Validated by log: [v0.20.0 docked dialog](docs/DOCKED_DIALOG_TEST.md).**
+Three requests were completed from the panel in game and verified. The log
+does not show how the panel looked. The dialog is a panel
 docked to the right edge of the screen, without dimming the map. Missions,
 modifiers and enemy forces are three sections, one open at a time, and a
 closed section shows its summary. Enemy forces are chosen per checked mission

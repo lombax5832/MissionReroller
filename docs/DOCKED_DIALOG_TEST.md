@@ -1,18 +1,62 @@
-# Docked dialog — v0.20.0
+# Docked dialog — v0.20.0, quiet data gaps — v0.20.1
+
+## Result, 2026-09-29 session (v0.20.0)
+
+The log shows the panel opened with Ctrl+Shift+F8 and three requests
+completed from it on planet 268, each ending in
+`PUBLICATION_STATE_VERIFIED … map_ui_row_confirmed=true`: two published a new
+seed after 1 and 192 seeds, one selected an operation that already matched.
+No `STOPPED` or `BLOCKED` line was written. The log does not show how the
+panel looked.
+
+The user reported that the panel sometimes showed `UPDATING PLANET DATA. YOUR
+CHOICES ARE KEPT` for a moment and ignored clicks meanwhile. v0.20.1 changes
+that; see *Quiet data gaps* below.
 
 ## Status
 
-Not validated in game. Only offline tests were run: the layout, the retained
-drawing against a recording engine, and the dialog logic with the real click
-router. Nobody has seen this panel drawn by the game yet. What those tests
-cannot show is listed under *Limits*.
+v0.20.1 is not validated in game. Only offline tests were run: the layout,
+the retained drawing against a recording engine, and the dialog logic with
+the real click router. What those tests cannot show is listed under *Limits*.
 
 Search, prediction, publication, compatibility, the catalogue, the hotkey,
 the mouse gate and the click router are unchanged from v0.19.0.
 
+## Quiet data gaps — v0.20.1
+
+The game's planet data is briefly unavailable now and then, for example
+while a request to the backend is pending. v0.20.0 dimmed every row, showed
+the status above and refused REROLL OPERATIONS until the data returned.
+
+- **A gap is not shown.** The rows, the status and the buttons stay as they
+  were, and the request can be edited. It is edited against the list the
+  panel already shows.
+- **The panel changes only when the data did.** When the data returns
+  unchanged, nothing happens. When it returns different, missions and rules
+  the planet no longer offers are removed, with `UNAVAILABLE FILTERS CLEARED
+  FOR THIS PLANET/DIFFICULTY`, as before. A refresh of the same planet and
+  difficulty no longer turns the mission list back to its first page.
+- **REROLL OPERATIONS during a gap waits.** The panel shows a search in its
+  first step, `1 CHECK PLANET` and `CHECKING PLANET DATA`, and starts it as
+  soon as the data returns. The request is validated against that fresh data
+  like any other; a search is never started from the retained list. CANCEL
+  SEARCH, CLOSE, alt-tab and viewing another planet drop the waiting request.
+- **A gap of 1.5 seconds or more is reported** with `UPDATING PLANET DATA.
+  YOUR CHOICES ARE KEPT`. The request stays editable. A waiting request is
+  given up after 10 seconds; the panel then reads `PLANET DATA DID NOT
+  ARRIVE; TRY AGAIN` once the data is back.
+- `OPERATION IN PROGRESS …` stays through a gap instead of disappearing for
+  its duration.
+
+To test: use the panel for a few minutes and report any moment in which rows
+go dim or the status changes without a click. Start a search several times;
+if one takes noticeably longer than the usual two seconds before seeds are
+counted, note it. The log line `DIALOG_SEARCH` is written when the search
+really starts, not when the button is clicked.
+
 ## Install
 
-Install `releases/Mission-Reroller-v0.20.0.zip` in place of the previous package,
+Install `releases/Mission-Reroller-v0.20.1.zip` in place of the previous package,
 Purge / Deploy, and restart. Remain alone on your ship for this supervised test.
 If the panel is unusable, reinstall `Mission-Reroller-v0.19.0.zip`; the two
 builds differ only in the dialog.
@@ -60,7 +104,7 @@ Status wording that changed:
 | Nothing set | `Select missions; difficulty follows the map` | `CHOOSE WHAT THE OPERATION MUST CONTAIN` |
 | Something set | the same | `READY TO SEARCH` |
 | No planet shown | `Choose a planet and map difficulty` | `OPEN A PLANET ON THE WAR TABLE FIRST` |
-| Planet data updating | `Updating planet data; filters retained` | `UPDATING PLANET DATA. YOUR CHOICES ARE KEPT` |
+| Planet data updating | `Updating planet data; filters retained` | nothing for 1.5 seconds (v0.20.1), then `UPDATING PLANET DATA. YOUR CHOICES ARE KEPT` |
 | Operation in progress | `This operation is in progress; its missions cannot be rerolled` | `OPERATION IN PROGRESS. FINISH OR ABANDON IT TO REROLL` |
 
 Search results, errors and the reasons for dimmed missions keep their text.
@@ -107,7 +151,7 @@ Report what differs from the description, with a screenshot if possible.
 
 `MissionRerollerExperiment.log` has the same lines as v0.19.0. Two differ:
 
-- At start: `Mission Reroller 0.20.0 docked dialog; …` and
+- At start: `Mission Reroller 0.20.1 docked dialog; …` and
   `Mission filters: Ctrl+Shift+F8; native cursor; docked panel; …`.
 - `MODAL_OPEN`, `DIALOG_SEARCH`, `LUA_SEARCH_…` and the publication lines are
   unchanged. Constellations are logged with the game's tag as before.

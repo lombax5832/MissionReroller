@@ -3,7 +3,7 @@ from pathlib import Path
 import sys
 import build_identity_probe as probe
 
-VERSION='0.20.0'
+VERSION='0.20.1'
 def main(output=None):
     output=Path(output) if output else probe.build.ROOT/'releases'/f'Mission-Reroller-v{VERSION}.zip'
     probe.build.build_addon(probe.build_combined.MODULE,probe.source(search=True,publish=True,dialog=True),

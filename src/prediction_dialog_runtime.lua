@@ -39,6 +39,10 @@ do
     end
     local catalogue,catalogue_key,catalogue_view
     local running=false
+    -- Planet data is briefly unavailable now and then. since: when the gap
+    -- began. queued: when a start was requested during it. fixed: the last
+    -- known answer, kept through the gap.
+    local gap={}
     -- The outcome of the last search, or an error. Editing the request
     -- discards it.
     local report,report_tone
@@ -65,8 +69,8 @@ do
     local function friendly(tag)return ((Constellations.names[tag] or 'tag '..tag):gsub(' %b()$',''))end
     -- Closing the dialog cancels a running search.
     local function close()
-        if running then report,report_tone='Search cancelled','idle' end
-        M.cancel_requested=running;running=false;router:close()
+        if running or gap.queued then report,report_tone='Search cancelled','idle' end
+        M.cancel_requested=running;running=false;gap.queued=nil;router:close()
     end
     local function face()
         local function hash(a)local b=read(a,8);return string.format('%08x%08x',u(b,4),u(b,0))end
@@ -127,6 +131,19 @@ do
     validate_search_request=function(s,request)
         FilterCatalogue.validate(catalogue_for(s,request.difficulty,Search.scope(request.scope)),request.required,request.modifiers,request.constellations)
     end
+    local function begin(s)
+        -- Refresh eligibility immediately before accepting a request.
+        local ok,err=pcall(function()FilterCatalogue.validate(catalogue_for(s,difficulty,scope),selected,modifiers,tag_filter())end)
+        if ok then
+            local required,rules={},{}
+            for id,v in pairs(selected)do required[id]=v end
+            for id,v in pairs(modifiers)do rules[id]=v end
+            M.search_options={difficulty=difficulty,required=required,modifiers=rules,constellations=tag_filter(),
+                scope=scope and {region=scope.region} or nil}
+            M.request_search=true;M.search_attempts=0;running=true;report,report_tone='Checking planet data','idle'
+            emit('DIALOG_SEARCH planet='..s.planet..' region='..(scope and scope.region or 'all')..' difficulty='..difficulty)
+        else report,report_tone=tostring(err),'bad' end
+    end
     dialog_tick=function(focused,now)
         if not panel then init()end
         if running and (terminal[M.status] or tostring(M.status):find('STOPPED',1,true))then
@@ -136,13 +153,14 @@ do
         end
         if not focused then
             if router then dialog_release('focus lost; search continues')end
+            if gap.queued then gap.queued=nil;report,report_tone='Search cancelled','idle' end
             key_down=true;return
         end
         local down=user32.GetAsyncKeyState(0x11)<0 and user32.GetAsyncKeyState(0x10)<0 and user32.GetAsyncKeyState(0x77)<0
         if down and not key_down then
             if router then close()
             else
-                catalogue_key=nil;section,mission_page='missions',1
+                catalogue_key=nil;section,mission_page='missions',1;gap={}
                 local ok,region=pcall(pointed_region)
                 scope=ok and region and {region=region} or nil
                 router=make_router(gate);router:open()
@@ -170,7 +188,9 @@ do
             if key~=catalogue_key then
                 local ok,value=pcall(catalogue_for,s,difficulty,scope)
                 if ok then
-                    catalogue=value;catalogue_key=key;catalogue_view=view;mission_page=1
+                    -- Refreshed data of the same view keeps the page.
+                    if view~=catalogue_view then mission_page=1 end
+                    catalogue=value;catalogue_key=key;catalogue_view=view
                     local removed=false
                     for id in pairs(selected)do if not catalogue.mission_set[id]then selected[id]=nil;removed=true end end
                     for id in pairs(modifiers)do if not catalogue.modifier_set[id]then modifiers[id]=nil;removed=true end end
@@ -187,8 +207,11 @@ do
         -- Retain presentation only while the independently read UI still names
         -- the same planet/difficulty. Never use retained data to start a search.
         local retained=not s and not running and catalogue and view==catalogue_view
+        -- A short gap is not shown and does not block editing: the request is
+        -- edited against the retained catalogue and fresh data prunes it.
+        gap.since=retained and (gap.since or now) or nil
+        local overdue=retained and now-gap.since>=1.5
         local display=(s or running or retained) and catalogue
-        local locked=running or not s
         local groups=active_groups()
         local group=groups[1]
         for _,id in ipairs(groups)do if id==group_choice then group=id end end
@@ -199,7 +222,29 @@ do
         for _ in pairs(modifiers)do modifier_rules=modifier_rules+1 end
         for _,tags in pairs(filter.groups)do for _ in pairs(tags)do tag_rules=tag_rules+1 end end
         local rules=#names+modifier_rules+tag_rules
-        local stale=retained and 'Waiting for fresh planet data' or nil
+        -- The operation in progress keeps its missions; a city has no other
+        -- operation at this difficulty to reroll.
+        if s then
+            gap.fixed=false
+            if scope then
+                local row,level=M.active_row(s)
+                gap.fixed=row~=nil and level==difficulty and accepts(row)
+            end
+        elseif not retained then gap.fixed=false end
+        local fixed=gap.fixed
+        local compatible,compatibility_reason=true,nil
+        if catalogue then compatible,compatibility_reason=FilterCatalogue.possible(catalogue,selected,modifiers,filter)end
+        -- A start requested during a gap waits for fresh data, and is then
+        -- validated like any other.
+        if gap.queued then
+            if s then
+                gap.queued=nil
+                if compatible and not fixed and rules>0 then begin(s)end
+            elseif not retained then gap.queued=nil;report,report_tone='Planet changed; search not started','warn'
+            elseif now-gap.queued>=10 then gap.queued=nil;report,report_tone='Planet data did not arrive; try again','warn' end
+        end
+        local busy=running or gap.queued~=nil
+        local locked=busy or not (s or retained)
         local items,pages,tabs,forced={},1,{},{}
         if display and section=='missions' then
             local available=catalogue.missions or {}
@@ -211,12 +256,11 @@ do
                     local proposed={};for id,v in pairs(selected)do proposed[id]=v end;proposed[option.id]=true
                     enabled,reason=FilterCatalogue.possible(catalogue,proposed,modifiers,filter)
                 end
-                if retained then enabled=false;reason=stale end
                 items[#items+1]={id=option.id,name=option.name,enabled=enabled,reason=reason}
             end
         elseif display and section=='modifiers' then
             for _,option in ipairs(catalogue.modifiers or {})do
-                items[#items+1]={id='modifier:'..option.id,name=option.name,mode=modifiers[option.id],enabled=not retained,reason=stale}
+                items[#items+1]={id='modifier:'..option.id,name=option.name,mode=modifiers[option.id]}
             end
         elseif display and section=='enemies' then
             local offered=(catalogue.constellation_groups or {})[group]
@@ -224,7 +268,7 @@ do
                 assert(#offered.list<=11,'Too many constellation options')
                 for _,option in ipairs(offered.list)do
                     items[#items+1]={id='constellation:'..group..':'..option.id,name=(option.name:gsub(' %b()$','')),
-                        mode=(constellations[group] or {})[option.id],enabled=not retained,reason=stale}
+                        mode=(constellations[group] or {})[option.id]}
                 end
             end
             for i,id in ipairs(groups)do
@@ -232,31 +276,23 @@ do
             end
             for i,tag in ipairs(catalogue.forced or {})do forced[i]=friendly(tag)end
         end
-        -- The operation in progress keeps its missions; a city has no other
-        -- operation at this difficulty to reroll.
-        local fixed=false
-        if s and scope then
-            local row,level=M.active_row(s)
-            fixed=row~=nil and level==difficulty and accepts(row)
-        end
-        local compatible,compatibility_reason=true,nil
-        if catalogue then compatible,compatibility_reason=FilterCatalogue.possible(catalogue,selected,modifiers,filter)end
-        local ready=not running and s~=nil and compatible and not fixed
+        local ready=not busy and (s~=nil or retained) and compatible and not fixed
         -- The same precedence as before the panel was docked.
         local status,tone
         if running then status,tone=captions[M.status] or 'Checking planet data','busy'
+        elseif gap.queued then status,tone='Checking planet data','busy'
         elseif fixed then status,tone='Operation in progress. Finish or abandon it to reroll','warn'
-        elseif retained then status,tone='Updating planet data. Your choices are kept','warn'
+        elseif overdue then status,tone='Updating planet data. Your choices are kept','warn'
         elseif not compatible then status,tone=compatibility_reason,'bad'
-        elseif not s then
+        elseif not s and not retained then
             status,tone=why=='Choose a planet and map difficulty' and 'Open a planet on the war table first' or why or report or 'Waiting for planet data','warn'
         elseif report then status,tone=report,report_tone
         else status,tone=rules>0 and 'Ready to search' or 'Choose what the operation must contain','idle' end
         -- An empty request is refused by validation; the panel disables Start instead.
-        local model={running=running,locked=locked,ready=ready,can_start=ready and rules>0,can_clear=not locked and rules>0,
+        local model={running=busy,locked=locked,ready=ready,can_start=ready and rules>0,can_clear=not locked and rules>0,
             difficulty=difficulty,status=tostring(status),tone=tone,
-            step=running and (steps[M.status] or 1) or nil,
-            detail=running and grouped(M.search_attempts or 0)..' of '..grouped(default_limit)..' seeds searched'
+            step=busy and (running and steps[M.status] or 1) or nil,
+            detail=busy and grouped(running and M.search_attempts or 0)..' of '..grouped(default_limit)..' seeds searched'
                 or ready and rules>0 and tone=='idle' and 'Rerolls every unstarted operation of the campaign' or '',
             faction=display and catalogue.faction or nil,scope=scope and 'city' or 'planet',
             section=section,items=items,page=mission_page,pages=pages,groups=tabs,group=group,
@@ -266,7 +302,9 @@ do
             note=display and section=='enemies' and group==0 and 'Check a mission to set its own enemies' or nil}
         local action=router:step(x,y,user32.GetAsyncKeyState(1)<0,Panel.layout(width,height,model).targets)
         if action=='close' then close()
-        elseif action=='cancel' then M.cancel_requested=true;running=false;report,report_tone='Search cancelled','idle'
+        elseif action=='cancel' then
+            if gap.queued then gap.queued=nil else M.cancel_requested=true;running=false end
+            report,report_tone='Search cancelled','idle'
         elseif action=='previous_page' then mission_page=math.max(1,mission_page-1)
         elseif action=='next_page' then mission_page=math.min(pages,mission_page+1)
         elseif type(action)=='string' and action:match('^section:')then
@@ -294,17 +332,7 @@ do
                 constellations[target]=next(tags) and tags or nil
                 report=nil
             elseif action=='start' and model.can_start then
-                -- Refresh eligibility immediately before accepting a request.
-                local ok,err=pcall(function()FilterCatalogue.validate(catalogue_for(s,difficulty,scope),selected,modifiers,tag_filter())end)
-                if ok then
-                    local required,rules={},{}
-                    for id,v in pairs(selected)do required[id]=v end
-                    for id,v in pairs(modifiers)do rules[id]=v end
-                    M.search_options={difficulty=difficulty,required=required,modifiers=rules,constellations=tag_filter(),
-                        scope=scope and {region=scope.region} or nil}
-                    M.request_search=true;M.search_attempts=0;running=true;report,report_tone='Checking planet data','idle'
-                    emit('DIALOG_SEARCH planet='..s.planet..' region='..(scope and scope.region or 'all')..' difficulty='..difficulty)
-                else report,report_tone=tostring(err),'bad' end
+                if s then begin(s)else gap.queued=now end
             end
         end
         if not router.opened and not router.closing then dialog_release('closed');return end
