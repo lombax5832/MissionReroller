@@ -1,6 +1,16 @@
 # Mission Reroller — development only
 
-**Next in-game test: [v0.19.0 constellation exclusion](docs/CONSTELLATION_FILTER_TEST.md)
+**Next in-game test: [v0.20.0 docked dialog](docs/DOCKED_DIALOG_TEST.md).**
+Not yet validated in game; only offline tests were run. The dialog is a panel
+docked to the right edge of the screen, without dimming the map. Missions,
+modifiers and enemy forces are three sections, one open at a time, and a
+closed section shows its summary. Enemy forces are chosen per checked mission
+with a row of buttons instead of pages. REROLL OPERATIONS is disabled until a
+mission or a rule is set, and a search shows its four steps and the seeds
+searched. Escape is not handled, because the dialog blocks the mouse only.
+Search, prediction and publication are those of v0.19.0.
+
+**Also awaiting an in-game test: [v0.19.0 constellation exclusion](docs/CONSTELLATION_FILTER_TEST.md)
 and [all mission types and cities](docs/CITY_SCOPE_TEST.md).**
 Each constellation cycles ANY, ACCEPT, EXCLUDE per checked mission, or for the
 whole operation when no mission is checked; any number can be excluded.
