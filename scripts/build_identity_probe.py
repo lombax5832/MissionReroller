@@ -75,7 +75,7 @@ def source(search=False,publish=False,dialog=False):
         runtime=runtime.replace('no refresh or selection will occur','search then publish one verified seed')
         runtime=runtime.replace('; read-only;', '; supervised live publication;')
     if dialog:
-        runtime=runtime.replace('0.10.1 search, publish and select','0.20.1 docked dialog').replace('Ctrl+Shift+F9','Ctrl+Shift+F8')
+        runtime=runtime.replace('0.10.1 search, publish and select','0.20.2 docked dialog').replace('Ctrl+Shift+F9','Ctrl+Shift+F8')
     parts.append(runtime)
     return ('\n'.join(parts)+'\n').encode()
 

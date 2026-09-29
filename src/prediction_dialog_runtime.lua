@@ -141,7 +141,8 @@ do
             M.search_options={difficulty=difficulty,required=required,modifiers=rules,constellations=tag_filter(),
                 scope=scope and {region=scope.region} or nil}
             M.request_search=true;M.search_attempts=0;running=true;report,report_tone='Checking planet data','idle'
-            emit('DIALOG_SEARCH planet='..s.planet..' region='..(scope and scope.region or 'all')..' difficulty='..difficulty)
+            emit('DIALOG_SEARCH planet='..s.planet..' region='..(scope and scope.region or 'all')..' difficulty='..difficulty
+                ..' players='..tostring(s.sc))
         else report,report_tone=tostring(err),'bad' end
     end
     dialog_tick=function(focused,now)
@@ -207,6 +208,7 @@ do
         -- Retain presentation only while the independently read UI still names
         -- the same planet/difficulty. Never use retained data to start a search.
         local retained=not s and not running and catalogue and view==catalogue_view
+            and why~='Only the host can reroll operations'
         -- A short gap is not shown and does not block editing: the request is
         -- edited against the retained catalogue and fresh data prunes it.
         gap.since=retained and (gap.since or now) or nil
@@ -341,5 +343,5 @@ do
         stingray.Script.set_temp_byte_count(temp);assert(ok,err)
     end
     M.dialog_enabled=true
-    emit('Mission filters: Ctrl+Shift+F8; native cursor; docked panel; all checked families in one operation; map difficulty; constellations per mission; repeat searches allowed')
+    emit('Mission filters: Ctrl+Shift+F8; native cursor; docked panel; alone or hosting a lobby; all checked families in one operation; map difficulty; constellations per mission; repeat searches allowed')
 end

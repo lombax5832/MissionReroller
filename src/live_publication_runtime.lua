@@ -7,20 +7,23 @@ local function rawhex(s)return (s:gsub('..',function(v)return string.char(tonumb
 local function ownership(b)
     assert(pointer(game+0x347cee8)==b,'Board changed')
     local session=pointer(game+0x347cef0)
-    assert(u(read(session+0x162d8,4),0)==1,'Expected one source owner')
-    local source=read(session+0x162e0,8)
+    assert(M.dialog_enabled or u(read(session+0x162d8,4),0)==1,'Expected one source owner')
+    -- Alone the local player is the only participant. In a lobby the local
+    -- player must be its host: a participant who owns the board.
+    local source,sources,known=participants(session)
     local local_owner=read(session+0xb398,8)
-    assert(source==local_owner and source~=string.rep('\0',8),'Source is not local owner')
-    assert(read(b+0x1f8078,8)==source,'Not local selection owner')
+    assert(known[local_owner],'Source is not local owner')
+    assert(read(b+0x1f8078,8)==local_owner,'Not local selection owner')
     local count=u(read(b+0x1f80d0,4),0)
     assert(count<=5,'Invalid owner count')
-    local entries=count>0 and read(b+0x1f8080,count*16) or '';local found=false;local ids={}
+    local entries=count>0 and read(b+0x1f8080,count*16) or '';local ids={}
     for i=0,count-1 do
         local id=entries:sub(i*16+1,i*16+8)
         assert(id~=string.rep('\0',8) and not ids[id],'Invalid owner entries');ids[id]=true
-        if id==source then found=true end
     end
-    local capacity=count+(found and 0 or 1)
+    -- The game adds an entry for every participant that has none.
+    local capacity=count
+    for _,id in ipairs(sources)do if not ids[id]then capacity=capacity+1 end end
     assert(capacity<=5,'Owner queue has no capacity for local source')
     page(b+0x78e84,4,0x20000);page(b+0x1f8080,capacity*16,0x20000)
     page(b+0x1f80d0,4,0x20000)

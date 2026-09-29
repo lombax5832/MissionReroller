@@ -16,6 +16,8 @@ for test,module in [('test_seed_publication.lua','seed_publication.lua'),('test_
 with tempfile.TemporaryDirectory() as folder:
     entry=Path(folder)/'live.lua';entry.write_bytes(source)
     subprocess.run([lua,str(ROOT/'tests/test_live_search_runtime.lua'),str(entry)],check=True)
+    # Only the dialog build accepts a lobby.
+    subprocess.run([lua,str(ROOT/'tests/test_lobby_host.lua'),str(entry),'solo'],check=True)
     archive=build.main(Path(folder)/'live.zip')
     with zipfile.ZipFile(archive) as z:
         assert len(z.namelist())==4

@@ -275,10 +275,11 @@ up(dialog,'dialog_release')('test cleanup');assert(not held and released==opened
 -- Real context logic: viewed-planet requests, retained presentation through
 -- temporary cache/backend gaps, and no stale start or cross-planet display.
 local function word(n)return string.char(n%256,math.floor(n/256)%256,math.floor(n/65536)%256,math.floor(n/16777216)%256)end
-local ship=268;local viewed=269;local ui_planet=269;local unavailable=false
+local ship=268;local viewed=269;local ui_planet=269;local unavailable=false;local guest=false
 up(real_context,'snapshot',function(preview)
-    assert(preview);if unavailable then return nil,'waiting for pending backend requests' end
-    return {planet=viewed,selection=word(ship)..word(viewed),fingerprint=ship..':'..viewed}
+    assert(preview);if guest then return nil,'Only the host can reroll operations' end
+    if unavailable then return nil,'waiting for pending backend requests' end
+    return {planet=viewed,selection=word(ship)..word(viewed),fingerprint=ship..':'..viewed,sc=3}
 end,true)
 up(real_context,'pointer',function()return 100000 end,true)
 up(real_context,'game',0,true)
@@ -319,7 +320,7 @@ assert(shown('CANCEL SEARCH') and shown('1 CHECK PLANET') and shown('CHECKING PL
 local searches=#logs
 unavailable=false;frame()
 assert(M.request_search and M.search_options.required[4] and M.search_options.difficulty==10,'Fresh data starts the waiting search')
-assert(#logs==searches+1 and logs[#logs]=='DIALOG_SEARCH planet=269 region=all difficulty=10\n' and last_model.running)
+assert(#logs==searches+1 and logs[#logs]=='DIALOG_SEARCH planet=269 region=all difficulty=10 players=3\n' and last_model.running)
 M.request_search=nil;M.status='cancelled';frame()
 -- Cancel, close, another planet and a lasting gap each drop a waiting start.
 unavailable=true;frame();click('start');frame();assert(last_model.running)
@@ -354,6 +355,14 @@ click('next_page');frame();assert(last_model.page==2)
 ship=266;frame();assert(last_model.page==2 and #last_model.items==6,'A refresh must not turn the page back')
 planet=269;ship=268;frame();assert(last_model.pages==1 and last_model.page==1 and #last_model.items==1)
 ship=viewed;frame();assert(last_model.ready,'Same-planet reroll still works')
+-- A guest of a lobby is told so at once. It is not a gap: nothing is offered
+-- and nothing waits.
+guest=true;frame()
+assert(last_model.status=='Only the host can reroll operations' and last_model.tone=='warn',last_model.status)
+assert(last_model.locked and #last_model.items==0 and not last_model.can_start and not last_model.running and last_selected[4])
+assert(find('start').enabled==false and find('close').enabled and shown('ONLY THE HOST CAN REROLL OPERATIONS'))
+click('start');frame();assert(not M.request_search and not last_model.running,'A guest cannot queue a search')
+guest=false;frame();assert(last_model.ready and #last_model.items==1 and last_model.can_start and not M.request_search)
 ui_planet=100;frame();assert(#last_model.items==0 and not last_model.ready,'Mismatched map view must not display stale options')
 assert(last_model.locked and last_model.faction==nil and not last_model.can_start and find('start').enabled==false and find('close').enabled)
 ui_planet=600;frame()

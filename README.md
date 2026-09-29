@@ -1,7 +1,16 @@
 # Mission Reroller — development only
 
-**Next in-game test: [v0.20.1 quiet data gaps](docs/DOCKED_DIALOG_TEST.md).**
-Not yet validated in game; only offline tests were run. A brief gap in the
+**Next in-game test: [v0.20.2 hosting a lobby](docs/LOBBY_HOST_TEST.md).**
+Not validated in game, and never run with a second player; only offline
+tests against synthetic memory. The mod no longer stops when the session has
+more than one player. The host of a lobby of up to four can reroll; a guest
+is told that only the host can. The game then sends the new seed to every
+player, so their war tables change too. What several of the fields mean in a
+lobby is inferred, and other checks may still stop the mod there. The earlier
+builds still require one player.
+
+**Working in game: [v0.20.1 quiet data gaps](docs/DOCKED_DIALOG_TEST.md).**
+Confirmed by the user. A brief gap in the
 planet data no longer dims the dialog, changes its status or blocks clicks.
 REROLL OPERATIONS pressed during a gap waits and starts on fresh data. The
 dialog changes only when the returned data differs. A gap of 1.5 seconds or

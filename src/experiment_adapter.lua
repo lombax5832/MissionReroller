@@ -119,6 +119,19 @@ local function page(a,n,kind)
     assert(begin+n<=limit and m[0].State==0x1000 and m[0].Protect==4 and m[0].Type==kind,
            'unexpected target page')
 end
+-- The players of the session: one alone, up to four in a lobby. Only the
+-- dialog build accepts a lobby; the earlier builds were tested alone.
+local function participants(session)
+    local n=u(read(session+0x162d8,4),0)
+    assert(n>=1 and n<=(M.dialog_enabled and 4 or 1),'owner count outside supervised bounds')
+    local bytes,list,known=read(session+0x162e0,n*8),{},{}
+    for i=0,n-1 do
+        local id=bytes:sub(i*8+1,i*8+8)
+        assert(id~=string.rep('\0',8) and not known[id],'invalid source owner')
+        known[id]=true;list[#list+1]=id
+    end
+    return bytes,list,known
+end
 local initialized=false
 local function initialize()
     ffi=require('ffi'); api=create_api(); kernel=ffi.load('kernel32')
@@ -167,10 +180,16 @@ local function snapshot(viewed_planet)
     assert(read(session+0x167e6,1)=='\0','session gate set')
     assert(read(root+0x108d,1)=='\0' and read(root+0x1099,1)=='\0' and
            read(root+0x8e8,8)==string.rep('\0',8),'transition gates set')
-    local sc=u(read(session+0x162d8,4),0)
+    local source,sources,known=participants(session)
+    local sc=#sources
+    -- In a lobby the board belongs to its host, and only the host rerolls.
+    -- Alone nothing more is read than before.
+    if sc>1 then
+        local player=read(session+0xb398,8)
+        if not (known[player] and read(b+0x1f8078,8)==player)then return nil,'Only the host can reroll operations' end
+    end
     local dc=u(read(b+0x1f80d0,4),0)
-    assert(sc==1 and dc<=5,'owner count outside supervised bounds')
-    local source=read(session+0x162e0,sc*8)
+    assert(dc<=5,'owner count outside supervised bounds')
     local dest=read(b+0x1f8080,dc*16)
     local ids={}; local union=0
     for i=0,dc-1 do
@@ -178,8 +197,7 @@ local function snapshot(viewed_planet)
         assert(id~=string.rep('\0',8) and not ids[id],'invalid destination owner')
         ids[id]=true; union=union+1
     end
-    assert(source~=string.rep('\0',8),'invalid source owner')
-    if not ids[source] then union=union+1 end
+    for _,id in ipairs(sources)do if not ids[id] then union=union+1 end end
     assert(union<=5,'owner union overflow')
     page(game+0x3483c38,8,0x1000000) -- Only the native helper may update this module data.
     page(b+0x78e84,4,0x20000)
