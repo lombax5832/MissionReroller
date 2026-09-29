@@ -21,12 +21,32 @@ up(dialog,'user32',user,true)
 local acquired,released=0,0;local held=false;local last_model,last_selected
 up(dialog,'gate',{acquire=function()assert(not held);held=true;acquired=acquired+1;return true end,
     held=function()return held end,release=function()if held then released=released+1 end;held=false;return true end},true)
-up(dialog,'panel',{clear=function()end,show=function(_,_,s,_,_,model)last_model=model;last_selected=s end},true)
-up(dialog,'face',function()return {}end,true)
+-- The packaged panel draws every model the runtime builds, into a recording engine.
+local drawn={}
+local function object()local o={};drawn[#drawn+1]=o;return o end
+local real=up(dialog,'Panel').new({Application={worlds=function()return {1,2}end,main_world=function()return 1 end},
+    World={create_screen_gui=function()drawn={};return {}end,destroy_gui=function()drawn={}end},
+    Gui={resolution=function()return 1200,820 end,material=function()return {}end,
+        rect=function()return object()end,update_rect=function()end,
+        text=function(_,value)local o=object();o.value=value;return o end,update_text=function(_,o,value)o.value=value end,
+        triangle=function()return object()end,
+        text_extents=function(_,value,_,size)return {0},{#value*size*0.5},{#value*size*0.5}end},
+    Material={set_scalar=function()end,set_vector2=function()end,set_vector4=function()end,set_texture=function()end},
+    IdString64={from_hex=function(s)return s end},
+    Vector2=setmetatable({x=function(v)return v[1]end},{__call=function(_,...)return {...}end}),
+    Vector3=function(...)return {...}end,Color=function(...)return {...}end})
+local function shown(value)
+    for _,o in ipairs(drawn)do if o.value==value then return true end end
+    return false
+end
+up(dialog,'panel',{clear=function()real:clear()end,show=function(_,options,s,face,pointer,model)
+    last_model=model;last_selected=s;real:show(options,s,face,pointer,model)
+end},true)
+up(dialog,'face',function()return {font='a',material='b',atlas='c'}end,true)
 local planet=268
 local function offered(...)
     local group={list={},set={}}
-    for i,id in ipairs({...})do group.list[i]={id=id,name='Constellation '..id};group.set[id]=true end
+    for i,id in ipairs({...})do group.list[i]={id=id,name='Constellation '..id..' (Tag'..id..')'};group.set[id]=true end
     return group
 end
 local compatibility=dofile(arg[2]..'/mission_compatibility.lua')
@@ -37,8 +57,13 @@ up(dialog,'context',function()
     local decoded={operations={}};for i,row in ipairs(city_rows)do decoded.operations[i]={row=row,difficulty=10}end
     return {planet=planet,context='stable',fingerprint=tostring(planet),on_ship_planet=true,decoded=decoded,active=in_progress},10
 end,true)
+local many,many_set={},{}
+for id=1,30 do many[id]={id=id,name='Mission '..id};many_set[id]=true end
 up(dialog,'catalogue_for',function(_,_,within)
     catalogue_scope=within and within.region
+    if planet==270 then
+        return {faction=4,slots=3,missions=many,mission_set=many_set,modifiers={},modifier_set={},forced={},constellation_groups={}}
+    end
     return {faction=planet==268 and 2 or 3,slots=3,compatibility=compatibility,
         profiles={{masks=reachable,modifiers={}},{masks=reachable,modifiers={0x1101e25c}}},
         missions=planet==268 and {{id=2,name='Survey'},{id=4,name='Democracy'},{id=9,name='Nursery'}} or {{id=4,name='Democracy'}},
@@ -52,101 +77,175 @@ stingray={Gui={resolution=function()return 1200,820 end},Script={temp_byte_count
 local panel=up(dialog,'Panel');local now=0
 local function frame(focus)now=now+0.01;dialog(focus~=false,now)end
 local function toggle()key=false;frame();key=true;frame();key=false;frame()end
+local function find(id)
+    for _,t in ipairs(panel.layout(1200,820,last_model).targets)do if t.id==id then return t end end
+end
 local function click(id)
-    local target
-    for _,t in ipairs(panel.layout(1200,820,last_model).targets)do if t.id==id then target=t end end
-    assert(target);x=target.x+target.w/2;y=target.y+target.h/2
+    local target=assert(find(id),id)
+    x=target.x+target.w/2;y=target.y+target.h/2
     mouse=false;frame();mouse=true;frame();mouse=false;frame()
 end
+local function ids()local out={};for i,item in ipairs(last_model.items)do out[i]=item.id end;return table.concat(out,' ')end
+local function tabs()
+    local out={};for i,group in ipairs(last_model.groups)do out[i]=group.name..(group.selected and '*' or '')end
+    return table.concat(out,' | ')
+end
 frame();toggle();assert(acquired==1 and held)
+assert(last_model.section=='missions' and ids()=='2 4 9','Missions are open when the dialog opens')
+assert(shown('CHOOSE WHAT THE OPERATION MUST CONTAIN') and shown('TERMINIDS') and shown('/ WHOLE PLANET') and shown('DIFFICULTY 10')
+    and shown('SURVEY') and shown('0 OF 3 SLOTS') and shown('REROLL OPERATIONS') and shown('CLOSE') and not shown('CANCEL SEARCH'))
+assert(last_model.faction==2 and last_model.scope=='planet' and last_model.difficulty==10 and last_model.slots==3)
+assert(last_model.status=='Choose what the operation must contain' and last_model.tone=='idle' and last_model.detail=='')
+assert(last_model.ready and not last_model.can_start and not last_model.can_clear and last_model.rules==0)
+assert(find('start').enabled==false and find('clear').enabled==false and find('close').enabled,'Nothing set: no reroll and no clear')
+assert(not find('up') and not find('down') and not find('cancel'),'Difficulty follows the map')
 click('start');assert(not M.request_search,'Empty filters must not start')
 click(2);frame();assert(last_model.items[3].enabled==false and last_model.items[1].enabled,'Conflicts disabled; checked mission removable')
 click(9);assert(not last_selected[9],'Disabled conflict must ignore clicks')
 click(2);frame();assert(last_model.items[3].enabled,'Deselecting must re-enable compatible choice')
-click(2);click(4);click('start')
+click(2);click(4);frame()
+assert(last_model.can_start and last_model.can_clear and last_model.rules==2 and last_model.checked==2)
+assert(last_model.status=='Ready to search' and last_model.detail=='Rerolls every unstarted operation of the campaign')
+assert(last_model.summaries.missions=='Geological Survey, Spread Democracy' and last_model.summaries.modifiers=='Any'
+    and last_model.summaries.enemies=='Any')
+-- One section is open at a time; the open one closes on a click.
+click('section:missions');frame();assert(last_model.section==nil and #last_model.items==0 and last_selected[2])
+click('section:modifiers');frame();assert(last_model.section=='modifiers' and ids()=='modifier:'..0x1101e25c)
+click('section:modifiers');frame();assert(last_model.section==nil)
+click('section:missions');frame();assert(last_model.section=='missions' and ids()=='2 4 9')
+click('start')
 assert(M.request_search and M.search_options.required[2] and M.search_options.required[4])
 assert(not M.search_options.required[1] and M.search_options.difficulty==10)
-M.request_search=nil;M.status='search_running';frame()
-assert(last_model.running and last_model.difficulty_locked)
+M.request_search=nil;M.status='search_running';M.search_attempts=2731;frame()
+assert(last_model.running and last_model.locked and not last_model.can_start and not last_model.can_clear)
+assert(last_model.status=='Searching seeds' and last_model.tone=='busy' and last_model.step==2)
+assert(last_model.detail=='2,731 of 262,144 seeds searched',last_model.detail)
+assert(shown('SEARCHING SEEDS') and shown('2,731 OF 262,144 SEEDS SEARCHED') and shown('2 SEARCH SEEDS') and shown('CANCEL SEARCH')
+    and shown('GEOLOGICAL SURVEY, SPREAD DEMOCRACY') and shown('2 OF 3 SLOTS'))
+assert(find('cancel').enabled and find('close').enabled and find('clear').enabled==false and not find('start'))
+assert(find(2).enabled==false and find(9).enabled==false and find('section:modifiers').enabled,'A search locks the rows, not the sections')
+click(2);assert(last_selected[2],'A running search ignores the rows')
+click('clear');assert(last_selected[2] and last_selected[4],'A running search cannot be cleared')
+click('section:modifiers');frame();assert(last_model.section=='modifiers' and find('modifier:'..0x1101e25c).enabled==false)
+click('modifier:'..0x1101e25c);frame();assert(last_model.items[1].mode==nil)
+click('section:missions');frame()
+for status,step in pairs({waiting_for_stable_inputs=1,capture_retry=1,search_waiting_backend=2,publication_pending=3,selection_pending=4})do
+    M.status=status;frame();assert(last_model.running and last_model.step==step,status)
+end
+M.status='search_running';M.search_attempts=0;frame()
 frame(false);assert(not held and not M.cancel_requested,'Alt-tab must preserve search')
 toggle();assert(acquired==2 and last_model.running)
 click('cancel');assert(M.cancel_requested);M.cancel_requested=nil;M.status='cancelled';frame()
+assert(not last_model.running and last_model.status=='Search cancelled' and last_model.tone=='idle' and last_model.can_start)
+click('section:modifiers');frame()
 click('close');frame();frame();assert(not held)
 toggle();assert(acquired==3 and last_selected[2] and last_selected[4],'Reopening retains filter')
+assert(last_model.section=='missions','Reopening starts on the missions')
 click('start');assert(M.request_search);M.request_search=nil;M.status='search_running';frame()
 M.status='publication_test_passed';frame();frame();frame();assert(not held,'Success closes modal')
 toggle();assert(acquired==4);click('start');assert(M.request_search,'Can start another search')
 M.request_search=nil
 M.status='cancelled';frame()
-click('modifiers_tab');frame();click('modifier:'..0x1101e25c);frame()
-assert(last_model.items[1].mode=='require')
+click('section:modifiers');frame();click('modifier:'..0x1101e25c);frame()
+assert(last_model.items[1].mode=='require' and last_model.summaries.modifiers=='1 rule' and last_model.rules==3)
+assert(last_model.status=='Ready to search','Editing the request discards the last report')
 click('modifier:'..0x1101e25c);frame();assert(last_model.items[1].mode=='exclude')
 click('start');assert(M.search_options.modifiers[0x1101e25c]=='exclude')
 M.request_search=nil;M.status='cancelled';frame()
--- Survey (2) and Democracy (4) are checked: one constellation page each.
-local function ids()local out={};for i,item in ipairs(last_model.items)do out[i]=item.id end;return table.concat(out,' ')end
-click('constellations_tab');frame()
-assert(last_model.pages==2 and last_model.page==1 and ids()=='constellation_group constellation:2:2 constellation:2:4',ids())
-assert(last_model.items[1].caption=='FOR: GEOLOGICAL SURVEY' and last_model.items[1].enabled==false)
-assert(last_model.items[2].mode==nil and last_model.hint:find('this mission',1,true) and last_model.subtitle:find('Predator Strain',1,true))
-click('constellation:2:4');frame();assert(last_model.items[3].mode=='accept' and last_model.items[2].mode==nil and last_model.ready)
-click('next_page');frame()
-assert(last_model.page==2 and last_model.items[1].caption=='FOR: SPREAD DEMOCRACY' and ids()=='constellation_group constellation:4:2 constellation:4:6',ids())
-assert(last_model.items[2].mode==nil and last_model.items[3].mode==nil,'Each mission keeps its own constellations')
-click('constellation:4:2');click('constellation:4:6');frame();assert(last_model.items[2].mode=='accept' and last_model.items[3].mode=='accept')
-click('constellation:4:6');frame();assert(last_model.items[3].mode=='exclude','A second click excludes the constellation')
+-- Survey (2) and Democracy (4) are checked: one group of constellations each.
+click('section:enemies');frame()
+assert(tabs()=='Geological Survey* | Spread Democracy' and last_model.group==2 and ids()=='constellation:2:2 constellation:2:4',tabs()..' '..ids())
+assert(last_model.items[1].name=='Constellation 2' and last_model.items[2].name=='Constellation 4','The game tag is not displayed')
+assert(find('group:2').enabled and find('group:4').enabled and not find('previous_page') and not find('next_page'))
+assert(last_model.items[1].mode==nil and last_model.note==nil and last_model.forced=='Predator Strain',last_model.forced)
+click('constellation:2:4');frame();assert(last_model.items[2].mode=='accept' and last_model.items[1].mode==nil and last_model.ready)
+assert(last_model.summaries.enemies=='1 rule')
+click('group:4');frame()
+assert(tabs()=='Geological Survey | Spread Democracy*' and last_model.group==4 and ids()=='constellation:4:2 constellation:4:6',tabs()..' '..ids())
+assert(last_model.items[1].mode==nil and last_model.items[2].mode==nil,'Each mission keeps its own constellations')
+click('constellation:4:2');click('constellation:4:6');frame();assert(last_model.items[1].mode=='accept' and last_model.items[2].mode=='accept')
+click('constellation:4:6');frame();assert(last_model.items[2].mode=='exclude','A second click excludes the constellation')
+assert(last_model.summaries.enemies=='3 rules')
 click('start');assert(M.request_search)
 local sent=M.search_options.constellations.groups
 assert(sent[2][4]=='accept' and not sent[2][2] and sent[4][2]=='accept' and sent[4][6]=='exclude' and not sent[0] and M.search_options.required[2])
-M.request_search=nil;M.status='cancelled';frame()
-click('constellation:4:6');frame();assert(last_model.items[3].mode==nil and sent[4][6]=='exclude','A third click clears it; the request is a copy')
+M.request_search=nil;M.status='search_running';frame()
+assert(last_model.group==4 and find('constellation:4:2').enabled==false and find('group:2').enabled,'A search locks the rules, not the groups')
+click('constellation:4:2');frame();assert(last_model.items[1].mode=='accept')
+click('group:2');frame();assert(last_model.group==2 and ids()=='constellation:2:2 constellation:2:4')
+click('group:4');frame()
+M.status='cancelled';frame()
+click('constellation:4:6');frame();assert(last_model.items[2].mode==nil and sent[4][6]=='exclude','A third click clears it; the request is a copy')
 -- Excluding everything a mission can draw is refused.
 click('constellation:4:2');click('constellation:4:6');click('constellation:4:6');frame()
-assert(last_model.items[2].mode=='exclude' and last_model.items[3].mode=='exclude' and not last_model.ready)
-assert(last_model.status=='Every constellation of this mission is excluded',last_model.status)
+assert(last_model.items[1].mode=='exclude' and last_model.items[2].mode=='exclude' and not last_model.ready and not last_model.can_start)
+assert(last_model.status=='Every constellation of this mission is excluded' and last_model.tone=='bad',last_model.status)
+assert(find('start').enabled==false)
 click('start');assert(not M.request_search)
-click('constellation:4:2');click('constellation:4:6');frame();assert(last_model.ready and not last_model.items[2].mode)
--- Unchecking a mission removes its page and its constellations.
-click('missions_tab');frame();click(4);click('constellations_tab');frame()
-assert(last_model.pages==1 and last_model.items[1].caption=='FOR: GEOLOGICAL SURVEY' and last_model.items[3].mode=='accept')
-click('missions_tab');frame();click(4);click('constellations_tab');frame();click('next_page');frame()
-assert(last_model.page==2 and not last_model.items[2].mode,'A re-checked mission starts without constellations')
--- A mission without drawable constellations shows an empty page.
-click('missions_tab');frame();click(2);click(4);click(9);click('constellations_tab');frame()
-assert(last_model.pages==1 and #last_model.items==0,'Nursery offers no constellation here')
--- Without checked missions the single page applies to any one mission.
-click('missions_tab');frame();click(9);click('constellations_tab');frame()
-assert(last_model.pages==1 and last_model.items[1].caption=='FOR: THE OPERATION' and ids()=='constellation_group constellation:0:2 constellation:0:4 constellation:0:6',ids())
-assert(last_model.hint:find('no mission carries any',1,true))
+click('constellation:4:2');click('constellation:4:6');frame();assert(last_model.ready and not last_model.items[1].mode)
+-- Unchecking a mission removes its group and its constellations.
+click('section:missions');frame();click(4);click('section:enemies');frame()
+assert(tabs()=='Geological Survey*' and last_model.items[2].mode=='accept')
+click('section:missions');frame();click(4);click('section:enemies');frame()
+assert(tabs()=='Geological Survey* | Spread Democracy','A group that went away is not selected again')
+click('group:4');frame()
+assert(last_model.group==4 and not last_model.items[1].mode and not last_model.items[2].mode,'A re-checked mission starts without constellations')
+-- A mission without drawable constellations shows an empty list.
+click('section:missions');frame();click(2);click(4);click(9);click('section:enemies');frame()
+assert(tabs()=='Nuke Nursery*' and #last_model.items==0,'Nursery offers no constellation here')
+-- Without checked missions the single group applies to any one mission.
+click('section:missions');frame();click(9);click('section:enemies');frame()
+assert(tabs()=='Any mission*' and last_model.group==0 and ids()=='constellation:0:2 constellation:0:4 constellation:0:6',ids())
+assert(last_model.note=='Check a mission to set its own enemies' and last_model.summaries.modifiers=='1 rule')
 click('constellation:0:6');click('constellation:0:2');click('constellation:0:2');frame()
-assert(last_model.items[4].mode=='accept' and last_model.items[2].mode=='exclude')
+assert(last_model.items[3].mode=='accept' and last_model.items[1].mode=='exclude' and last_model.can_start)
 click('start');assert(M.request_search and M.search_options.constellations.groups[0][6]=='accept'
     and M.search_options.constellations.groups[0][2]=='exclude' and next(M.search_options.required)==nil)
 M.request_search=nil;M.status='cancelled';frame()
-click('missions_tab');frame();click(2);click('start')
+click('section:missions');frame();click(2);click('start')
 assert(M.request_search and next(M.search_options.constellations.groups)==nil,'Checking a mission discards the any-mission constellations')
 M.request_search=nil;M.status='cancelled';frame()
-click(4);click('constellations_tab');frame();click('constellation:2:2');click('next_page');frame();click('constellation:4:6')
-click('modifiers_tab');frame()
+click(4);click('section:enemies');frame();click('constellation:2:2');click('group:4');frame();click('constellation:4:6')
+click('section:modifiers');frame()
 planet=269;frame()
 assert(not last_selected[2] and last_selected[4],'Faction changes must prune invalid mission filters')
 assert(#last_model.items==1 and last_model.items[1].id=='modifier:'..0xf6f1b0c7 and not last_model.items[1].mode)
+assert(last_model.status=='Unavailable filters cleared for this planet/difficulty' and last_model.tone=='warn' and last_model.faction==3)
 click('start');assert(next(M.search_options.modifiers)==nil,'Faction changes must prune old modifier rules')
 assert(next(M.search_options.constellations.groups)==nil,'Faction changes must prune constellations and their missions')
 M.request_search=nil;M.status='cancelled';frame()
-click('constellations_tab');frame()
-assert(last_model.pages==1 and last_model.items[1].caption=='FOR: SPREAD DEMOCRACY' and ids()=='constellation_group constellation:4:14',ids())
-click('constellation:4:14');frame();assert(last_model.items[2].mode=='accept')
-click('clear');frame();assert(ids()=='constellation_group constellation:0:14 constellation:0:15' and not last_model.items[2].mode,'Clear removes missions and constellations')
-click('missions_tab');frame();click(4);click('modifiers_tab');frame()
+click('section:enemies');frame()
+assert(tabs()=='Spread Democracy*' and ids()=='constellation:4:14' and last_model.forced=='',ids())
+click('constellation:4:14');frame();assert(last_model.items[1].mode=='accept')
+click('clear');frame();assert(ids()=='constellation:0:14 constellation:0:15' and not last_model.items[1].mode,'Clear removes missions and constellations')
+assert(not next(last_selected) and not last_model.can_start and not last_model.can_clear and find('start').enabled==false)
+assert(last_model.status=='Choose what the operation must contain')
 M.request_search=nil
-assert(M.search_options.scope==nil and last_model.subtitle:find('this planet',1,true),'Nothing pointed at: whole planet')
+click('start');assert(not M.request_search,'A cleared request must not start')
+-- More missions than one page holds.
+planet=270;frame();click('section:missions');frame()
+assert(last_model.pages==2 and last_model.page==1 and #last_model.items==24 and last_model.items[24].id==24)
+assert(find('previous_page').enabled and find('next_page').enabled)
+click('next_page');frame();assert(last_model.page==2 and #last_model.items==6 and last_model.items[1].id==25)
+click('next_page');frame();assert(last_model.page==2)
+click(30);frame();assert(last_selected[30] and last_model.summaries.missions=='Destroy Exospire')
+click('previous_page');frame();assert(last_model.page==1 and #last_model.items==24)
+click('previous_page');frame();assert(last_model.page==1)
+click('next_page');frame();click(30);frame();assert(not next(last_selected))
+planet=269;frame();assert(last_model.pages==1 and last_model.page==1 and ids()=='4' and not find('next_page'))
+click(4);click('section:modifiers');frame()
+assert(M.search_options.scope==nil and last_model.scope=='planet','Nothing pointed at: whole planet')
 -- Opening the dialog on a city's operation limits it to that city.
 M.request_search=nil;M.status='cancelled';frame()
+-- Closing the dialog cancels a running search, and says so when it reopens.
+click('start');assert(M.request_search);M.request_search=nil;M.status='search_running';frame()
+click('close');assert(M.cancel_requested==true,'Close cancels the search')
+M.cancel_requested=nil;M.status='cancelled';frame();frame();assert(not held)
+toggle();assert(held and not last_model.running and last_model.status=='Search cancelled' and last_model.can_start)
 local opened=acquired
 click('close');frame();frame();assert(not held)
 pointed=1;toggle();assert(acquired==opened+1)
-assert(catalogue_scope==1 and last_model.subtitle:find('This city or megafactory only',1,true),last_model.subtitle)
+assert(catalogue_scope==1 and last_model.scope=='city' and last_model.section=='missions',last_model.scope)
 assert(logs[#logs]=='MODAL_OPEN scope=region 1\n')
 click('start');assert(M.request_search and M.search_options.scope.region==1 and M.search_options.required[4])
 M.request_search=nil;M.status='cancelled';frame()
@@ -160,6 +259,7 @@ local function record(row,level,where)
 end
 in_progress=record(49,10,planet);frame()
 assert(not last_model.ready and last_model.status:find('in progress',1,true),last_model.status)
+assert(not last_model.can_start and last_model.tone=='warn' and not last_model.locked and find('start').enabled==false and find(4).enabled)
 click('start');assert(not M.request_search,'An operation in progress must not start a search')
 in_progress=record(49,9,planet);frame();assert(last_model.ready,'Another difficulty of the city can be rerolled')
 in_progress=record(29,10,planet);frame();assert(last_model.ready,'An operation outside the city does not block it')
@@ -168,7 +268,7 @@ in_progress=nil;frame()
 click('close');frame();frame();toggle()
 assert(catalogue_scope==nil and logs[#logs]=='MODAL_OPEN scope=planet\n','Reopening without a city returns to the planet')
 click('close');frame();frame();pointed=3;toggle()
-assert(catalogue_scope==nil and last_model.subtitle:find('this planet',1,true),'A city of another planet is ignored')
+assert(catalogue_scope==nil and last_model.scope=='planet','A city of another planet is ignored')
 click('start');assert(M.request_search and M.search_options.scope==nil);M.request_search=nil;M.status='cancelled';frame()
 pointed=nil
 up(dialog,'dialog_release')('test cleanup');assert(not held and released==opened+3)
@@ -190,15 +290,27 @@ end,true)
 up(dialog,'context',real_context,true)
 jit.flush() -- Discard traces compiled against the previous injected context.
 M.status='cancelled';frame();toggle();frame()
-assert(#last_model.items==1 and last_model.subtitle:find('Automatons',1,true),'Remote planet faction catalogue must populate')
+assert(#last_model.items==1 and last_model.faction==3,'Remote planet faction catalogue must populate')
 assert(last_model.ready,'Viewed-planet reroll must not require travel')
 click('start');assert(M.request_search,'Remote Start must accept the filter');M.request_search=nil;M.status='cancelled';frame()
 unavailable=true;frame()
 assert(#last_model.items==1 and not last_model.ready and last_model.items[1].enabled==false,'Temporary request wait must retain rows without permitting stale actions: '..#last_model.items..' '..tostring(last_model.ready)..' '..last_model.status)
+assert(last_model.locked and not last_model.can_start and not last_model.can_clear and last_model.faction==3 and last_selected[4])
+assert(last_model.status=='Updating planet data. Your choices are kept' and last_model.tone=='warn')
+assert(last_model.items[1].reason=='Waiting for fresh planet data' and find(4).enabled==false and find('start').enabled==false)
+click(4);assert(last_selected[4],'Retained rows ignore clicks')
+click('clear');assert(last_selected[4],'Retained filters cannot be cleared')
 click('start');assert(not M.request_search)
-unavailable=false;frame();assert(last_model.ready and #last_model.items==1)
+click('section:modifiers');frame()
+assert(last_model.section=='modifiers' and #last_model.items==1 and find(last_model.items[1].id).enabled==false)
+click('section:missions');frame()
+unavailable=false;frame();assert(last_model.ready and #last_model.items==1 and last_model.can_start and not last_model.locked)
 ship=viewed;frame();assert(last_model.ready,'Same-planet reroll still works')
 ui_planet=100;frame();assert(#last_model.items==0 and not last_model.ready,'Mismatched map view must not display stale options')
+assert(last_model.locked and last_model.faction==nil and not last_model.can_start and find('start').enabled==false and find('close').enabled)
+ui_planet=600;frame()
+assert(last_model.status=='Open a planet on the war table first' and last_model.tone=='warn' and #last_model.items==0 and last_model.locked)
+assert(shown('OPEN A PLANET ON THE WAR TABLE FIRST') and shown('NO PLANET') and shown('NO PLANET CHOSEN') and not shown('DEMOCRACY'))
 up(dialog,'dialog_release')('test cleanup')
 -- A constellation input failure must leave mission and modifier filters usable.
 local built={faction=2,missions={{id=2,name='Survey'}},constellation_groups={}}
@@ -212,4 +324,4 @@ local before=#logs
 assert(real_catalogue({planet=268,board=0},10)==built and real_catalogue({planet=268,board=0},10)==built)
 assert(#logs==before+1 and logs[#logs]:find('CONSTELLATION_CATALOGUE_BLOCKED',1,true) and logs[#logs]:find('Missing global effects',1,true),
     'Constellation failures are logged once and do not block the catalogue')
-print('Dialog: city scope, constellation acceptance and exclusion per mission, real mouse router, filters, empty validation, map difficulty, alt-tab, cancel, close, reopen and repeat passed')
+print('Dialog: sections, groups, paging, locked states, city scope, constellation acceptance and exclusion per mission, real mouse router, filters, empty request, map difficulty, alt-tab, cancel, close, reopen and repeat passed')

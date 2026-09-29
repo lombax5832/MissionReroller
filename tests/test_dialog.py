@@ -10,6 +10,8 @@ import build_dialog as build
 source=build.probe.source(search=True,publish=True,dialog=True)
 for forbidden in (b'VirtualProtect',b'VirtualAlloc',b'OpenProcess',b'CreateRemoteThread',b'io.open',b'os.execute',b'io.popen',b'candidate_path'):
     assert forbidden not in source,forbidden
+# The dialog build draws the docked panel; older builds keep the centred one.
+assert b'Docked briefing panel' in source and b'CLEAR SELECTION' not in source
 lua=os.environ['HD2_LUAJIT']
 subprocess.run([lua,str(ROOT/'tests/test_filter_catalogue.lua'),str(ROOT/'src')],check=True)
 subprocess.run([lua,str(ROOT/'tests/test_mission_compatibility.lua'),str(ROOT/'src')],check=True)
@@ -25,6 +27,6 @@ with tempfile.TemporaryDirectory() as folder:
     with zipfile.ZipFile(archive) as z:
         assert len(z.namelist())==4
         assert source in z.read(next(n for n in z.namelist() if n.endswith('.patch_0')))
-for test,module in [('test_mouse_panel.lua','mouse_panel.lua'),('test_modal_pointer.lua','modal_pointer.lua'),('test_window_mouse_gate.lua','window_mouse_gate.lua')]:
+for test,module in [('test_docked_panel.lua','docked_panel.lua'),('test_mouse_panel.lua','mouse_panel.lua'),('test_modal_pointer.lua','modal_pointer.lua'),('test_window_mouse_gate.lua','window_mouse_gate.lua')]:
     subprocess.run([lua,str(ROOT/'tests'/test),str(ROOT/'src'/module)],check=True)
-print('Dialog package, native cursor gate and click routing passed')
+print('Dialog package, docked panel, native cursor gate and click routing passed')

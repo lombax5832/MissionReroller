@@ -3,7 +3,9 @@
 do
     local panel,gate,router,exe
     local selected,difficulty,key_down={},10,true
-    local modifiers,tab,page_number={},'missions',1
+    -- One section is open at a time, or none. The enemy section shows the
+    -- rules of one group: a checked mission, or 0 for any mission.
+    local modifiers,section,mission_page,group_choice={},'missions',1,0
     local constellations,tag_error={},nil
     -- A city or megafactory appears on the map as its operation. The one
     -- under the cursor when the dialog opens, or else the selected one,
@@ -37,7 +39,9 @@ do
     end
     local catalogue,catalogue_key,catalogue_view
     local running=false
-    local report='Select missions; difficulty follows the map'
+    -- The outcome of the last search, or an error. Editing the request
+    -- discards it.
+    local report,report_tone
     local terminal={publication_test_passed=true,publication_blocked=true,publication_failed=true,
         publication_restored=true,publication_cancelled=true,search_exhausted=true,
         search_failed=true,search_cancelled=true,capture_timeout=true,cancelled=true,
@@ -47,6 +51,23 @@ do
         publication_pending='Refreshing operations',selection_pending='Opening matching operation',
         publication_test_passed='Matching operation selected',search_exhausted='No match; search again to continue',
         search_cancelled='Search cancelled',cancelled='Search cancelled',publication_blocked='Map changed; reopen the planet and retry'}
+    local tones={publication_test_passed='good',search_exhausted='warn',publication_blocked='warn',
+        search_cancelled='idle',cancelled='idle',publication_cancelled='idle'}
+    local steps={waiting_for_stable_inputs=1,capture_retry=1,search_running=2,search_waiting_backend=2,
+        publication_pending=3,selection_pending=4}
+    local function grouped(n)
+        local digits,found=tostring(math.floor(n))
+        repeat digits,found=digits:gsub('^(%d+)(%d%d%d)','%1,%2')until found==0
+        return digits
+    end
+    local function count(n)return n==0 and 'Any' or n..(n==1 and ' rule' or ' rules')end
+    -- The names table also holds the game's tag, which the log keeps.
+    local function friendly(tag)return ((Constellations.names[tag] or 'tag '..tag):gsub(' %b()$',''))end
+    -- Closing the dialog cancels a running search.
+    local function close()
+        if running then report,report_tone='Search cancelled','idle' end
+        M.cancel_requested=running;running=false;router:close()
+    end
     local function face()
         local function hash(a)local b=read(a,8);return string.format('%08x%08x',u(b,4),u(b,0))end
         local f={font=hash(game+0x3772268),material=hash(pointer(game+0x37c5478)+24),atlas=hash(game+0x3772ee8)}
@@ -110,6 +131,7 @@ do
         if not panel then init()end
         if running and (terminal[M.status] or tostring(M.status):find('STOPPED',1,true))then
             running=false;report=M.search_report or captions[M.status] or M.status
+            report_tone=M.search_report and 'warn' or tones[M.status] or 'bad'
             if M.status=='publication_test_passed' and router then router:close()end
         end
         if not focused then
@@ -118,9 +140,9 @@ do
         end
         local down=user32.GetAsyncKeyState(0x11)<0 and user32.GetAsyncKeyState(0x10)<0 and user32.GetAsyncKeyState(0x77)<0
         if down and not key_down then
-            if router then M.cancel_requested=running;running=false;router:close()
+            if router then close()
             else
-                catalogue_key=nil
+                catalogue_key=nil;section,mission_page='missions',1
                 local ok,region=pcall(pointed_region)
                 scope=ok and region and {region=region} or nil
                 router=make_router(gate);router:open()
@@ -148,7 +170,7 @@ do
             if key~=catalogue_key then
                 local ok,value=pcall(catalogue_for,s,difficulty,scope)
                 if ok then
-                    catalogue=value;catalogue_key=key;catalogue_view=view;page_number=1
+                    catalogue=value;catalogue_key=key;catalogue_view=view;mission_page=1
                     local removed=false
                     for id in pairs(selected)do if not catalogue.mission_set[id]then selected[id]=nil;removed=true end end
                     for id in pairs(modifiers)do if not catalogue.modifier_set[id]then modifiers[id]=nil;removed=true end end
@@ -157,7 +179,7 @@ do
                         for tag in pairs(tags)do if not (offered and offered.set[tag])then tags[tag]=nil;removed=true end end
                     end
                     prune_groups()
-                    if removed then report='Unavailable filters cleared for this planet/difficulty' end
+                    if removed then report,report_tone='Unavailable filters cleared for this planet/difficulty','warn' end
                 else catalogue=nil;catalogue_key=key;emit('FILTER_CATALOGUE_BLOCKED '..tostring(value))end
             end
             if not catalogue then why='Eligibility unavailable; reopen filters to retry';s=nil end
@@ -166,34 +188,49 @@ do
         -- the same planet/difficulty. Never use retained data to start a search.
         local retained=not s and not running and catalogue and view==catalogue_view
         local display=(s or running or retained) and catalogue
-        -- The constellations tab has one page per active group.
-        local available=display and tab~='constellations' and catalogue[tab] or {}
+        local locked=running or not s
         local groups=active_groups()
-        local pages=tab=='constellations' and #groups or math.max(1,math.ceil(#available/12))
-        page_number=math.min(page_number,pages)
-        local group=groups[page_number]
-        local items={}
-        for i=(page_number-1)*12+1,math.min(#available,page_number*12)do
-            local option=available[i]
-            local enabled,reason=true,nil
-            if tab=='missions' and not selected[option.id]then
-                local proposed={};for id,v in pairs(selected)do proposed[id]=v end;proposed[option.id]=true
-                enabled,reason=FilterCatalogue.possible(catalogue,proposed,modifiers,tag_filter())
+        local group=groups[1]
+        for _,id in ipairs(groups)do if id==group_choice then group=id end end
+        group_choice=group
+        local filter=tag_filter()
+        local names,modifier_rules,tag_rules={},0,0
+        for _,id in ipairs(groups)do if id~=0 then names[#names+1]=Search.options[id].name end end
+        for _ in pairs(modifiers)do modifier_rules=modifier_rules+1 end
+        for _,tags in pairs(filter.groups)do for _ in pairs(tags)do tag_rules=tag_rules+1 end end
+        local rules=#names+modifier_rules+tag_rules
+        local stale=retained and 'Waiting for fresh planet data' or nil
+        local items,pages,tabs,forced={},1,{},{}
+        if display and section=='missions' then
+            local available=catalogue.missions or {}
+            pages=math.max(1,math.ceil(#available/24));mission_page=math.min(mission_page,pages)
+            for i=(mission_page-1)*24+1,math.min(#available,mission_page*24)do
+                local option=available[i]
+                local enabled,reason=true,nil
+                if not selected[option.id]then
+                    local proposed={};for id,v in pairs(selected)do proposed[id]=v end;proposed[option.id]=true
+                    enabled,reason=FilterCatalogue.possible(catalogue,proposed,modifiers,filter)
+                end
+                if retained then enabled=false;reason=stale end
+                items[#items+1]={id=option.id,name=option.name,enabled=enabled,reason=reason}
             end
-            if retained then enabled=false;reason='Waiting for fresh planet data' end
-            items[#items+1]={id=tab=='missions' and option.id or 'modifier:'..option.id,name=option.name,mode=modifiers[option.id],enabled=enabled,reason=reason}
-        end
-        local offered=tab=='constellations' and display and (catalogue.constellation_groups or {})[group]
-        if offered and #offered.list>0 then
-            assert(#offered.list<=11,'Too many constellation options')
-            items[1]={id='constellation_group',name='group',enabled=false,
-                caption='FOR: '..(group==0 and 'THE OPERATION' or string.upper(Search.options[group].name)),
-                reason=pages>1 and 'Use < and > to switch between checked missions' or nil}
-            for _,option in ipairs(offered.list)do
-                items[#items+1]={id='constellation:'..group..':'..option.id,name=option.name,
-                    mode=(constellations[group] or {})[option.id],enabled=not retained,
-                    reason=retained and 'Waiting for fresh planet data' or nil}
+        elseif display and section=='modifiers' then
+            for _,option in ipairs(catalogue.modifiers or {})do
+                items[#items+1]={id='modifier:'..option.id,name=option.name,mode=modifiers[option.id],enabled=not retained,reason=stale}
             end
+        elseif display and section=='enemies' then
+            local offered=(catalogue.constellation_groups or {})[group]
+            if offered then
+                assert(#offered.list<=11,'Too many constellation options')
+                for _,option in ipairs(offered.list)do
+                    items[#items+1]={id='constellation:'..group..':'..option.id,name=(option.name:gsub(' %b()$','')),
+                        mode=(constellations[group] or {})[option.id],enabled=not retained,reason=stale}
+                end
+            end
+            for i,id in ipairs(groups)do
+                tabs[i]={id=id,name=id==0 and 'Any mission' or Search.options[id].name,selected=id==group}
+            end
+            for i,tag in ipairs(catalogue.forced or {})do forced[i]=friendly(tag)end
         end
         -- The operation in progress keeps its missions; a city has no other
         -- operation at this difficulty to reroll.
@@ -203,50 +240,60 @@ do
             fixed=row~=nil and level==difficulty and accepts(row)
         end
         local compatible,compatibility_reason=true,nil
-        if catalogue then compatible,compatibility_reason=FilterCatalogue.possible(catalogue,selected,modifiers,tag_filter())end
-        local status=running and (captions[M.status] or 'Checking planet data') or (not s and why or report)
-        if not running and not compatible then status=compatibility_reason end
-        if retained then status='Updating planet data; filters retained' end
-        if fixed and not running then status='This operation is in progress; its missions cannot be rerolled' end
-        local model={running=running,ready=not running and s~=nil and compatible and not fixed,difficulty=difficulty,difficulty_locked=true,
-            calls=M.search_attempts or 0,counter_label='Seeds',status=tostring(status),items=items,tab=tab,page=page_number,pages=pages,
-            subtitle=display and (({[2]='Terminids',[3]='Automatons',[4]='Illuminate'})[catalogue.faction]
-                ..(scope and ' / This city or megafactory only' or ' / Valid options for this planet and difficulty'))
-                or 'Waiting for planet eligibility'}
-        if tab=='constellations' then
-            model.hint=group==0 and 'ACCEPT: a mission carries one of them. EXCLUDE: no mission carries any. Click to cycle.'
-                or 'ACCEPT: this mission carries one of them. EXCLUDE: it carries none. Click to cycle.'
-            if display and #(catalogue.forced or {})>0 then
-                model.subtitle=(scope and 'Always here' or 'Planet-wide')..', not rerollable: '..Constellations.describe(catalogue.forced)
-            end
-        end
+        if catalogue then compatible,compatibility_reason=FilterCatalogue.possible(catalogue,selected,modifiers,filter)end
+        local ready=not running and s~=nil and compatible and not fixed
+        -- The same precedence as before the panel was docked.
+        local status,tone
+        if running then status,tone=captions[M.status] or 'Checking planet data','busy'
+        elseif fixed then status,tone='Operation in progress. Finish or abandon it to reroll','warn'
+        elseif retained then status,tone='Updating planet data. Your choices are kept','warn'
+        elseif not compatible then status,tone=compatibility_reason,'bad'
+        elseif not s then
+            status,tone=why=='Choose a planet and map difficulty' and 'Open a planet on the war table first' or why or report or 'Waiting for planet data','warn'
+        elseif report then status,tone=report,report_tone
+        else status,tone=rules>0 and 'Ready to search' or 'Choose what the operation must contain','idle' end
+        -- An empty request is refused by validation; the panel disables Start instead.
+        local model={running=running,locked=locked,ready=ready,can_start=ready and rules>0,can_clear=not locked and rules>0,
+            difficulty=difficulty,status=tostring(status),tone=tone,
+            step=running and (steps[M.status] or 1) or nil,
+            detail=running and grouped(M.search_attempts or 0)..' of '..grouped(default_limit)..' seeds searched'
+                or ready and rules>0 and tone=='idle' and 'Rerolls every unstarted operation of the campaign' or '',
+            faction=display and catalogue.faction or nil,scope=scope and 'city' or 'planet',
+            section=section,items=items,page=mission_page,pages=pages,groups=tabs,group=group,
+            slots=display and catalogue.slots or nil,checked=#names,rules=rules,
+            summaries={missions=#names>0 and table.concat(names,', ') or 'Any',modifiers=count(modifier_rules),enemies=count(tag_rules)},
+            forced=table.concat(forced,', '),
+            note=display and section=='enemies' and group==0 and 'Check a mission to set its own enemies' or nil}
         local action=router:step(x,y,user32.GetAsyncKeyState(1)<0,Panel.layout(width,height,model).targets)
-        if action=='close' then M.cancel_requested=running;running=false;router:close()
-        elseif action=='cancel' then M.cancel_requested=true;running=false;report='Search cancelled'
-        elseif action=='missions_tab' then tab='missions';page_number=1
-        elseif action=='modifiers_tab' then tab='modifiers';page_number=1
-        elseif action=='constellations_tab' then tab='constellations';page_number=1
-        elseif action=='previous_page' then page_number=math.max(1,page_number-1)
-        elseif action=='next_page' then page_number=math.min(pages,page_number+1)
-        elseif not running then
-            if action=='clear' then selected={};modifiers={};constellations={}
+        if action=='close' then close()
+        elseif action=='cancel' then M.cancel_requested=true;running=false;report,report_tone='Search cancelled','idle'
+        elseif action=='previous_page' then mission_page=math.max(1,mission_page-1)
+        elseif action=='next_page' then mission_page=math.min(pages,mission_page+1)
+        elseif type(action)=='string' and action:match('^section:')then
+            -- Clicking the open section closes it.
+            local name=action:sub(9);section=section~=name and name or nil
+        elseif type(action)=='string' and action:match('^group:')then group_choice=tonumber(action:sub(7))
+        elseif not locked then
+            if action=='clear' then selected={};modifiers={};constellations={};report=nil
             elseif type(action)=='number' then
                 if selected[action]then selected[action]=nil
                 else
                     local proposed={};for id,v in pairs(selected)do proposed[id]=v end;proposed[action]=true
-                    if FilterCatalogue.possible(catalogue,proposed,modifiers,tag_filter())then selected[action]=true end
+                    if FilterCatalogue.possible(catalogue,proposed,modifiers,filter)then selected[action]=true end
                 end
-                prune_groups()
+                prune_groups();report=nil
             elseif type(action)=='string' and action:match('^modifier:')then
                 local id=tonumber(action:sub(10))
                 modifiers[id]=modifiers[id]==nil and 'require' or modifiers[id]=='require' and 'exclude' or nil
+                report=nil
             elseif type(action)=='string' and action:match('^constellation:')then
                 local target,id=action:match('^constellation:(%d+):(%d+)$')
                 target,id=tonumber(target),tonumber(id)
                 local tags=constellations[target] or {}
                 tags[id]=tags[id]==nil and 'accept' or tags[id]=='accept' and 'exclude' or nil
                 constellations[target]=next(tags) and tags or nil
-            elseif action=='start' and model.ready then
+                report=nil
+            elseif action=='start' and model.can_start then
                 -- Refresh eligibility immediately before accepting a request.
                 local ok,err=pcall(function()FilterCatalogue.validate(catalogue_for(s,difficulty,scope),selected,modifiers,tag_filter())end)
                 if ok then
@@ -255,9 +302,9 @@ do
                     for id,v in pairs(modifiers)do rules[id]=v end
                     M.search_options={difficulty=difficulty,required=required,modifiers=rules,constellations=tag_filter(),
                         scope=scope and {region=scope.region} or nil}
-                    M.request_search=true;M.search_attempts=0;running=true;report='Checking planet data'
+                    M.request_search=true;M.search_attempts=0;running=true;report,report_tone='Checking planet data','idle'
                     emit('DIALOG_SEARCH planet='..s.planet..' region='..(scope and scope.region or 'all')..' difficulty='..difficulty)
-                else report=tostring(err)end
+                else report,report_tone=tostring(err),'bad' end
             end
         end
         if not router.opened and not router.closing then dialog_release('closed');return end
@@ -266,5 +313,5 @@ do
         stingray.Script.set_temp_byte_count(temp);assert(ok,err)
     end
     M.dialog_enabled=true
-    emit('Mission filters: Ctrl+Shift+F8; native cursor; all checked families in one operation; map difficulty; constellations per mission; repeat searches allowed')
+    emit('Mission filters: Ctrl+Shift+F8; native cursor; docked panel; all checked families in one operation; map difficulty; constellations per mission; repeat searches allowed')
 end

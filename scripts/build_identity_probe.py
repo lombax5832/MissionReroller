@@ -33,7 +33,7 @@ def source(search=False,publish=False,dialog=False):
     parts.append('local on_prediction_ready,advance_prediction_search,on_search_match,on_existing_match,advance_live_publication,dialog_tick,dialog_release,validate_search_request')
     parts.append('local bind_constellations,observe_constellations')
     if dialog:
-        for name,file in [('Panel','mouse_panel.lua'),('Compatibility','mission_compatibility.lua'),('FilterCatalogue','filter_catalogue.lua'),('make_gate','window_mouse_gate.lua'),('make_router','modal_pointer.lua'),('window_signatures','window_signatures.lua'),
+        for name,file in [('Panel','docked_panel.lua'),('Compatibility','mission_compatibility.lua'),('FilterCatalogue','filter_catalogue.lua'),('make_gate','window_mouse_gate.lua'),('make_router','modal_pointer.lua'),('window_signatures','window_signatures.lua'),
                           ('Constellations','constellation_prediction.lua'),('make_constellation_inputs','constellation_inputs.lua')]:
             parts.append('local '+name+'=(function()\n'+(root/file).read_text()+'\nend)()')
     if publish:
@@ -75,7 +75,7 @@ def source(search=False,publish=False,dialog=False):
         runtime=runtime.replace('no refresh or selection will occur','search then publish one verified seed')
         runtime=runtime.replace('; read-only;', '; supervised live publication;')
     if dialog:
-        runtime=runtime.replace('0.10.1 search, publish and select','0.19.0 constellation exclusion').replace('Ctrl+Shift+F9','Ctrl+Shift+F8')
+        runtime=runtime.replace('0.10.1 search, publish and select','0.20.0 docked dialog').replace('Ctrl+Shift+F9','Ctrl+Shift+F8')
     parts.append(runtime)
     return ('\n'.join(parts)+'\n').encode()
 
