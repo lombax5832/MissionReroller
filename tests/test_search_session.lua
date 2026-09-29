@@ -1,0 +1,49 @@
+local S=dofile(assert(arg[1]))
+local function packet(seed,types,context)
+    local m={};for _,id in ipairs(types)do m[#m+1]={native_type=id}end
+    return {seed=seed,context=context or 'same',operations={{row=2,difficulty=10,operation_id=6,missions=m}}}
+end
+local p=packet(1,{59,81,65})
+local s=S.new();s:start(p,10,{[1]=true,[2]=true},0)
+s:advance(p,0,function()error('existing match must not call')end)
+assert(s.match and s.calls==0 and not s.running)
+local result=s.status;s:cancel('Dialog closed');assert(s.status==result and s.match)
+assert(S.find(packet(2,{81,85,65}),10,{[2]=true,[4]=true}))
+assert(S.find(packet(2,{82,85,59}),10,{[2]=true,[4]=true}))
+assert(not S.find(packet(2,{81,59,65}),10,{[2]=true,[4]=true}))
+assert(not S.find(packet(1,{59,65}),10,{[1]=true,[2]=true}))
+local split=packet(1,{59});split.operations[2]={row=3,difficulty=10,missions={{native_type=81}}}
+assert(not S.find(split,10,{[1]=true,[2]=true}),'must match one operation')
+local n=0
+local function call()n=n+1 end
+s=S.new();p=packet(1,{65});s:start(p,10,{[1]=true},0);s:advance(p,0,call)
+for i=1,29 do s:advance(p,i,call)end
+assert(n==1);s:advance(nil,31,call);assert(not s.running and n==1)
+s=S.new();n=0;s:start(p,10,{[1]=true},0)
+for i=0,30 do s:advance(packet(i+1,{65}),i,call)end
+assert(n==5 and s.calls==5 and not s.running)
+assert(not pcall(function()s:start(p,10,{[1]=true},32)end))
+s=S.new();n=0;s:start(p,10,{[1]=true},0);s:advance(p,0,call);s:cancel();s:advance(packet(2,{65}),9,call)
+assert(n==1);s:start(packet(2,{65}),10,{[1]=true},10);assert(s.calls==1)
+s:advance(packet(2,{65},'other'),10,call);assert(not s.running and n==1)
+assert(not pcall(function()S.new():start(p,1,{[1]=true,[2]=true},0)end))
+assert(not pcall(function()S.new():start(p,10,{},0)end))
+-- Combined mode can pass the old cap, but never outruns publication or pacing.
+s=S.new({max_calls=false,interval=1});n=0
+s:start(p,10,{[1]=true,[2]=true},0);s:advance(p,0,call)
+s:advance(packet(2,{65}),0.99,call);assert(n==1)
+s:advance(packet(2,{65}),1,call);assert(n==2)
+s:advance(packet(2,{65}),2,call);assert(n==2,'same seed must not reroll')
+for i=3,8 do s:advance(packet(i,{65}),i,call)end
+assert(n==8 and s.running,'must continue beyond five calls')
+s:advance(packet(9,{59,81,65}),9,call)
+assert(s.match and not s.running and n==8,'match both requirements after the old cap')
+s:start(packet(9,{65}),10,{[1]=true},9);s:advance(packet(9,{65}),9,call)
+assert(n==9,'another search needs no process restart')
+s:cancel();s:start(packet(10,{65}),10,{[1]=true},9.1)
+s:advance(packet(10,{65}),9.1,call);assert(n==9,'restart must preserve pacing')
+s:advance(packet(10,{65}),10,call);assert(n==10)
+s:advance(nil,41,call);assert(not s.running and n==10,'unlimited mode still times out stalled refresh')
+s:start(packet(11,{65}),10,{[1]=true},42)
+s:advance(packet(11,{65}),223,call);assert(not s.running and n==10,'search time limit remains')
+print('search: existing match, AND, pacing, timeout, legacy budget, uncapped mode, cancellation, context passed')

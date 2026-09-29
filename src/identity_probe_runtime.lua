@@ -1,0 +1,155 @@
+-- Diagnostic only: nothing here publishes, calls the game generator or selects.
+local original_update,original_shutdown=rawget(_G,'update'),rawget(_G,'shutdown')
+local stopped,key_down,armed=false,true,nil
+local probe,last_poll,previous,stable=nil,-math.huge,nil,0
+local capture_failures,last_capture_error=0,nil
+local code_signatures={
+    {0x11e3c10,1104,'e600b7f917c0dae668397ec326b9ec53df4705e0c1135d5880be8fcaa91d65bd'},
+    {0x11e4060,1136,'5cc7271a512f5caf431abcc5b3e0fcbeb99c325eeae368b03f3ec52427e1661f'},
+    {0x11e44d0,960,'761e9b878f605a026082169dd67c4a2f5cae070d03a840ac2027499531689801'},
+    {0x11e4b50,248,'0847b63474ce07ef97714cd0acf6d71d76e9a1a4ec1acee82d0d25789bee0dc3'},
+    {0x12d5550,288,'b4c826d4744fdbbc161f2da037c544451c77caea400dfe5b87c77233f060289a'},
+    {0x12dbd70,64,'f021d86754fcf3cb8658ab2e205d01a9df0d85eb0fd24f8f7893ef0f3e315ca1'},
+    {0x11e6020,743,'f5570461586131f1cc890d3745194440ae83dd0c2b1bb468db9f947c33fbc848'},
+    {0x11e6800,338,'f5dfdd2ba5a53230faa8ad361012721980e49da2a121ad7ad7a44f03d0372358'},
+    {0x11e5100,1291,'5d9b9f3fb65fd7f0b39817b4919bebea8bd14995f77694053c7f8e0e6aebb488'},
+    {0x11e3250,2382,'93ef0654c865d859f1299ddcfa11d0c27772ab96542a1d1d95c9c2d819b85e5a'},
+    {0x11e6340,793,'b417991b06d78e8df61b2866c5373e0b166a018d459dbaa3078f34880d6dfa9f'},
+    {0x11f96e0,450,'b121a84355d760e1d95c35e3fbc508a2f86875fe3614cec66b643d4587d03667'},
+    {0x12e7990,243,'1f2ccbbfa61bc50a3e2ec72bfcc2000a992f09f2495f60be2f173568064de7f4'},
+    {0x12df110,952,'77111a8319abae6556e658acadbb13660f1582be47b3d2fc5d315ac8232c50a0'},
+    {0x177e5b0,831,'66c3b348db09003218b6cec50fd322fb1de77c4512a464fb135e7556470e28f8'},
+    {0x174ab50,335,'0bd16770e68656de8fb7e84f9d62a64cda0e8ffa0d81c25c539ef4e79d743ab9'},
+    {0x174b110,464,'4b395978f97967bfc97024b41ab6b63246c120019aa369f91d358321b543a7a4'},
+    {0x11ebb40,152,'5feaccab97b046561f786f2e60533112168f152ebcd19f38ad1e190c9a08e6a9'},
+}
+local function prepare()
+    initialize()
+    for _,sig in ipairs(code_signatures)do
+        assert(sha256(read(game+sig[1],sig[2]))==sig[3],'Generator signature mismatch')
+    end
+    assert(hex(read(game+0x23c6780,8))=='000000000000f03d','RNG scaling constant mismatch')
+    probe=make_probe(read,u,predict_identity,make_special_inputs(read,u,api.pointer),
+        function(cached_read)return make_level_inputs(cached_read,u,game)end,
+        make_level_verification(make_rng,choose_level),composition_factory(read,u,api.pointer,game))
+    M.status='ready_read_only'
+    emit('LUA_IDENTITY_READY signatures=verified read_only=true')
+end
+local function capture(s)
+    local ok,result=xpcall(function()return probe:capture(s)end,function(err)
+        if debug and type(debug.traceback)=='function' then return debug.traceback(tostring(err),2)end
+        return tostring(err)
+    end)
+    if ok then return result end
+    -- A capture spans mutable game data. Reject it intact and retry, never
+    -- weaken graph bounds or carry a prior partially stable sample forward.
+    previous=nil;stable=0;capture_failures=capture_failures+1
+    last_capture_error=string.format('planet=%d seed=%u %s',s.planet,s.seed,tostring(result))
+    M.status='capture_retry'
+    if capture_failures==1 then emit('LUA_CAPTURE_RETRY '..last_capture_error)end
+    return nil
+end
+local function tick()
+    if not probe then prepare()end
+    local now=api.time()
+    local pid=ffi.new('uint32_t[1]')
+    user32.GetWindowThreadProcessId(user32.GetForegroundWindow(),pid)
+    local focused=pid[0]==kernel.GetCurrentProcessId()
+    if dialog_tick then dialog_tick(focused,now)end
+    if observe_constellations then observe_constellations(now)end
+    local down=focused and user32.GetAsyncKeyState(0x11)<0 and user32.GetAsyncKeyState(0x10)<0 and user32.GetAsyncKeyState(0x78)<0
+    if M.dialog_enabled then down=false end
+    if M.cancel_requested then
+        M.cancel_requested=nil;armed=nil
+        if advance_prediction_search then advance_prediction_search('cancel',now)end
+        if advance_live_publication then advance_live_publication('cancel',now)end
+        M.status='cancelled'
+    end
+    local requested=M.request_search;M.request_search=nil
+    if requested or (down and not key_down) then
+        if advance_live_publication and advance_live_publication('cancel',now) then key_down=down;return end
+        if advance_prediction_search and advance_prediction_search('cancel',now) then key_down=down;return end
+        armed=now;previous=nil;stable=0;M.status='waiting_for_stable_inputs'
+        capture_failures=0;last_capture_error=nil;M.last_result=nil;M.level_result=nil;M.composition_result=nil
+        emit('LUA_IDENTITY_ARMED; no refresh or selection will occur')
+    end
+    key_down=down
+    if advance_prediction_search then advance_prediction_search('tick',now)end
+    if advance_live_publication then advance_live_publication('tick',now)end
+    if not armed then return end
+    if now-armed>30 then
+        armed=nil;M.status='capture_timeout';emit('LUA_IDENTITY_BLOCKED stable map inputs unavailable; press shortcut to retry')
+        if last_capture_error then emit('LUA_CAPTURE_DETAIL failures='..capture_failures..' last='..last_capture_error)end
+        return
+    end
+    if now-last_poll<0.5 then return end
+    last_poll=now
+    local s,why=snapshot(true)
+    if not s then previous=nil;stable=0;M.status=why or 'waiting';return end
+    local captured=capture(s)
+    if not captured then return end
+    local again=snapshot(true)
+    local repeated=again and capture(again)
+    if not repeated or repeated.fingerprint~=captured.fingerprint then
+        previous=nil;stable=0;return
+    end
+    stable=previous==captured.fingerprint and stable+1 or 1
+    previous=captured.fingerprint
+    if stable<4 then return end
+    armed=nil
+    if capture_failures>0 then emit('LUA_CAPTURE_RECOVERED rejected_captures='..capture_failures)end
+    local start=api.time()
+    local result=probe:compare(captured)
+    M.status=result.passed and 'identity_test_passed' or 'identity_test_mismatch'
+    M.last_result=result
+    emit(string.format('LUA_IDENTITY_%s planet=%d seed=%u pool=%d special_events=%d matched=%d live=%d predicted=%d elapsed_ms=%.3f read_only=true scope=IDs/seeds/difficulty',
+        result.passed and 'PASS' or 'MISMATCH',s.planet,s.seed,captured.input.pool_count,#(captured.input.specials or {}),result.matched,result.observed,result.predicted,(api.time()-start)*1000))
+    for i=1,math.min(#result.errors,8)do emit('LUA_IDENTITY_DETAIL '..result.errors[i])end
+    if result.passed and captured.level_graphs then
+        local levels=probe:compare_levels(captured);M.level_result=levels
+        M.status=levels.passed and 'identity_and_level_tests_passed' or 'level_test_mismatch'
+        emit(string.format('LUA_LEVEL_%s checked=%d category_draws=%d observed_seed_assisted=true scope=level-selection',
+            levels.passed and 'PASS' or 'MISMATCH',levels.checked,levels.category_draws))
+        for i=1,math.min(#levels.errors,8)do emit('LUA_LEVEL_DETAIL '..levels.errors[i])end
+    end
+    if result.passed and captured.composition then
+        local composition=captured.composition;M.composition_result=composition
+        if not composition.passed then M.status='composition_test_mismatch'
+        elseif not M.level_result or M.level_result.passed then M.status='composition_test_passed' end
+        emit(string.format('LUA_COMPOSITION_%s planet=%d operations=%d templates=%d modifiers=%d missions=%d observed_mission_seeds=false scope=operation-base-inputs',
+            composition.passed and 'PASS' or 'MISMATCH',s.planet,composition.operations,composition.templates,composition.modifiers,composition.checked))
+        for i=1,math.min(#composition.errors,8)do emit('LUA_COMPOSITION_DETAIL '..composition.errors[i])end
+        if composition.independent_bases then
+            emit(string.format('LUA_SEED_PREDICTION_%s planet=%d seed=%u bases=%d operations=%d missions=%d observed_operation_bases=false preserved_active=true read_only=true',
+                composition.passed and 'PASS' or 'MISMATCH',s.planet,s.seed,composition.bases,composition.operations,composition.checked))
+        end
+    end
+    if on_prediction_ready and result.passed and M.level_result and M.level_result.passed
+        and M.composition_result and M.composition_result.passed and M.composition_result.independent_bases then
+        on_prediction_ready(s,captured.definitions,now)
+    else
+        emit('Read-only comparison; no publication. Constellations and unsupported campaign branches remain unverified. Press shortcut to test another planet.')
+    end
+end
+local function pack(...)return {n=select('#',...),...}end
+_G.update=function(...)
+    local result=original_update and pack(original_update(...)) or {n=0}
+    if not stopped then
+        local ok,err=pcall(tick)
+        if not ok then
+            stopped=true;M.status='STOPPED: '..tostring(err);emit(M.status)
+            if advance_live_publication then pcall(advance_live_publication,'cancel',0)end
+            if dialog_release then pcall(dialog_release,'error')end
+        end
+    end
+    return unpack(result,1,result.n)
+end
+_G.shutdown=function(...)
+    stopped=true
+    if advance_prediction_search then pcall(advance_prediction_search,'cancel',0)end
+    if advance_live_publication then pcall(advance_live_publication,'cancel',0)end
+    if dialog_release then pcall(dialog_release,'shutdown')end
+    if log then pcall(function()log:close()end);log=nil end
+    if original_shutdown then return original_shutdown(...)end
+end
+emit('Mission Reroller 0.8.0 independent seed prediction; read-only; Ctrl+Shift+F9; background progress enabled')

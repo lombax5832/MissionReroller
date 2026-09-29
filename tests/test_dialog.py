@@ -1,0 +1,30 @@
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import zipfile
+ROOT=Path(__file__).resolve().parents[1]
+sys.path.insert(0,str(ROOT/'scripts'))
+import build_dialog as build
+source=build.probe.source(search=True,publish=True,dialog=True)
+for forbidden in (b'VirtualProtect',b'VirtualAlloc',b'OpenProcess',b'CreateRemoteThread',b'io.open',b'os.execute',b'io.popen',b'candidate_path'):
+    assert forbidden not in source,forbidden
+lua=os.environ['HD2_LUAJIT']
+subprocess.run([lua,str(ROOT/'tests/test_filter_catalogue.lua'),str(ROOT/'src')],check=True)
+subprocess.run([lua,str(ROOT/'tests/test_mission_compatibility.lua'),str(ROOT/'src')],check=True)
+subprocess.run([lua,str(ROOT/'tests/test_constellation_inputs.lua'),str(ROOT/'src')],check=True)
+# Recorded native seeds live in the sibling reference checkout; they are read, never copied.
+subprocess.run([lua,str(ROOT/'tests/test_constellation_prediction.lua'),str(ROOT/'src'),
+    str(ROOT.parent/'KnowYourConstellation/tests/fixtures/seeds.lua')],check=True)
+with tempfile.TemporaryDirectory() as folder:
+    entry=Path(folder)/'dialog.lua';entry.write_bytes(source)
+    subprocess.run([lua,str(ROOT/'tests/test_prediction_dialog.lua'),str(entry),str(ROOT/'src')],check=True)
+    subprocess.run([lua,str(ROOT/'tests/test_constellation_runtime.lua'),str(entry)],check=True)
+    archive=build.main(Path(folder)/'dialog.zip')
+    with zipfile.ZipFile(archive) as z:
+        assert len(z.namelist())==4
+        assert source in z.read(next(n for n in z.namelist() if n.endswith('.patch_0')))
+for test,module in [('test_mouse_panel.lua','mouse_panel.lua'),('test_modal_pointer.lua','modal_pointer.lua'),('test_window_mouse_gate.lua','window_mouse_gate.lua')]:
+    subprocess.run([lua,str(ROOT/'tests'/test),str(ROOT/'src'/module)],check=True)
+print('Dialog package, native cursor gate and click routing passed')
