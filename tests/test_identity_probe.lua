@@ -16,17 +16,18 @@ end
 local function replace(s,offset,bytes)return s:sub(1,offset)..bytes..s:sub(offset+#bytes+1)end
 local H=dofile((arg[0]:match('^(.*[/\\])') or '')..'harness.lua')
 local make_probe=H.module(arg[2])
+local O=H.offsets(arg[2]:match('^(.*)[/\\]'))
 local row=string.rep('\0',92)
 row=replace(row,12,word(123));row=replace(row,16,string.char(12,1))
 row=replace(row,24,string.char(6));row=replace(row,32,string.char(1));row=replace(row,52,string.char(1))
 local operations=row..string.rep('\0',109*92)
-local b=1000;local definitions=b+0x2cc9ec;local changed=false
+local b=1000;local definitions=b+O.board.definitions[2];local changed=false
 local capture_probe=make_probe(function(address,size)
     local bytes
-    if address==b+0x101454+268*0x118 or address==definitions then bytes=word(9)
-    elseif address==b+0x22b1a8 then bytes=word(8)
-    elseif address==definitions+0xa183c then bytes=word(changed and 34 or 35)
-    elseif address==b+0x17a2c0 then bytes=row
+    if address==b+O.board.campaign+0x1c+268*O.campaign.definition_stride or address==definitions then bytes=word(9)
+    elseif address==b+O.board.definitions[1] then bytes=word(8)
+    elseif address==definitions+O.definitions.pool_count then bytes=word(changed and 34 or 35)
+    elseif address==b+O.board.active_snapshot then bytes=row
     else error('Unexpected read')end
     assert(#bytes==size);return bytes
 end,u,function(input,seed)
@@ -52,25 +53,25 @@ assert(not capture_probe:compare(captured).passed,'Absent predicted operation mu
 do
     local ffi=require('ffi')
     local board=ffi.cast('uint8_t*',0x20000000000)
-    local defs=board+0x22b1a8
+    local defs=board+O.board.definitions[1]
     local function numeric(a)return tonumber(ffi.cast('uintptr_t',a))end
     local reads={}
     local function read(a,size)
         local n=numeric(a);local key=n..':'..size;reads[key]=(reads[key] or 0)+1
-        if n==numeric(board+0x101454) or n==numeric(defs) then return word(9)end
-        if n==numeric(board+0x17a2c0) then return string.rep('\0',92)end
-        if n==numeric(defs+0xa183c) then return word(35):sub(1,size)end
-        if n==numeric(defs+0xa1820) then return word(407)end
-        if n==numeric(defs+0x11004) then return word(512)end
+        if n==numeric(board+O.board.campaign+0x1c) or n==numeric(defs) then return word(9)end
+        if n==numeric(board+O.board.active_snapshot) then return string.rep('\0',92)end
+        if n==numeric(defs+O.definitions.pool_count) then return word(35):sub(1,size)end
+        if n==numeric(defs+O.definitions.pool_start) then return word(407)end
+        if n==numeric(defs+O.definitions.node_count) then return word(512)end
         error('Unexpected opaque-pointer read')
     end
     local probe=make_probe(read,u,function()end,nil,function(cached)
         return function(d)
-            assert(u(cached(d+0xa183c,4),0)==35)
-            assert(u(cached(d+0xa1820,4),0)==407,'Distinct pointer reads must not alias')
-            assert(u(cached(d+0x11004,4),0)==512)
-            assert(cached(d+0xa183c,2)==word(35):sub(1,2),'Read size is part of cache identity')
-            local rebuilt=ffi.cast('uint8_t*',numeric(d)+0xa1820)
+            assert(u(cached(d+O.definitions.pool_count,4),0)==35)
+            assert(u(cached(d+O.definitions.pool_start,4),0)==407,'Distinct pointer reads must not alias')
+            assert(u(cached(d+O.definitions.node_count,4),0)==512)
+            assert(cached(d+O.definitions.pool_count,2)==word(35):sub(1,2),'Read size is part of cache identity')
+            local rebuilt=ffi.cast('uint8_t*',numeric(d)+O.definitions.pool_start)
             assert(u(cached(rebuilt,4),0)==407)
             return {1},false,'graph'
         end
@@ -81,7 +82,7 @@ do
         fingerprint='frame',decoded={operations={{row=0,operation_id=6}}}})
     _G.tostring=original
     assert(ok,result)
-    assert(reads[numeric(defs+0xa1820)..':4']==1,'Equivalent pointer values must reuse the cached read')
+    assert(reads[numeric(defs+O.definitions.pool_start)..':4']==1,'Equivalent pointer values must reuse the cached read')
     assert(not result.fingerprint:find('[cdata (deleted)]',1,true))
 end
 
@@ -101,11 +102,11 @@ local dirty,cache_planet=false,100
 up(real_snapshot,'game',0,true)
 up(real_snapshot,'pointer',function(address)return address end,true)
 up(real_snapshot,'read',function(address,size)
-    if address==0x347ce28+0x429c then return word(15)..string.rep('\0',16)..word(1)end
-    if address==0x347cee8+0x17a298 then return word(268)..word(100)..word(4294967295)..word(4294967295)..word(0)end
-    if address==0x347cee8+0xf9a08 then return word(cache_planet)..word(dirty and 1 or 0)end
-    if address==0x347cee8+0xffc0c then return word(cache_planet)end
-    if address==0x347cee0+0x31c48 then error('past_preview_cache_guard')end
+    if address==O.rva.screen_owner+O.screen_owner.stack then return word(15)..string.rep('\0',16)..word(1)end
+    if address==O.rva.board+O.board.selection then return word(268)..word(100)..word(4294967295)..word(4294967295)..word(0)end
+    if address==O.rva.board+O.board.operation_cache then return word(cache_planet)..word(dirty and 1 or 0)end
+    if address==O.rva.board+O.board.mission_cache then return word(cache_planet)end
+    if address==O.rva.backend+O.backend.pending_requests then error('past_preview_cache_guard')end
     error('Unexpected cache-guard read')
 end,true)
 local ok,why=pcall(real_snapshot,true)
@@ -114,21 +115,22 @@ local value,reason=real_snapshot();assert(value==nil and reason=='waiting for ca
 dirty=true;value,reason=real_snapshot(true);assert(value==nil and reason=='waiting for caches')
 dirty=false;cache_planet=101;value,reason=real_snapshot(true);assert(value==nil and reason=='waiting for caches')
 -- Continue through the real decoder, keeping the raw ship/view selection intact.
-local board,session,backend,root,screen=0x347cee8,0x347cef0,0x347cee0,0x3326340,0x347ce28
+-- With game at 0 and pointers read as themselves, each global points at its own RVA.
+local board,session,backend,root,screen=O.rva.board,O.rva.session,O.rva.backend,O.rva.ui_root,O.rva.screen_owner
 local memory={}
 local raw_selection=word(268)..word(100)..word(4294967295)..word(4294967295)..word(0)
-memory[screen+0x429c]=word(15)..string.rep('\0',16)..word(1)
-memory[board+0x17a298]=raw_selection
-memory[board+0xf9a08]=word(100)..word(0);memory[board+0xffc0c]=word(100)
-memory[backend+0x31c48]=word(0);memory[backend+0x702fc]=word(14);memory[backend+0x702f8]=word(1)
-memory[session+0x167e6]='\0';memory[root+0x108d]='\0';memory[root+0x1099]='\0';memory[root+0x8e8]=string.rep('\0',8)
-memory[session+0x162d8]=word(1);memory[session+0x162e0]=word(1)..word(0)
-memory[board+0x1f80d0]=word(0);memory[board+0x1f8080]=''
-memory[board+0x78e84]=word(9)..row;memory[board+0x17a2bc]=word(9)
+memory[screen+O.screen_owner.stack]=word(15)..string.rep('\0',16)..word(1)
+memory[board+O.board.selection]=raw_selection
+memory[board+O.board.operation_cache]=word(100)..word(0);memory[board+O.board.mission_cache]=word(100)
+memory[backend+O.backend.pending_requests]=word(0);memory[backend+O.backend.state]=word(14);memory[backend+O.backend.available]=word(1)
+memory[session+O.session.gate]='\0';memory[root+O.ui_root.loading_gate]='\0';memory[root+O.ui_root.transition_gate]='\0';memory[root+O.ui_root.transition]=string.rep('\0',8)
+memory[session+O.session.player_count]=word(1);memory[session+O.session.players]=word(1)..word(0)
+memory[board+O.board.owner_count]=word(0);memory[board+O.board.owners]=''
+memory[board+O.board.seed]=word(9)..row;memory[board+O.board.published_seed]=word(9)
 local viewed_row=replace(row,16,string.char(100,0))
 viewed_row=replace(viewed_row,84,string.char(1));viewed_row=replace(viewed_row,88,string.char(1))
-memory[board+0xf7280]=viewed_row..string.rep('\0',109*92)
-memory[board+0xffc08]=word(1);memory[board+0xf9a10]=replace(string.rep('\0',76),60,word(1))
+memory[board+O.board.operations]=viewed_row..string.rep('\0',109*92)
+memory[board+O.board.mission_count]=word(1);memory[board+O.board.missions]=replace(string.rep('\0',76),60,word(1))
 up(real_snapshot,'page',function()end,true)
 up(real_snapshot,'read',function(address,size)
     local bytes=assert(memory[address],'Missing synthetic snapshot field');assert(#bytes==size);return bytes
@@ -182,10 +184,10 @@ local level_ok=true
 local composition
 local capture_attempts,fail_capture=0,nil
 local collect_invalid=H.module((arg[2]:gsub('identity_probe.lua$','level_inputs.lua')))(function(address,size)
-    if address==0x32e98e9 then return '\0'end
-    if address==0xa183c then return word(1)end
-    if address==0xa1820 then return word(0)end
-    if address==0xa100c or address==0x11004 then return word(12)end
+    if address==O.rva.categories+9 then return '\0'end
+    if address==O.definitions.pool_count then return word(1)end
+    if address==O.definitions.pool_start then return word(0)end
+    if address==O.definitions.level_roots or address==O.definitions.node_count then return word(12)end
     error('Unexpected invalid-root read')
 end,u,0)
 local fake_probe={

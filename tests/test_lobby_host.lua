@@ -5,6 +5,8 @@ local ffi=require('ffi')
 local lobby=assert(arg[2])=='lobby'
 local H=dofile((arg[0]:match('^(.*[/\\])') or '')..'harness.lua')
 local up=H.up
+-- The offsets the entry was built with (src/offsets.lua).
+local O=H.offsets((arg[0]:match('^(.*[/\\])') or '')..'../src')
 CowboyBingusModLoader={api=1,version=18,open_log=function()return {write=function()end,flush=function()end,close=function()end}end}
 update=function()return 1,nil,3 end;shutdown=function()return 4,nil,6 end
 dofile(arg[1])
@@ -37,7 +39,7 @@ end}
 local kernel={VirtualQuery=function(a,m)
     m=ffi.cast('MRE_MEMORY_BASIC_INFORMATION *',m) -- The adapter passes a void pointer.
     m[0].BaseAddress=a;m[0].RegionSize=4096;m[0].State=0x1000;m[0].Protect=4
-    m[0].Type=address(a)==base+0x3483c38 and 0x1000000 or 0x20000
+    m[0].Type=address(a)==base+O.rva.rng_state and 0x1000000 or 0x20000
     return ffi.sizeof(m[0])
 end}
 H.natives(update,{api=api,ffi=ffi,kernel=kernel,game=ffi.cast('uint8_t *',base)})
@@ -48,19 +50,19 @@ local code=up(up(ownership,'verify_code'),'offsets').code.campaign_helpers.bytes
 -- board it is. entries: the players the board already lists.
 local function scene(players,me,owner,entries)
     memory={}
-    put(base+0x347cee8,ptr(board));put(base+0x347cef0,ptr(session));put(base+0x347cee0,ptr(backend))
-    put(base+0x3326340,ptr(root));put(base+0x347ce28,ptr(screen));put(base+0x12d5670,code)
-    put(screen+0x429c,word(15)..string.rep('\0',16)..word(1))
-    put(board+0x17a298,word(268)..word(268)..string.rep('\0',12))
-    put(board+0xf9a08,word(268)..word(0));put(board+0xffc0c,word(268))
-    put(backend+0x31c48,word(0));put(backend+0x702fc,word(14));put(backend+0x702f8,word(1))
-    put(session+0x167e6,'\0');put(root+0x108d,'\0');put(root+0x1099,'\0');put(root+0x8e8,string.rep('\0',8))
-    put(session+0x162d8,word(#players));put(session+0x162e0,table.concat(players))
-    put(session+0xb398,me);put(board+0x1f8078,owner)
+    put(base+O.rva.board,ptr(board));put(base+O.rva.session,ptr(session));put(base+O.rva.backend,ptr(backend))
+    put(base+O.rva.ui_root,ptr(root));put(base+O.rva.screen_owner,ptr(screen));put(base+O.rva.campaign_helpers,code)
+    put(screen+O.screen_owner.stack,word(15)..string.rep('\0',16)..word(1))
+    put(board+O.board.selection,word(268)..word(268)..string.rep('\0',12))
+    put(board+O.board.operation_cache,word(268)..word(0));put(board+O.board.mission_cache,word(268))
+    put(backend+O.backend.pending_requests,word(0));put(backend+O.backend.state,word(14));put(backend+O.backend.available,word(1))
+    put(session+O.session.gate,'\0');put(root+O.ui_root.loading_gate,'\0');put(root+O.ui_root.transition_gate,'\0');put(root+O.ui_root.transition,string.rep('\0',8))
+    put(session+O.session.player_count,word(#players));put(session+O.session.players,table.concat(players))
+    put(session+O.session.local_player,me);put(board+O.board.selection_owner,owner)
     local rows={};for i,entry in ipairs(entries)do rows[i]=entry..word(0)..word(0)end
-    put(board+0x1f80d0,word(#entries));put(board+0x1f8080,table.concat(rows))
-    put(board+0x78e84,word(321)..string.rep('\0',92));put(board+0x17a2bc,word(321))
-    put(board+0xffc08,word(1));put(board+0xf7280,string.rep('\0',110*92));put(board+0xf9a10,string.rep('\0',76))
+    put(board+O.board.owner_count,word(#entries));put(board+O.board.owners,table.concat(rows))
+    put(board+O.board.seed,word(321)..string.rep('\0',92));put(board+O.board.published_seed,word(321))
+    put(board+O.board.mission_count,word(1));put(board+O.board.operations,string.rep('\0',110*92));put(board+O.board.missions,string.rep('\0',76))
     return ffi.cast('uint8_t *',board)
 end
 local function fails(message,fn,...)

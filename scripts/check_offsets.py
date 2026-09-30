@@ -8,11 +8,13 @@ for the build offsets.lua names. --reference is the dump offsets.lua was made
 for (the same default); a stale entry is searched for in <dump dir> by its
 reference bytes with relative displacements wildcarded, and the new RVA is
 printed. --find-anchors prints anchor candidates for globals without one and
-for unverified struct fields. Nothing is written; edit offsets.lua by hand.
-Exit status 1 when any entry is stale.
+for unverified struct fields. With HD2_GAME_ROOT set it also compares the
+module hashes with the installed game. Nothing is written; edit offsets.lua
+by hand. Exit status 1 when any entry is stale.
 """
 import argparse
 import hashlib
+import os
 from pathlib import Path
 import re
 import struct
@@ -182,6 +184,23 @@ def find_anchors(data, images):
                     break
 
 
+def installed_hashes(data):
+    """Compare hashes with the installed binaries, as api.module_hash computes them."""
+    root = os.environ.get('HD2_GAME_ROOT')
+    if not root:
+        return True
+    ok = True
+    for module, relative in (('game', 'data/game/game.dll'), ('exe', 'bin/helldivers2.exe')):
+        path = Path(root) / relative
+        if not path.exists():
+            continue
+        digest = hashlib.sha256(path.read_bytes()).hexdigest().upper()
+        if digest != data['hashes'][module]:
+            ok = False
+            print(f'STALE hash {module}: installed {path} is {digest}')
+    return ok
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     parser.add_argument('dump', nargs='?')
@@ -202,6 +221,9 @@ def main(argv=None):
     stale = check(data, images, reference)
     total = len(data['code']) + len(data['globals']) + sum(len(f) for f in data['structs'].values())
     print(f'{len(stale)} stale of {total} entries' if stale else f'all anchored entries match {images.folder}')
+    # The installed game may be newer than the dump; say so, without failing the dump check.
+    if not installed_hashes(data):
+        print('the installed game is not the build offsets.lua names; see docs/UPDATING.md')
     return 1 if stale else 0
 
 

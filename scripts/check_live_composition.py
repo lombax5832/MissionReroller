@@ -5,15 +5,17 @@ from pathlib import Path
 import subprocess
 from fixture_memory import FixtureMemory
 from validate_lua_identity import lua
+import offsets
 
 ROOT=Path(__file__).resolve().parents[1]
+O=offsets.load()
 
 def main(folder):
     memory=FixtureMemory(folder);meta=memory.meta;b=int(meta['board'],16)
     data=dict(game=meta['game'],definitions=meta['definitions'],planet=meta['planet'],
               ranges=[dict(address=hex(a),hex=d.hex()) for a,d in memory.pages.items()],
-              cases=[dict(seed=memory.u32(b+0x78e84),operations=memory.read(b+0xf7280,110*92).hex(),
-                          missions=memory.read(b+0xf9a10,330*76).hex())])
+              cases=[dict(seed=memory.u32(b+O.field('board','seed')),operations=memory.read(b+O.field('board','operations'),110*92).hex(),
+                          missions=memory.read(b+O.field('board','missions'),330*76).hex())])
     target=folder/'capture.lua';target.write_text('return '+lua(data),encoding='ascii')
     missing=folder/'missing.txt';missing.write_text('',encoding='ascii')
     result=subprocess.run([os.environ.get('HD2_LUAJIT',str(ROOT.parent/'tools/src/LuaJIT/src/luajit.exe')),

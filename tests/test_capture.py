@@ -13,6 +13,7 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from inspect_operations import decode_capture
 from compare_operations import compare_captures
+import offsets
 
 
 def fixture():
@@ -41,7 +42,7 @@ def fixture():
                  mission_cache=struct.pack('<I', 12).hex(), missions=missions.hex(),
                  campaign_seed=struct.pack('<I', 20).hex(),
                  screen=struct.pack('<6I', 15, 0, 0, 0, 0, 1).hex())
-    return dict(format=2, build=25480438, session='synthetic', session_after='synthetic',
+    return dict(format=2, build=offsets.load().build, session='synthetic', session_after='synthetic',
                 before=frame, after=copy.deepcopy(frame))
 
 

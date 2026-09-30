@@ -284,6 +284,7 @@ structs={
     },
     mission_type={
         size={0x380,unverified=true},
+        title_key={0x340,unverified=true},
         horde_tag={0x360,unverified=true},
         biomes={0x368,unverified=true},
         biome_count={0x370,unverified=true},
@@ -316,5 +317,16 @@ structs={
 },
 
 research={
+    -- Functions the Unicorn validators call or replace. The generator code
+    -- they emulate is listed under code (compose_operation, level_choice, ...).
+    generate_missions={rva=0x11e5670,from='11e5670, the mission generator scripts/emulate_seed.py replays after 12d5550'},
+    template_candidates={rva=0x11e4cd0,from='11e4cd0, the template candidate collector validate_composition_choices.py replaces'},
+    composition_174a610={rva=0x174a610,from='174a610, stubbed to return 0 by validate_composition_choices.py'},
+    composition_174a6e0={rva=0x174a6e0,from='174a6e0, stubbed to return 0 by validate_composition_choices.py'},
+    -- Code pages the validators map executable ({rva,size}).
+    code_section={rva=0x1000,size=0x210f000,from='the first section of game.dll, dumps/build-25480438/inspection.txt'},
+    generator_pages={rva=0x11e3000,size=0x4000,from='11e3000..11e7000, the composition generator, validate_composition_choices.py'},
+    choice_pages={rva=0x11e6000,size=0x1000,from='11e6000..11e7000, level and mission choice, validate_level_choice.py'},
+    helper_pages={rva=0x2088000,size=0x1000,from='2088000..2089000, a code page the generator calls into'},
 },
 }

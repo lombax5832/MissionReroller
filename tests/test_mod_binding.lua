@@ -25,7 +25,7 @@ local function bind(mappings,at)
     local map={}
     for i=0,255 do map[i+1]=le(i==(at or 7) and code or 12*65536+i,4)..le(0,4)..string.rep('\0',320)end
     local record=le(code,4)..le(#mappings,4)..table.concat(mappings)
-    map[(at or 7)+1]=record..string.rep('\0',328-#record)
+    map[(at or 7)+1]=record..string.rep('\0',B.BUCKET-#record)
     segments[3]={buckets,table.concat(map)}
 end
 bind({mapping(B.KEYBOARD,B.KEYBOARD_BASE+0x77),mapping(2,16)})

@@ -1,7 +1,7 @@
 """Print the mission families for src/search_session.lua from research files.
 
 Development tool. Mission titles come from the mission records of the saved
-build 25480438 image (title key at record +0x340) and the English (US) string
+build 25480438 image (the title key, mission_type.title_key in src/offsets.lua) and the English (US) string
 table extracted with Filediver. Neither input is packaged. The first twelve
 families keep their established order and names; the rest follow by title.
 """
@@ -12,9 +12,13 @@ import sys
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
-IMAGE = ROOT.parent / 'dumps/build-25480438/game.dll.unpacked.bin'
-STRINGS = ROOT.parent / 'extracted/strings-25480438/0xd29d9f674db28566.strings.json'
-RECORDS, STRIDE, COUNT = 0x3773420, 0x380, 162
+sys.path.insert(0, str(ROOT / 'scripts'))
+import offsets
+
+O = offsets.load()
+IMAGE = ROOT.parent / f'dumps/build-{O.build}/game.dll.unpacked.bin'
+STRINGS = ROOT.parent / f'extracted/strings-{O.build}/0xd29d9f674db28566.strings.json'
+RECORDS, STRIDE, COUNT = O.rva['mission_types'], O.field('mission_type', 'size'), 162
 ESTABLISHED = [
     ('Launch ICBM', ['LAUNCH ICBM']),
     ('Geological Survey', ['CONDUCT GEOLOGICAL SURVEY']),
@@ -54,7 +58,7 @@ def main():
         at = RECORDS + kind * STRIDE
         if not struct.unpack_from('<I', image, at)[0]:
             continue
-        title = strings.get(struct.unpack_from('<I', image, at + 0x340)[0])
+        title = strings.get(struct.unpack_from('<I', image, at + O.field('mission_type', 'title_key'))[0])
         if title:
             by_title.setdefault(title, []).append(kind)
         else:

@@ -1,9 +1,10 @@
+local H=dofile((arg[0]:match('^(.*[/\\])') or '')..'harness.lua')
+local O=H.offsets(arg[1])
 -- Usage: luajit test_planet_model.lua <src> [<capture oracle>]
 -- The planet model's interface over scripted modules, then, when the saved
 -- campaign capture (artifacts/level-capture-oracle.lua) is given, its
 -- capture, predictor and catalogue over the real modules and memory.
 local root=arg[1]
-local H=dofile((arg[0]:match('^(.*[/\\])') or '')..'harness.lua')
 local ffi=require('ffi')
 local function word(n)return string.char(n%256,math.floor(n/256)%256,math.floor(n/65536)%256,math.floor(n/16777216)%256)end
 local function u(b,o)local a,c,d,e=b:byte(o+1,o+4);return a+c*256+d*65536+e*16777216 end
@@ -68,7 +69,7 @@ do
     assert(not pcall(planet.inputs),'A missing configuration manager fails the inputs')
     assert(select(2,pcall(planet.inputs)):find('Missing composition pointer',1,true))
     assert(select(2,pcall(planet.constellation_inputs)):find('Missing configuration manager',1,true))
-    poke(game+0x347cdf8,word(manager)..word(0));events={}
+    poke(game+O.rva.configuration,word(manager)..word(0));events={}
     local inputs=planet.inputs()
     assert(table.concat(events,',')=='read 1347cdf8,config,effects,inputs','The manager, then the effects, as the native collectors')
     assert(planet.inputs()==inputs and planet.constellation_inputs().name=='tags')
@@ -124,7 +125,7 @@ local function pointer(s)local value=ffi.new('uint64_t[1]');ffi.copy(value,s,8);
 local Planet=H.planet_model(root)
 local verify=dofile(root..'/verify_predicted_board.lua')
 local game=ffi.cast('uint8_t*',tonumber(fixture.game));local definitions=tonumber(fixture.definitions)
-local board=definitions-0x22b1a8
+local board=definitions-O.board.definitions[1]
 local boards,descriptors=0,0
 for index,case in ipairs(fixture.cases)do
     if index>4 then break end

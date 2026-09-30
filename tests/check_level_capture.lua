@@ -30,6 +30,7 @@ local function read(address,size)
 end
 local function u(s,o)local a,b,c,d=s:byte(o+1,o+4);assert(d);return a+b*256+c*65536+d*16777216 end
 local H=dofile((arg[0]:match('^(.*[/\\])') or '')..'harness.lua')
+local O=H.offsets(root..'/src')
 local collect=H.module(root..'/src/level_inputs.lua')(read,u,tonumber(fixture.game))
 local verify=dofile(root..'/src/level_verification.lua')(dofile(root..'/src/generation_rng.lua'),dofile(root..'/src/mission_level_choice.lua'))
 local total=0
@@ -53,11 +54,11 @@ for _,case in ipairs(fixture.cases)do
     assert(result.passed,'seed='..case.seed..'\n'..table.concat(result.errors,'\n'))
     -- Exercise the same cached capture with pointer addresses used in-game.
     local definitions=tonumber(fixture.definitions)
-    local board=definitions-0x22b1a8
+    local board=definitions-O.board.definitions[1]
     local function runtime_read(address,size)
         address=tonumber(ffi.cast('uintptr_t',address))
-        if address==board+0x101454 then return read(definitions,4)end
-        if address==board+0x17a2c0 then return string.rep('\0',92)end
+        if address==board+O.board.campaign+0x1c then return read(definitions,4)end
+        if address==board+O.board.active_snapshot then return string.rep('\0',92)end
         return read(address,size)
     end
     local probe=H.module(root..'/src/identity_probe.lua')(runtime_read,u,function()end,nil,

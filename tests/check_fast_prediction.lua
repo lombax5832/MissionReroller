@@ -31,7 +31,9 @@ local ready=up(up(update,'tick'),'on_prediction_ready')
 local Planet=up(ready,'Planet');local make_job=up(ready,'make_search_job')
 local Search=dofile(root..'/search_session.lua')
 local game=ffi.cast('uint8_t*',tonumber(fixture.game));local definitions=tonumber(fixture.definitions)
-local board=definitions-0x22b1a8
+local H=dofile((arg[0]:match('^(.*[/\\])') or '')..'harness.lua')
+local O=H.offsets(root)
+local board=definitions-O.board.definitions[1]
 local bytes=raw(fixture.cases[1].operations);local planet
 for row=0,109 do if bytes:byte(row*92+53)~=0 then planet=bytes:byte(row*92+17)+bytes:byte(row*92+18)*256 end end
 local predict=Planet.bind(read,u,pointer,game,board,planet).predictor(definitions)

@@ -22,10 +22,11 @@ end
 local function u(s,o)local a,b,c,d=s:byte(o+1,o+4);return a+b*256+c*65536+d*16777216 end
 local function pointer(s)local value=ffi.new('uint64_t[1]');ffi.copy(value,s,8);if value[0]==0 then return nil end;return ffi.cast('uint8_t*',value[0])end
 local H=dofile((arg[0]:match('^(.*[/\\])') or '')..'harness.lua')
+local O=H.offsets(root)
 local function module(name)return H.module(root..'/'..name..'.lua')end
 local game,definitions=tonumber(fixture.game),tonumber(fixture.definitions)
 game=ffi.cast('uint8_t*',game)
-local board=definitions-0x22b1a8
+local board=definitions-O.board.definitions[1]
 local Planet=dofile((arg[0]:match('^(.*[/\\])') or '')..'harness.lua').planet_model(root)
 local inputs=Planet.bind(read,u,pointer,game,board,fixture.planet).inputs()
 local rng=module('generation_rng')
@@ -51,7 +52,7 @@ if arg[5] then
         candidate_factory=function(take,planet)return packaged.bind(take,u,pointer,game,board,planet).predictor(definitions)end
     end
 end
-local active_bytes=read(board+0x17a2c0,92)
+local active_bytes=read(board+O.board.active_snapshot,92)
 local active
 if active_bytes:byte(53)~=0 and (not fixture.planet or active_bytes:byte(17)+active_bytes:byte(18)*256==fixture.planet) then
     active={row=u(active_bytes,0),seed=u(active_bytes,12),id=active_bytes:byte(25),template_index=u(active_bytes,56),modifiers={}}
@@ -72,7 +73,7 @@ for case_index,case in ipairs(fixture.cases)do
     local output=predict(operations,planet,inputs,function(op)return levels(definitions,op)end,active)
     local independent,preserved=bases(read,u,pointer,game,board,definitions,planet,inputs)(case.seed)
     if case_index==1 then
-        local campaign=board+0x101438
+        local campaign=board+O.board.campaign
         local function reject(overrides,expected)
             local ok,why=pcall(bases,function(address,size)
                 local at=tonumber(ffi.cast('uintptr_t',address));return overrides[at] or read(address,size)
@@ -80,11 +81,11 @@ for case_index,case in ipairs(fixture.cases)do
             assert(not ok and tostring(why):find(expected,1,true),tostring(why))
         end
         local function word(n)return string.char(n%256,math.floor(n/256)%256,math.floor(n/65536)%256,math.floor(n/16777216)%256)end
-        reject({[campaign+0x46050+planet*0x130]='\0'},'Planet generation disabled')
-        reject({[campaign+0x7284c]=word(0)},'Unsupported normal campaign event count')
-        reject({[campaign+0x78c60]=word(1),[campaign+0x77a64]=word(planet)},'Unsupported invasion operation bases')
-        for i=0,u(read(campaign+0x7284c,4),0)-1 do
-            local at=campaign+0x7004c+i*20
+        reject({[campaign+O.campaign.planet_enabled+planet*O.campaign.planet_stride]='\0'},'Planet generation disabled')
+        reject({[campaign+O.campaign.base_count]=word(0)},'Unsupported normal campaign event count')
+        reject({[campaign+O.campaign.invasion_count]=word(1),[campaign+O.campaign.invasions+4]=word(planet)},'Unsupported invasion operation bases')
+        for i=0,u(read(campaign+O.campaign.base_count,4),0)-1 do
+            local at=campaign+O.campaign.bases+i*20
             if u(read(at+8,4),0)==planet then reject({[at+12]=word(2)},'Unsupported defense operation bases');break end
         end
     end

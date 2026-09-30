@@ -8,8 +8,13 @@ import hashlib
 import json
 from pathlib import Path
 import struct
+import sys
 
-BUILD = 25480438
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import offsets
+
+O = offsets.load()
+BUILD = O.build
 OP_SIZE, OP_CAPACITY = 92, 110
 MISSION_SIZE, MISSION_CAPACITY = 76, 330
 FIELDS = ('selection', 'operations', 'operation_cache', 'mission_count',
@@ -127,7 +132,7 @@ def add_names(result, dump_path, strings_path):
     strings = {row['Key']: row['Value'] for row in source['Items']}
     for operation in result['operations']:
         for mission in operation['missions']:
-            at = 0x3773420 + mission['native_type'] * 896 + 0x340
+            at = O.rva['mission_types'] + mission['native_type'] * O.field('mission_type', 'size') + O.field('mission_type', 'title_key')
             key = u32(dump, at)
             mission['title_hash'] = f'{key:08x}'
             mission['title_hint'] = strings.get(key)
