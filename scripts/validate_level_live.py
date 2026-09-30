@@ -5,8 +5,10 @@ import os
 from pathlib import Path
 import subprocess
 from validate_lua_identity import lua
+import offsets
 
 ROOT = Path(__file__).resolve().parents[1]
+O = offsets.load()
 
 
 def main(path):
@@ -23,12 +25,12 @@ def main(path):
             if offset >= 0 and offset+count <= len(data):
                 return data[offset:offset+count].hex()
         raise ValueError(f'Missing captured bytes at {start:#x}')
-    guard = next(g for g in captured['guards'] if address(g['address']) == board+0x78e84)
+    guard = next(g for g in captured['guards'] if address(g['address']) == board+O.field('board', 'seed'))
     seed = int.from_bytes(bytes.fromhex(guard['expected_hex'])[:4], 'little')
     data = dict(game=hex(address(captured['game'])),
                 definitions=hex(address(captured['definitions'])), ranges=ranges,
-                cases=[dict(seed=seed, operations=read(board+0xf7280, 110*92),
-                            missions=read(board+0xf9a10, 330*76))])
+                cases=[dict(seed=seed, operations=read(board+O.field('board', 'operations'), 110*92),
+                            missions=read(board+O.field('board', 'missions'), 330*76))])
     target = path.with_suffix('.lua')
     target.write_text('return '+lua(data), encoding='ascii')
     subprocess.run([os.environ.get('HD2_LUAJIT', str(ROOT.parent/'tools/src/LuaJIT/src/luajit.exe')),

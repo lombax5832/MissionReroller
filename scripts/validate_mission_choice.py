@@ -13,8 +13,15 @@ import subprocess
 import sys
 from fixture_memory import FixtureMemory
 from validate_lua_identity import lua
+import offsets
 
 ROOT=Path(__file__).resolve().parents[1]
+O=offsets.load()
+
+
+def pages(name):
+    entry=O.data['research'][name]
+    return entry['rva'],entry['rva']+entry['size']
 sys.path.insert(0,str(ROOT.parent/'tools/seed-emulator-deps'))
 from unicorn import Uc,UC_ARCH_X86,UC_MODE_64
 from unicorn.x86_const import UC_X86_REG_RIP,UC_X86_REG_RSP,UC_X86_REG_RCX,UC_X86_REG_RDX,UC_X86_REG_R8,UC_X86_REG_R9
@@ -27,16 +34,17 @@ def main(folder):
     # Only the function's captured code pages are executable; all other captures
     # are read-only data, and test-owned scratch/stack is writable, non-executable.
     for address,data in memory.pages.items():
-        engine.mem_map(address,4096,5 if base+0x11e6000<=address<base+0x11e7000 else 1)
+        start,end=pages('choice_pages')
+        engine.mem_map(address,4096,5 if base+start<=address<base+end else 1)
         engine.mem_write(address,data)
-    scratch=0x10000000000;stack=scratch+0x10000;stop=base+0x11e6340-1
+    scratch=0x10000000000;stack=scratch+0x10000;stop=base+O.rva['mission_choice']-1
     engine.mem_map(scratch,0x20000,3)
     definitions=scratch;candidate_address=scratch+0x1000;counts_address=scratch+0x2000;output=scratch+0x3000
     rand=random.Random(6020340)
     cases=[]
     ids=[]
     for id in [0,3,7,22,40,55,59,65,81,82,103,108]:
-        try: mission_hash=memory.u32(base+0x3773420+id*0x380)
+        try: mission_hash=memory.u32(base+O.rva['mission_types']+id*O.field('mission_type','size'))
         except ValueError: continue
         if mission_hash:ids.append(id)
     assert len(ids)>=8,'Need at least eight captured mission types for scalar/vector coverage'
@@ -49,7 +57,7 @@ def main(folder):
         if index<6:mission_seed=[0,1,0x7fffffff,0x80000000,0xfffffffe,0xffffffff][index]
         raw=bytearray(0x300)
         for i,id in enumerate(pool):
-            mission_hash=memory.u32(base+0x3773420+id*0x380)
+            mission_hash=memory.u32(base+O.rva['mission_types']+id*O.field('mission_type','size'))
             assert mission_hash!=0
             struct.pack_into('<If',raw,0x38+i*8,mission_hash,weights[id])
         engine.mem_write(definitions,bytes(raw))
@@ -63,7 +71,7 @@ def main(folder):
         for i,value in enumerate(args[4:]):engine.mem_write(sp+0x28+i*8,struct.pack('<Q',value))
         for reg,value in zip([UC_X86_REG_RCX,UC_X86_REG_RDX,UC_X86_REG_R8,UC_X86_REG_R9],args[:4]):engine.reg_write(reg,value)
         engine.reg_write(UC_X86_REG_RSP,sp)
-        engine.emu_start(base+0x11e6340,stop,timeout=1_000_000,count=100_000)
+        engine.emu_start(base+O.rva['mission_choice'],stop,timeout=1_000_000,count=100_000)
         assert engine.reg_read(UC_X86_REG_RIP)==stop,'Native picker exceeded execution budget'
         selected=struct.unpack('<I',engine.mem_read(output+0x30,4))[0]
         after={id:struct.unpack('<I',engine.mem_read(counts_address+id*4,4))[0] for id in pool}

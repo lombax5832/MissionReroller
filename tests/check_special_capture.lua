@@ -13,10 +13,12 @@ local function u(s,o)local a,b,c,d=s:byte(o+1,o+4);assert(d);return a+b*256+c*65
 local function pointer(s)local n=u(s,0)+4294967296*u(s,4);if n>=65536 and n<140737488355328 then return n end end
 local root=arg[2]
 local predict=dofile(root..'/src/operation_identity.lua')(dofile(root..'/src/generation_rng.lua'))
-local collect=dofile(root..'/src/special_operation_inputs.lua')(read,u,pointer)
-local probe=dofile(root..'/src/identity_probe.lua')(read,u,predict,collect)
+local H=dofile((arg[0]:match('^(.*[/\\])') or '')..'harness.lua')
+local O=H.offsets(root..'/src')
+local collect=H.module(root..'/src/special_operation_inputs.lua')(read,u,pointer)
+local probe=H.module(root..'/src/identity_probe.lua')(read,u,predict,collect)
 local b=tonumber(fixture.board)
-local s={board=b,planet=fixture.planet,seed=u(read(b+0x17a2bc,4),0),operations=read(b+0xf7280,110*92),fingerprint='captured'}
+local s={board=b,planet=fixture.planet,seed=u(read(b+O.board.published_seed,4),0),operations=read(b+O.board.operations,110*92),fingerprint='captured'}
 local captured=probe:capture(s)
 local result=probe:compare(captured)
 assert(result.passed,table.concat(result.errors,'\n'))

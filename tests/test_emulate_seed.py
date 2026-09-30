@@ -9,15 +9,17 @@ import unittest
 spec=importlib.util.spec_from_file_location('emulator',Path(__file__).resolve().parents[1]/'scripts/emulate_seed.py')
 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 BASE=0x40000000
+O=module.O  # src/offsets.lua, as the emulator reads it
 
 
 class ReplayTests(unittest.TestCase):
     def fixture(self,folder,code=b'\xc3'):
         (folder/'pages').mkdir()
         (folder/'meta.json').write_text(json.dumps({'session':'test','game':hex(BASE),'board':hex(0x70000000),'planet':268}))
-        address=0x70000000+0xf7000
+        # The page of the board's operations, and the operation cache after them.
+        address=(0x70000000+O.field('board','operations'))&~4095
         (folder/'pages'/f'{address:x}.json').write_text(json.dumps({'session':'test','address':hex(address),'hex':bytes(0x3000).hex()}))
-        for rva,body in ((0x12d5550,code),(0x11e5670,b'\xc3')):
+        for rva,body in ((O.rva['reseed_board'],code),(O.research['generate_missions'],b'\xc3')):
             data=bytearray(4096);offset=rva%4096;data[offset:offset+len(body)]=body
             address=(BASE+rva)&~4095
             (folder/'pages'/f'{address:x}.json').write_text(json.dumps({'session':'test','address':hex(address),'hex':data.hex()}))

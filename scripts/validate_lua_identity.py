@@ -10,8 +10,10 @@ from pathlib import Path
 import struct
 import subprocess
 from fixture_memory import FixtureMemory
+import offsets
 
 ROOT = Path(__file__).resolve().parents[1]
+O = offsets.load()
 
 
 def lua(value):
@@ -34,10 +36,11 @@ def input_from_fixture(folder):
     memory = FixtureMemory(folder)
     board, game = (int(memory.meta[k], 16) for k in ('board', 'game'))
     planet = memory.meta['planet']
-    assert memory.read(game+0x23c6780, 8) == bytes.fromhex('000000000000f03d')
-    definition_id = memory.u32(board+0x101454+planet*0x118)
+    rng_scale = O.data['code']['rng_scale']['bytes']
+    assert memory.read(game+O.rva['rng_scale'], len(rng_scale)//2) == bytes.fromhex(rng_scale)
+    definition_id = memory.u32(board+O.field('board', 'campaign')+0x1c+planet*O.field('campaign', 'definition_stride'))
     definitions = None
-    for offset in (0x22b1a8, 0x2cc9ec, 0x36e230):
+    for offset in O.field('board', 'definitions'):
         try:
             if memory.u32(board+offset) == definition_id:
                 definitions = board+offset
@@ -45,13 +48,13 @@ def input_from_fixture(folder):
         except ValueError:
             continue
     assert definitions is not None, 'Definitions not cached'
-    active = memory.read(board+0x17a2c0, 92)
-    result = dict(planet=planet, pool_count=memory.u32(definitions+0xa183c), max_difficulty=10)
+    active = memory.read(board+O.field('board', 'active_snapshot'), 92)
+    result = dict(planet=planet, pool_count=memory.u32(definitions+O.field('definitions', 'pool_count')), max_difficulty=10)
     if active[52]:
         result['active'] = dict(row=int.from_bytes(active[:4], 'little'), id=active[24],
                                 difficulty=active[32], planet=int.from_bytes(active[16:18], 'little'),
                                 seed=int.from_bytes(active[12:16], 'little'))
-    return result, memory.u32(board+0x17a2bc)
+    return result, memory.u32(board+O.field('board', 'published_seed'))
 
 
 def main(folder):

@@ -31,23 +31,25 @@ local function up(fn,name)
     for i=1,100 do local key,value=debug.getupvalue(fn,i);if key==name then return value end;if not key then break end end
     error('Missing upvalue '..name)
 end
-local function module(name)return dofile(root..'/'..name..'.lua')end
+local H=dofile((arg[0]:match('^(.*[/\\])') or '')..'harness.lua')
+local O=H.offsets(root)
+local function module(name)return H.module(root..'/'..name..'.lua')end
 CowboyBingusModLoader={api=1,version=18,open_log=function()return nil end}
 update=function()end
 dofile(arg[3])
 local ready=up(up(update,'tick'),'on_prediction_ready')
 local Planet=up(ready,'Planet')
 local game=ffi.cast('uint8_t*',tonumber(fixture.game));local board=tonumber(fixture.board)
-local planet=u(read(board+0x17a298,8),4);assert(planet<512,'No viewed planet')
-local seed=u(read(board+0x78e84,4),0)
-local key=read(board+0x101454+planet*0x118,4);local definitions
-for _,offset in ipairs({0x22b1a8,0x2cc9ec,0x36e230})do
+local planet=u(read(board+O.board.selection,8),4);assert(planet<512,'No viewed planet')
+local seed=u(read(board+O.board.seed,4),0)
+local key=read(board+O.board.campaign+0x1c+planet*O.campaign.definition_stride,4);local definitions
+for _,offset in ipairs(O.board.definitions)do
     if read(board+offset,4)==key then definitions=board+offset;break end
 end
 assert(definitions,'Planet definitions are not cached')
-local bytes=read(board+0xf7280,110*92)
-local count=u(read(board+0xffc08,4),0);assert(count<=330)
-local missions=count>0 and read(board+0xf9a10,count*76) or ''
+local bytes=read(board+O.board.operations,110*92)
+local count=u(read(board+O.board.mission_count,4),0);assert(count<=330)
+local missions=count>0 and read(board+O.board.missions,count*76) or ''
 local decoded={operations={}};local levels,seen={},{}
 for row=0,109 do
     local at=row*92

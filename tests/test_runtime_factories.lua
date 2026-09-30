@@ -19,16 +19,22 @@ local function factory(file,params,g)
     local chunk=assert(loadstring('return function('..params..')\n'..text(file)..'\nend','@'..file))
     return setfenv(chunk,env)()
 end
+-- The adapter's inputs (build_identity_probe.ADAPTER).
+local ADAPTER='core,config,make_map_screen,offsets,O,sha256'
 local lines={}
 local binders={}
 local make_reroll_session=factory('reroll_session.lua','',{})()
-local make_map_screen=factory('map_screen.lua','',{})()
+-- The offsets and their numbers, as the build passes them.
+local offsets=dofile(src..'/offsets.lua')
+local O=dofile(src..'/offset_values.lua')(offsets)
+local function sha256()return '' end
+local make_map_screen=factory('map_screen.lua','...',{})(O)
 local function fake_host(config)
     local M,emit={status='initializing'},function(s)lines[#lines+1]=s end
     return {M=M,config=config,emit=emit,reroll_session=make_reroll_session(M,emit,{strict=true}),
         hex=function()return '' end,u=function()return 0 end,read=function()error('no memory')end,
         pointer=function()error('no memory')end,page=function()end,participants=function()end,
-        snapshot=function()return nil,'open galactic map' end,initialize=function()end,expected_code='',
+        snapshot=function()return nil,'open galactic map' end,initialize=function()end,O=O,verify_code=function()end,
         map=setmetatable({HINT_WIDGET=1696},{__index=function()return function()error('no memory')end end}),
         write=function()error('no writes')end,
         when_initialized=function(bind)binders[#binders+1]=bind end,close_log=function()end}
@@ -41,7 +47,7 @@ local function last()return lines[#lines]end
 
 -- The adapter: its host, and nothing when the loader is unsupported.
 local g={CowboyBingusModLoader={api=1,version=18,open_log=function()return nil end}}
-local host=factory('experiment_adapter.lua','core,config,make_map_screen',g)({},config,make_map_screen)
+local host=factory('experiment_adapter.lua',ADAPTER,g)({},config,make_map_screen,offsets,O,sha256)
 local M=g.MissionRerollerExperiment
 assert(host and host.M==M and host.config==config and M.read_only==false and M.preview_prediction==true and M.version=='9.9.9')
 for _,name in ipairs({'emit','hex','u','read','pointer','page','participants','snapshot','initialize','when_initialized','close_log'})do
@@ -56,12 +62,12 @@ local write_binders={}
 local write=factory('guarded_write.lua','',{})()({read=function()end,page=function()end,
     when_initialized=function(bind)write_binders[#write_binders+1]=bind end})
 assert(type(write)=='function' and #write_binders==1)
-assert(type(host.expected_code)=='string' and host.u('\1\2\0\0',0)==513)
+assert(host.O==O and type(host.verify_code)=='function' and host.u('\1\2\0\0',0)==513)
 local old={CowboyBingusModLoader={api=1,version=15}}
-assert(factory('experiment_adapter.lua','core,config,make_map_screen',old)({},{read_only=true},make_map_screen)==nil)
+assert(factory('experiment_adapter.lua',ADAPTER,old)({},{read_only=true},make_map_screen,offsets,O,sha256)==nil)
 assert(old.MissionRerollerExperiment.status=='unsupported_loader' and old.MissionRerollerExperiment.read_only==true)
 local again={MissionRerollerExperiment={}}
-assert(factory('experiment_adapter.lua','core,config,make_map_screen',again)({},config,make_map_screen)==nil,'A second copy stays inert')
+assert(factory('experiment_adapter.lua',ADAPTER,again)({},config,make_map_screen,offsets,O,sha256)==nil,'A second copy stays inert')
 
 -- The runtimes, created in the assembler's order.
 local runtime='host,lib,hooks'

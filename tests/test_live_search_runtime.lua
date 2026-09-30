@@ -11,7 +11,7 @@ update=function()return 1,nil,3 end;shutdown=function()return 4,nil,6 end
 dofile(arg[1]);local tick=up(update,'tick');local advance=up(tick,'advance_live_publication')
 local match=up(up(tick,'advance_prediction_search'),'on_search_match')
 local game,board=0x10000000,0x20000000
-up(match,'game',game,true)
+local O=dofile((arg[0]:match('^(.*[/\\])') or '')..'harness.lua').offsets((arg[0]:match('^(.*[/\\])') or '')..'../src')
 local selection=word(268)..word(268)..word(4294967295)..word(4294967295)..word(0)
 local before={board=board,planet=268,seed=11,selection=selection,active=string.rep('00',92),fingerprint='before',context='same'}
 local p={row=0,id=1,seed=888,difficulty=10,category=0,faction=2,explicit_hash=0,template_index=3,modifiers={},valid=true,
@@ -23,16 +23,16 @@ local live=before;local canonical=11;local writes,notifications,selected=0,0,0;l
 up(match,'snapshot',function(viewed)assert(viewed==true,'Publication must use viewed-planet snapshots');return live end,true)
 -- The map UI shows the planet and difficulty, through the host's map screen.
 up(match,'map').viewed=function()return displayed_planet,difficulty end
-local signatures=up(match,'selection_signatures')
 up(match,'read',function(address,n)
-    if address==board+0x78e60 then return selection:sub(1,8)end
-    if address==board+0x78e84 then return word(canonical)end
-    if address==board+0x78e88 then return string.rep('\0',92)end
-    if address==game+0x148c348 then assert(n==16);return raw('44896308c7430cffffffffe8e859e4ff')end
-    for _,sig in ipairs(signatures)do if address==game+sig[1] then return raw(sig[2])end end
+    if address==board+O.board.selection_context then return selection:sub(1,8)end
+    if address==board+O.board.seed then return word(canonical)end
+    if address==board+O.board.active_operation then return string.rep('\0',92)end
     error('Unexpected read '..address)
 end,true)
 up(match,'ownership',function(b)assert(b==board);return 'owner'end,true)
+-- The code publication relies on is checked through the host before each use.
+local verified={}
+up(match,'verify_code',function(names)for _,name in ipairs(names)do verified[name]=(verified[name] or 0)+1 end end,true)
 local partial=false
 up(match,'write_seed',function(b,seed)
     assert(b==board);writes=writes+1;canonical=seed
@@ -50,6 +50,9 @@ local session=up(tick,'reroll_session');local on_match=match
 match=function(...)session.settle();session.advance('waiting_for_stable_inputs');session.advance('search_matched');return on_match(...)end
 local job={baseline=before,seed=22,operation=p,operations={p}}
 match(job,0);assert(writes==1 and notifications==1 and MissionRerollerExperiment.status=='publication_pending')
+for _,name in ipairs({'select_operation','select_campaign_row','selection_dispatch','selection_listener','map_click'})do
+    assert(verified[name]==1,'Publication checks '..name..' first')
+end
 advance('tick',1);assert(selected==1 and MissionRerollerExperiment.status=='publication_test_passed')
 match(job,2);assert(writes==1,'Only one publication per test session')
 local function reset()

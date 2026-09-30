@@ -10,11 +10,8 @@ This repo sits in the HD2 modding workspace (`..`). Shared tooling is in
 `../tools/`; `../dumps/` and `../extracted/` and this repo's `artifacts/` hold
 material derived from the game: keep them out of git and out of every release.
 
-Supported game: Steam build **25480438**. The pinned hashes are asserted in
-`src/experiment_adapter.lua` (search `hash mismatch`):
-
-- `game.dll`: `2E2C3B7C2500646DADD5F2B4C6E0504DBB7E7896139F64CDDC0D1813C718F51E`
-- `helldivers2.exe`: `F5FEE03DCFDB2E553A4752C283590950AC13316B376D8196AA556FF0400D5F06`
+Supported game: Steam build **25480438**. Its module hashes, and every other
+build-specific constant, are in `src/offsets.lua`.
 
 The install path is `$env:HD2_GAME_ROOT`; LuaJIT is `$env:HD2_LUAJIT`.
 
@@ -40,10 +37,17 @@ The release entry runs in the game's LuaJIT VM with FFI:
   existing private read/write pages (check with `VirtualQuery`), never to code.
   GameGuard is active: never attach an external debugger or tool to the game.
   `tests/test_package.py` lists the APIs the release must never contain.
-- **Guard build-specific offsets** with the module hashes above and byte
-  signatures (`src/window_signatures.lua`, `src/selection_signatures.lua`).
-  On anything unexpected, log `STOPPED: <reason>`, release the mouse gate and
-  write nothing further; the README troubleshooting table relies on it.
+- **Every offset lives in `src/offsets.lua`.** RVAs, globals, code
+  signatures and struct fields of 0x100 or more go there, each with a `from`
+  note and an anchor or `unverified=true`. Code reads them as numbers
+  through `O`: `local O=...` in a module, `host.O` in a runtime (`O.rva.board`,
+  `O.board.seed`); Python tools through `scripts/offsets.py`. The adapter
+  checks every code entry and anchor on the first frame, and
+  `tests/test_offsets.py` fails on an offset literal anywhere else in `src/`.
+  Adding an offset or moving to a new game build: `docs/UPDATING.md`.
+- **Stop cleanly.** On anything unexpected, log `STOPPED: <reason>`, release
+  the mouse gate and write nothing further; the README troubleshooting table
+  relies on it.
 - **Share the VM politely.** All addons share one LuaJIT VM and the first
   `ffi.cdef` of a name wins. Call Win32 functions another addon may declare
   the way `src/window_cursor.lua` does (resolve by address, unnamed function
@@ -59,8 +63,8 @@ The release entry runs in the game's LuaJIT VM with FFI:
 ## Names that must not change
 
 Every release since v0.4.0 ships as module
-`mods/ipodalexei/mission_reroller_experiment` with the `MODULE` and `GUID` in
-`scripts/build_combined.py`, global `MissionRerollerExperiment` and log
+`mods/ipodalexei/mission_reroller_experiment` with the `RELEASE_MODULE` and
+`RELEASE_GUID` in `scripts/build_core.py`, global `MissionRerollerExperiment` and log
 `MissionRerollerExperiment.log`. Mod managers match on the GUID, so a new ZIP
 replaces the old one.
 
@@ -68,10 +72,12 @@ replaces the old one.
 
 ```
 src/                         library modules and runtimes, joined at build time
-src/mods/ipodalexei/         mission_reroller.lua is the inert core; the rest are research entries
-scripts/build.py             release: NAME, VERSION, SUMMARY; MODULE/GUID from build_combined
-scripts/build_*.py           research builds, listed in scripts/README.md
+src/offsets.lua              every build-specific address and offset (docs/UPDATING.md)
+src/mods/ipodalexei/         mission_reroller.lua, the inert core the entry embeds
+scripts/build.py             release: NAME, VERSION, SUMMARY; MODULE/GUID from build_core
+scripts/build_*.py           other configurations of the release source, listed in scripts/README.md
 scripts/check_live_*.py      live-memory checks through Memory Explorer
+scripts/check_offsets.py     src/offsets.lua against a game dump
 tests/                       Python drivers and LuaJIT tests
 docs/HISTORY.md              development log, newest first
 docs/*_TEST.md, *RESEARCH.md one file per in-game test or research topic
@@ -87,15 +93,20 @@ No single file in `src/` is the shipped entry. `scripts/build.py` calls
 
 - `src/mods/ipodalexei/mission_reroller.lua` is embedded with
   `MissionReroller` renamed to `MissionRerollerExperimentCore`.
-- Each library module is wrapped as `local name=(function() <file> end)()`,
-  so a module file ends in `return <value>`. A new module needs a line in the
-  list in `source()`; `source()` also collects them into a `lib` table.
+- `src/offsets.lua`, without its `research` section, becomes `local offsets`,
+  and `src/offset_values.lua` turns it into the numbers `O`.
+- Each library module is wrapped as `local name=(function(...) <file>
+  end)(O)`, so a module file starts with `local O=...` when it reads memory
+  and ends in `return <value>`. A new module needs a line in the list in
+  `source()`; `source()` also collects them into a `lib` table. Tests load a
+  module the same way with `H.module(path)` (`tests/harness.lua`).
 - The build's mode is data: `config()` in `build_identity_probe.py` gives
   `read_only`, `preview_prediction`, `version`, the startup `banner`, the
   `shortcut` name and a few log phrases. The chunk declares it as
   `local config={...}`. No source text is rewritten.
-- `experiment_adapter.lua` runs as `local host=(function(core,config) <file>
-  end)(core,config)` and ends in `return {M=M,config=config,emit=...}`: the
+- `experiment_adapter.lua` runs as a function of
+  `build_identity_probe.ADAPTER` (`core,config,make_map_screen,offsets,O,sha256`)
+  and ends in `return {M=M,config=config,emit=...,O=O,verify_code=...}`: the
   runtimes' host. It returns nothing when another copy runs or the loader is
   too old, and the chunk then stops (`if not host then return end`).
 - Each `*_runtime.lua` runs as `(function(host,lib,hooks) <file>
@@ -128,18 +139,17 @@ No single file in `src/` is the shipped entry. `scripts/build.py` calls
   `request`. None of it is on `M`.
 - Game-UI reads go through `host.map` (`src/map_screen.lua`, which the
   adapter receives as `make_map_screen`): the screen stack, the map UI's
-  viewed planet, difficulty and operation rows, and the BACK hint. Its
-  offsets live nowhere else. Writes go through `host.write(address, bytes,
+  viewed planet, difficulty and operation rows, and the BACK hint. No other
+  file reads them. Writes go through `host.write(address, bytes,
   what, verify)` (`src/guarded_write.lua`): page check, `WriteProcessMemory`
   resolved by address, read-back. Only publishing builds add `host.write`;
   the read-only builds contain no write. Tests replace fields of the shared
   `host.map` table (`up(dialog,'map').on_top=...`) instead of runtime closures.
 
-`build_combined.py`, `build_experiment.py` and `build_seed_test.py` are older
-research builds: they append the adapter inline through
-`build_core.inline_adapter()`, which drops its host return so their runtimes
-share its locals. The research builders reuse these modules, so a change to a
-shared module can break their tests too.
+`build_identity_probe.py` (its own `main`), `build_search_probe.py` and
+`build_live_search.py` are research builds of the same `source()` with fewer
+parts enabled; `test_identity_probe.py`, `test_search_probe.py` and
+`test_live_search.py` check them. The older checkpoint builds were removed.
 
 ## Build and test
 

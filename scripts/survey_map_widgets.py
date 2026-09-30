@@ -21,9 +21,12 @@ sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT.parent / 'MemoryExplorer/server'))
 import memory_mcp as mcp
+sys.path.insert(0, str(ROOT / 'scripts'))
+import offsets
 
-MANAGER, REGISTRY, KIND = 0x3326e68, 25224, 226
-SCREENS, STACK = 0x347ce28, 0x429c
+O = offsets.load()
+MANAGER, REGISTRY, KIND = O.rva['ui_manager'], O.field('ui_manager', 'registry'), 226
+SCREENS, STACK = O.rva['screen_owner'], O.field('screen_owner', 'stack')
 RECORD, LIMIT, PAGE = 164, 1 << 20, 4096
 
 

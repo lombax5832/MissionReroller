@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 from fixture_memory import FixtureMemory
 from validate_lua_identity import lua,input_from_fixture
+import offsets
 
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -14,7 +15,7 @@ def main(folder):
     memory=FixtureMemory(folder)
     board=int(memory.meta['board'],16)
     _,seed=input_from_fixture(folder)
-    data=dict(game=memory.meta['game'],definitions=hex(board+0x22b1a8),
+    data=dict(game=memory.meta['game'],definitions=hex(board+offsets.load().field('board','definitions')[0]),
               ranges=[dict(address=hex(a),hex=b.hex()) for a,b in memory.pages.items()],cases=[])
     for path in [folder/'predicted-operations.bin',*sorted(folder.glob('seed-*/predicted-operations.bin'))]:
         if not path.exists():continue

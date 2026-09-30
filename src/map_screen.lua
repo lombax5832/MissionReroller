@@ -1,19 +1,21 @@
--- The galactic map screen of build 25480438, read-only: the screen stack, the
--- map UI's viewed planet, difficulty and operation rows, and the BACK hint
--- widget. Every offset of these reads lives here. The adapter creates it as
--- host.map; the runtimes and the adapter's snapshot read the map through it.
+-- The galactic map screen, read-only: the screen stack, the map UI's viewed
+-- planet, difficulty and operation rows, and the BACK hint widget. Every read
+-- of them lives here; their offsets are in src/offsets.lua. The adapter
+-- creates it as host.map; the runtimes and the adapter's snapshot read the
+-- map through it.
 --
 -- memory: read(address,n), pointer(address) (the pointer stored there),
 -- u(bytes,offset), pointer_at(bytes,offset) (a pointer inside bytes, or nil),
 -- game() (the game.dll base) and ffi(). The adapter passes functions that
 -- look its own locals up on every call, so the native handles set on the
 -- first frame reach the map too.
+local O=...
 return function(memory)
     local read,pointer,u=memory.read,memory.pointer,memory.u
     local map={}
     local GALACTIC_MAP=15
     -- The screen stack: up to five screen ids, bottom first, depth at +20.
-    function map.stack()return read(pointer(memory.game()+0x347ce28)+0x429c,24)end
+    function map.stack()return read(pointer(memory.game()+O.rva.screen_owner)+O.screen_owner.stack,24)end
     -- The screen ids bottom first, or nil and the depth when it is out of range.
     function map.screens(stack)
         stack=stack or map.stack()
@@ -29,18 +31,18 @@ return function(memory)
         return depth>=1 and depth<=5 and u(stack,(depth-1)*4)==GALACTIC_MAP
     end
     -- The map UI object.
-    function map.ui()return pointer(memory.game()+0x3326aa0)end
+    function map.ui()return pointer(memory.game()+O.rva.map_ui)end
     -- The planet and the difficulty the map UI shows.
     function map.viewed(ui)
         ui=ui or map.ui()
-        local planet=u(read(ui+0x4ef8,4),0)
-        return planet,u(read(ui+0x4f14,4),0)
+        local planet=u(read(ui+O.map_ui.planet,4),0)
+        return planet,u(read(ui+O.map_ui.difficulty,4),0)
     end
     -- The map UI's two operation-row words: the selected row, then the row
     -- under the cursor (0xffffffff for none).
-    function map.rows_address(ui)return (ui or map.ui())+0x4f00 end
+    function map.rows_address(ui)return (ui or map.ui())+O.map_ui.rows end
     -- The row the map UI has processed as selected.
-    function map.processed_row(ui)return u(read((ui or map.ui())+0x4f98,4),0)end
+    function map.processed_row(ui)return u(read((ui or map.ui())+O.map_ui.processed_row,4),0)end
     -- The operation row under the cursor, or else the selected one; nil
     -- when neither is an operation row.
     function map.pointed_row()
@@ -52,7 +54,7 @@ return function(memory)
     -- the map screen object: the 136x32 design-unit container at local
     -- (56,16) that holds the key cap and the BACK label, found by
     -- scripts/survey_map_widgets.py on 2026-09-29. nil draws no hint.
-    map.HINT_WIDGET=1696
+    map.HINT_WIDGET=O.map_screen.hint_widget
     -- The BACK hint's solved rectangle, or nil when the galactic map is not
     -- the top screen or the hint is hidden. The map screen object is the one
     -- inline subscriber of a UI manager event registry; a widget record keeps
@@ -62,7 +64,7 @@ return function(memory)
     function map.back_hint()
         if not map.HINT_WIDGET then return nil end
         if not map.on_top()then return nil end
-        local entry=read(pointer(memory.game()+0x3326e68)+25224,24)
+        local entry=read(pointer(memory.game()+O.rva.ui_manager)+O.ui_manager.registry,24)
         if u(entry,0)~=1 or u(entry,16)~=226 then return nil end
         local owner=memory.pointer_at(entry,8)
         if not owner then return nil end

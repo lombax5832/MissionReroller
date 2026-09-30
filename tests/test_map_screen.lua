@@ -4,7 +4,9 @@
 -- fake Win32 entry points, then once for real into this process's memory.
 local src=assert(arg[1])
 local ffi=require('ffi')
-local make_map=assert(loadfile(src..'/map_screen.lua'))()
+local H=dofile((arg[0]:match('^(.*[/\\])') or '')..'harness.lua')
+local O=H.offsets(src)
+local make_map=H.module(src..'/map_screen.lua')
 local make_write=assert(loadfile(src..'/guarded_write.lua'))()
 local function word(n)return string.char(n%256,math.floor(n/256)%256,math.floor(n/65536)%256,math.floor(n/16777216)%256)end
 local function u(b,o)local a,c,d,e=b:byte(o+1,o+4);assert(e,'short read');return a+c*256+d*65536+e*16777216 end
@@ -21,46 +23,46 @@ end
 local function pointer(a)return assert(pointers[a],string.format('Missing pointer at %x',a))end
 local map=make_map({read=read,pointer=pointer,u=u,game=function()return game end,ffi=function()return ffi end,
     pointer_at=function(bytes,o)local v=u(bytes,o);return v>=0x10000 and v or nil end})
-pointers[game+0x347ce28]=stack_owner;pointers[game+0x3326aa0]=ui;pointers[game+0x3326e68]=registry
+pointers[game+O.rva.screen_owner]=stack_owner;pointers[game+O.rva.map_ui]=ui;pointers[game+O.rva.ui_manager]=registry
 local function stack(...)
     local ids={...};local bytes=''
     for i=1,5 do bytes=bytes..word(ids[i] or 0)end
-    memory[stack_owner+0x429c]=bytes..word(#ids)
+    memory[stack_owner+O.screen_owner.stack]=bytes..word(#ids)
 end
 
 -- The screen stack, bottom first; the galactic map (15) only counts on top.
 stack(15);assert(map.on_top() and table.concat(assert(map.screens()),',')=='15')
 stack(15,26);assert(not map.on_top() and table.concat(assert(map.screens()),',')=='15,26')
 stack(3,15);assert(map.on_top())
-memory[stack_owner+0x429c]=string.rep('\0',20)..word(0)
+memory[stack_owner+O.screen_owner.stack]=string.rep('\0',20)..word(0)
 local list,depth=map.screens();assert(list==nil and depth==0 and not map.on_top())
-memory[stack_owner+0x429c]=string.rep('\0',20)..word(6)
+memory[stack_owner+O.screen_owner.stack]=string.rep('\0',20)..word(6)
 list,depth=map.screens();assert(list==nil and depth==6 and not map.on_top())
 -- A stack read once is decided without a second read.
 stack(15);reads={};local raw=map.stack();assert(map.on_top(raw) and map.screens(raw) and #reads==1)
-assert(reads[1]==(stack_owner+0x429c)..':24')
+assert(reads[1]==(stack_owner+O.screen_owner.stack)..':24')
 
 -- The map UI: the viewed planet and difficulty, and the operation rows.
-memory[ui+0x4ef8]=word(268);memory[ui+0x4f14]=word(7)
+memory[ui+O.map_ui.planet]=word(268);memory[ui+O.map_ui.difficulty]=word(7)
 local planet,difficulty=map.viewed();assert(planet==268 and difficulty==7)
-assert(map.ui()==ui and map.rows_address()==ui+0x4f00 and map.rows_address(ui)==ui+0x4f00)
-memory[ui+0x4f98]=word(29);assert(map.processed_row()==29 and map.processed_row(ui)==29)
+assert(map.ui()==ui and map.rows_address()==ui+O.map_ui.rows and map.rows_address(ui)==ui+O.map_ui.rows)
+memory[ui+O.map_ui.processed_row]=word(29);assert(map.processed_row()==29 and map.processed_row(ui)==29)
 -- The row under the cursor wins; else the selected row; else none.
-memory[ui+0x4f00]=word(29)..word(41);assert(map.pointed_row()==41)
-memory[ui+0x4f00]=word(29)..word(4294967295);assert(map.pointed_row()==29)
-memory[ui+0x4f00]=word(4294967295)..word(4294967295);assert(map.pointed_row()==nil)
-memory[ui+0x4f00]=word(4294967295)..word(110);assert(map.pointed_row()==nil)
+memory[ui+O.map_ui.rows]=word(29)..word(41);assert(map.pointed_row()==41)
+memory[ui+O.map_ui.rows]=word(29)..word(4294967295);assert(map.pointed_row()==29)
+memory[ui+O.map_ui.rows]=word(4294967295)..word(4294967295);assert(map.pointed_row()==nil)
+memory[ui+O.map_ui.rows]=word(4294967295)..word(110);assert(map.pointed_row()==nil)
 
 -- The BACK hint: the map screen's widget at HINT_WIDGET, visible and opaque.
-assert(map.HINT_WIDGET==1696)
+assert(map.HINT_WIDGET==O.map_screen.hint_widget)
 local function widget(flags,opacity,sx,sy,x,y,w,h)
     local b=string.rep('\0',164)
     local function at(o,v)b=b:sub(1,o)..v..b:sub(o+#v+1)end
     at(0,word(flags));at(36,float(w));at(40,float(h));at(84,float(opacity));at(100,float(sx));at(140,float(sy))
     at(148,float(x));at(156,float(y))
-    memory[widgets+1696]=b
+    memory[widgets+O.map_screen.hint_widget]=b
 end
-memory[registry+25224]=word(1)..word(0)..word(widgets)..word(0)..word(226)..word(0)
+memory[registry+O.ui_manager.registry]=word(1)..word(0)..word(widgets)..word(0)..word(226)..word(0)
 stack(15);widget(0x10,1,1.5,1.5,48,32,80,24)
 local box=assert(map.back_hint())
 assert(box.x==48 and box.y==32 and box.w==120 and box.h==36 and box.scale==1.5)
@@ -70,11 +72,11 @@ widget(0x10,1,1.5,1.2,48,32,80,24);assert(map.back_hint()==nil,'Uneven scale')
 widget(0x10,1,1,1,48,32,4,4);assert(map.back_hint()==nil,'Too small')
 widget(0x10,1,1.5,1.5,48,32,80,24)
 stack(15,26);assert(map.back_hint()==nil,'Not on top');stack(15)
-memory[registry+25224]=word(1)..word(0)..word(widgets)..word(0)..word(227)..word(0)
+memory[registry+O.ui_manager.registry]=word(1)..word(0)..word(widgets)..word(0)..word(227)..word(0)
 assert(map.back_hint()==nil,'Another subscriber')
-memory[registry+25224]=word(1)..word(0)..word(0)..word(0)..word(226)..word(0)
+memory[registry+O.ui_manager.registry]=word(1)..word(0)..word(0)..word(0)..word(226)..word(0)
 assert(map.back_hint()==nil,'No owner')
-map.HINT_WIDGET=nil;assert(map.back_hint()==nil,'Disabled');map.HINT_WIDGET=1696
+map.HINT_WIDGET=nil;assert(map.back_hint()==nil,'Disabled');map.HINT_WIDGET=O.map_screen.hint_widget
 print('map screen: stack, top screen, viewed planet and difficulty, operation rows and BACK hint passed')
 
 -- The guarded write against fakes: the page check, the Win32 write through

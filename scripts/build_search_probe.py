@@ -7,7 +7,7 @@ VERSION='0.9.1'
 
 def main(output=None):
     output=Path(output) if output else probe.build.ROOT/'releases'/f'Mission-Reroller-Lua-Search-Probe-v{VERSION}.zip'
-    probe.build.build_addon(probe.build_combined.MODULE,probe.source(search=True),probe.build_combined.GUID,output,
+    probe.build.build_addon(probe.build.RELEASE_MODULE,probe.source(search=True),probe.build.RELEASE_GUID,output,
                            f'Mission Reroller v{VERSION} (read-only Lua search)')
     print(output)
     return output

@@ -16,6 +16,11 @@ DEPS = next((p/'tools/seed-emulator-deps' for p in ROOT.parents if (p/'tools/see
 sys.path.insert(0, str(DEPS))
 from unicorn import Uc, UcError, UC_ARCH_X86, UC_MODE_64, UC_HOOK_MEM_UNMAPPED, UC_HOOK_MEM_WRITE, UC_HOOK_MEM_FETCH_PROT, UC_HOOK_INSN, UC_HOOK_INTR
 from unicorn.x86_const import *
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import offsets
+
+O = offsets.load()
+CODE = O.data['research']['code_section']
 
 SCRATCH = 0x10000000000
 STACK = SCRATCH + 0x100000
@@ -26,7 +31,7 @@ def replay(folder, seed=None, output=None, observer=None):
     meta = json.loads((folder/'meta.json').read_text())
     base = int(meta['game'], 16)
     board = int(meta['board'], 16)
-    campaign = board + 0x101438
+    campaign = board + O.field('board', 'campaign')
     planet = meta['planet']
     if seed is not None and not 0 <= seed <= 0xffffffff:
         raise ValueError('Seed must fit uint32')
@@ -45,7 +50,7 @@ def replay(folder, seed=None, output=None, observer=None):
             if page in mapped:
                 raise ValueError('Overlapping capture pages')
             # Data pages cannot execute; only the pinned game-code interval can.
-            uc.mem_map(page,4096,7 if base+0x1000<=page<base+0x2110000 else 3)
+            uc.mem_map(page,4096,7 if base+CODE['rva']<=page<base+CODE['rva']+CODE['size'] else 3)
             uc.mem_write(page,data[offset:offset+4096]);mapped.add(page)
     for address,size in ((SCRATCH,0x10000),(STACK,0x100000),(STOP,0x1000)):
         uc.mem_map(address,size)
@@ -84,26 +89,30 @@ def replay(folder, seed=None, output=None, observer=None):
     try:
         # The mask helper reads the global board operation array. Preserve that
         # alias in EMULATED memory instead of passing an unrelated scratch array.
-        for address in (board+0xf9a0c,):
+        # The operation cache's flag word (+4).
+        for address in (board+O.field('board','operation_cache')+4,):
             page=address&~4095
             if page not in mapped:
                 missing.append({'address':hex(page),'size':4096,'access':'output_metadata'})
                 return {'status':'missing','missing':missing}
-        uc.mem_write(board+0xf9a0c,b'\x01')
+        uc.mem_write(board+O.field('board','operation_cache')+4,b'\x01')
         if seed is not None:
-            page=(campaign+0x78e84)&~4095
+            # campaign+0x78e84, the seed the generator reads: board.published_seed.
+            seed_at=board+O.field('board','published_seed')
+            page=seed_at&~4095
             if page not in mapped:
                 missing.append({'address':hex(page),'size':4096,'access':'seed_override'})
                 return {'status':'missing','missing':missing}
-            uc.mem_write(campaign+0x78e84,struct.pack('<I',seed))
-        invoke(0x12d5550,(board,campaign,planet))
+            uc.mem_write(seed_at,struct.pack('<I',seed))
+        invoke(O.rva['reseed_board'],(board,campaign,planet))
         stage='missions'
-        invoke(0x11e5670,(SCRATCH+0x4000,campaign,board+0xf7280,planet))
-        operations=bytes(uc.mem_read(board+0xf7280,0x2788))
-        missions=bytes(uc.mem_read(SCRATCH+0x4000,0x6200))
+        invoke(O.research['generate_missions'],(SCRATCH+0x4000,campaign,board+O.field('board','operations'),planet))
+        operations=bytes(uc.mem_read(board+O.field('board','operations'),110*92))
+        # 330 mission records, then their count.
+        missions=bytes(uc.mem_read(SCRATCH+0x4000,330*76+8))
         if bytes(uc.mem_read(SCRATCH+0x2790,0x4000-0x2790))!=b'\xa5'*(0x4000-0x2790) or bytes(uc.mem_read(SCRATCH+0xa200,0x10000-0xa200))!=b'\xa5'*(0x10000-0xa200):
             raise RuntimeError('Generator exceeded output buffer boundary')
-        mission_count=struct.unpack_from('<I',missions,0x61f8)[0]
+        mission_count=struct.unpack_from('<I',missions,330*76)[0]
         if mission_count>330:
             raise RuntimeError('Invalid generated mission count')
         destination=output or (folder if seed is None else folder/f'seed-{seed}')

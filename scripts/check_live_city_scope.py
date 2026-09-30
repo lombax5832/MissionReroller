@@ -17,6 +17,9 @@ sys.path.insert(0, str(ROOT.parent / 'MemoryExplorer/server'))
 sys.path.insert(0, str(ROOT / 'scripts'))
 import memory_mcp as mcp
 import build
+import offsets
+
+O = offsets.load()
 
 
 def main(difficulty='10'):
@@ -29,7 +32,7 @@ def main(difficulty='10'):
     def read(address, size):
         reply = mcp.call_tool(bridge, 'hd2_read', {'session': session, 'address': hex(address), 'size': size})
         return bytes.fromhex(reply['hex'])
-    board = int.from_bytes(read(game + 0x347cee8, 8), 'little')
+    board = int.from_bytes(read(game + O.rva['board'], 8), 'little')
     folder = ROOT / 'artifacts/city-live'
     folder.mkdir(parents=True, exist_ok=True)
     pages = {}

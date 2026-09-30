@@ -1,19 +1,20 @@
 -- Read-only capture and comparison for the partial Lua generation port.
+local O=...
 return function(read,u,predict,special_inputs,levels_factory,verify_levels,composition_capture)
     local ffi=require('ffi')
     local function address_number(address)return tonumber(ffi.cast('uintptr_t',address))end
     local probe={}
     function probe:capture(snapshot)
         local b,planet=snapshot.board,snapshot.planet
-        local key=read(b+0x101454+planet*0x118,4)
+        local key=read(b+O.board.campaign+0x1c+planet*O.campaign.definition_stride,4)
         local definitions,identity
-        for _,offset in ipairs({0x22b1a8,0x2cc9ec,0x36e230})do
+        for _,offset in ipairs(O.board.definitions)do
             local id=read(b+offset,4)
             if id==key then definitions=b+offset;identity=id;break end
         end
         assert(definitions,'Planet definitions are not cached')
-        local count=read(definitions+0xa183c,4)
-        local active=read(b+0x17a2c0,92)
+        local count=read(definitions+O.definitions.pool_count,4)
+        local active=read(b+O.board.active_snapshot,92)
         local input={planet=planet,pool_count=u(count,0),max_difficulty=10}
         if active:byte(53)~=0 then
             input.active={row=u(active,0),id=active:byte(25),seed=u(active,12),

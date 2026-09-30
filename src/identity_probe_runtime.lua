@@ -5,7 +5,7 @@
 local M,emit,read,u,hex,snapshot=host.M,host.emit,host.read,host.u,host.hex,host.snapshot
 local reroll_session=host.reroll_session
 local initialize,config=host.initialize,host.config
-local make_rng,sha256,make_probe,predict_identity=lib.make_rng,lib.sha256,lib.make_probe,lib.predict_identity
+local make_rng,make_probe,predict_identity=lib.make_rng,lib.make_probe,lib.predict_identity
 local make_special_inputs,make_level_inputs,make_level_verification=lib.make_special_inputs,lib.make_level_inputs,lib.make_level_verification
 local choose_level,Planet,ModInventory=lib.choose_level,lib.Planet,lib.ModInventory
 local dialog_tick,dialog_release,observe_constellations=hooks.dialog_tick,hooks.dialog_release,hooks.observe_constellations
@@ -28,32 +28,10 @@ local function sliced_read(address,size)
     if slice_end and slice_clock()>=slice_end then coroutine.yield()end
     return read(address,size)
 end
-local code_signatures={
-    {0x11e3c10,1104,'e600b7f917c0dae668397ec326b9ec53df4705e0c1135d5880be8fcaa91d65bd'},
-    {0x11e4060,1136,'5cc7271a512f5caf431abcc5b3e0fcbeb99c325eeae368b03f3ec52427e1661f'},
-    {0x11e44d0,960,'761e9b878f605a026082169dd67c4a2f5cae070d03a840ac2027499531689801'},
-    {0x11e4b50,248,'0847b63474ce07ef97714cd0acf6d71d76e9a1a4ec1acee82d0d25789bee0dc3'},
-    {0x12d5550,288,'b4c826d4744fdbbc161f2da037c544451c77caea400dfe5b87c77233f060289a'},
-    {0x12dbd70,64,'f021d86754fcf3cb8658ab2e205d01a9df0d85eb0fd24f8f7893ef0f3e315ca1'},
-    {0x11e6020,743,'f5570461586131f1cc890d3745194440ae83dd0c2b1bb468db9f947c33fbc848'},
-    {0x11e6800,338,'f5dfdd2ba5a53230faa8ad361012721980e49da2a121ad7ad7a44f03d0372358'},
-    {0x11e5100,1291,'5d9b9f3fb65fd7f0b39817b4919bebea8bd14995f77694053c7f8e0e6aebb488'},
-    {0x11e3250,2382,'93ef0654c865d859f1299ddcfa11d0c27772ab96542a1d1d95c9c2d819b85e5a'},
-    {0x11e6340,793,'b417991b06d78e8df61b2866c5373e0b166a018d459dbaa3078f34880d6dfa9f'},
-    {0x11f96e0,450,'b121a84355d760e1d95c35e3fbc508a2f86875fe3614cec66b643d4587d03667'},
-    {0x12e7990,243,'1f2ccbbfa61bc50a3e2ec72bfcc2000a992f09f2495f60be2f173568064de7f4'},
-    {0x12df110,952,'77111a8319abae6556e658acadbb13660f1582be47b3d2fc5d315ac8232c50a0'},
-    {0x177e5b0,831,'66c3b348db09003218b6cec50fd322fb1de77c4512a464fb135e7556470e28f8'},
-    {0x174ab50,335,'0bd16770e68656de8fb7e84f9d62a64cda0e8ffa0d81c25c539ef4e79d743ab9'},
-    {0x174b110,464,'4b395978f97967bfc97024b41ab6b63246c120019aa369f91d358321b543a7a4'},
-    {0x11ebb40,152,'5feaccab97b046561f786f2e60533112168f152ebcd19f38ad1e190c9a08e6a9'},
-}
 local function prepare()
+    -- initialize() checks the generator code and the RNG constant with every
+    -- other entry of src/offsets.lua.
     initialize()
-    for _,sig in ipairs(code_signatures)do
-        assert(sha256(read(game+sig[1],sig[2]))==sig[3],'Generator signature mismatch')
-    end
-    assert(hex(read(game+0x23c6780,8))=='000000000000f03d','RNG scaling constant mismatch')
     probe=make_probe(sliced_read,u,predict_identity,make_special_inputs(sliced_read,u,api.pointer),
         function(cached_read)return make_level_inputs(cached_read,u,game)end,
         make_level_verification(make_rng,choose_level),Planet.capture(sliced_read,u,api.pointer,game))

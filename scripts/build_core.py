@@ -13,22 +13,14 @@ MODULE = 'mods/ipodalexei/mission_reroller'
 NAME = 'Mission Reroller Development'
 VERSION = '0.2.0'
 GUID = 'dffa499a-e5de-48ef-9c5a-70f5fa96edc6'
+# The release's module and GUID, those of every published Mission Reroller ZIP
+# since v0.4.0; keep them so mod managers treat a new version as an update.
+RELEASE_MODULE = 'mods/ipodalexei/mission_reroller_experiment'
+RELEASE_GUID = '1b378e53-cb80-44f0-a05c-909834932ea1'
 
 
 def entry_path():
     return ROOT / 'src' / (MODULE + '.lua')
-
-
-def inline_adapter():
-    """experiment_adapter.lua for the older research builds, which append it
-    inline so their runtimes share its locals: the default mode, the map
-    screen it reads through, and without the host table that
-    build_identity_probe.source() returns from it."""
-    text = (ROOT / 'src' / 'experiment_adapter.lua').read_text()
-    body, marker, host = text.rpartition('\n-- Runtime host:')
-    assert marker and text.count(marker) == 1 and host.count('\nreturn {') == 1, 'adapter host return moved'
-    map_screen = (ROOT / 'src' / 'map_screen.lua').read_text()
-    return 'local config={}\nlocal make_map_screen=(function()\n' + map_screen + '\nend)()\n' + body + '\n'
 
 
 def release_path():

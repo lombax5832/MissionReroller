@@ -1,6 +1,10 @@
 -- HD2-Addon: mods/ipodalexei/mission_reroller
 if rawget(_G, 'MissionReroller') then return end
 local M = {version='0.2.0', status='initializing', native_ready=false}
+-- The game build whose record layouts inspect_snapshot decodes. The core
+-- stands alone, so it keeps its own copy; tests/test_offsets.py requires it
+-- to equal the build of src/offsets.lua.
+M.SUPPORTED_BUILD = 25480438
 rawset(_G, 'MissionReroller', M)
 
 -- Development core. No native adapter is installed: this file cannot issue
@@ -47,7 +51,7 @@ end
 -- Memory acquisition and build-signature checks belong to the future adapter.
 -- Two agreeing passes reduce mixed-frame reads; they are not an atomic snapshot.
 function M.inspect_snapshot(capture)
-    assert(type(capture)=='table' and capture.build==25480438, 'Unsupported snapshot build')
+    assert(type(capture)=='table' and capture.build==M.SUPPORTED_BUILD, 'Unsupported snapshot build')
     assert(id(capture.session) and capture.session_after==capture.session, 'Snapshot session changed')
     local a,b=capture.before,capture.after
     assert(type(a)=='table' and type(b)=='table', 'Missing snapshot passes')

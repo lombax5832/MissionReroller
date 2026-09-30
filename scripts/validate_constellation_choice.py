@@ -11,10 +11,15 @@ import sys
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
-IMAGE = ROOT.parent / 'dumps/build-25480438/game.dll.unpacked.bin'
-HASHES, DIFFICULTY, MISSIONS, CATEGORIES = 0x21e1920, 0x328d2a0, 0x3773420, 0x32e98e0
-CANDIDATES = {2: 0x114, 3: 0x174, 4: 0x1d4}
-FALLBACK = {2: 0x234, 3: 0x258, 4: 0x27c}
+sys.path.insert(0, str(ROOT / 'scripts'))
+import offsets
+
+O = offsets.load()
+IMAGE = ROOT.parent / f'dumps/build-{O.build}/game.dll.unpacked.bin'
+HASHES, DIFFICULTY, MISSIONS, CATEGORIES = (O.rva[name] for name in ('enemy_tags', 'difficulty_rows', 'mission_types', 'categories'))
+ROW, RECORD = O.field('difficulty_row', 'size'), O.field('mission_type', 'size')
+CANDIDATES = dict(zip((2, 3, 4), O.field('difficulty_row', 'constellation_candidates')))
+FALLBACK = dict(zip((2, 3, 4), O.field('difficulty_row', 'constellation_blockers')))
 HORDE = -0x7a83d32e807d87b7
 
 
@@ -32,7 +37,7 @@ def resolve(image, faction, difficulty, kind, seed, initial):
             tags.append(tag)
     for tag in initial:
         add(tag)
-    row = DIFFICULTY + (difficulty - 1) * 0x330
+    row = DIFFICULTY + (difficulty - 1) * ROW
     empty, pool, total = not tags, [], 0.0
     for i in range(8):
         tag, weight, only_empty = struct.unpack_from('<IfB', image, row + CANDIDATES[faction] + i * 12)
@@ -40,7 +45,7 @@ def resolve(image, faction, difficulty, kind, seed, initial):
             pool.append((tag, weight))
             total = f32(total + weight)
     state = seed
-    for _ in range(u32(row + 0x110)):
+    for _ in range(u32(row + O.field('difficulty_row', 'constellation_draws'))):
         if not pool or total <= 0:
             break
         state = (state * 0x5851F42D4C957F2D + 0x14057B7EF767814F) & 0xffffffffffffffff
@@ -61,8 +66,8 @@ def resolve(image, faction, difficulty, kind, seed, initial):
             blocked = blocked or blocker in tags
         if not blocked:
             add(fallback)
-    record = MISSIONS + kind * 0x380
-    if image[record + 0x34] == 2 and struct.unpack_from('<q', image, record + 0x360)[0] == HORDE:
+    record = MISSIONS + kind * RECORD
+    if image[record + 0x34] == 2 and struct.unpack_from('<q', image, record + O.field('mission_type', 'horde_tag'))[0] == HORDE:
         add(1)
     for i in range(8):
         excluded = u32(record + 0x14 + i * 4)
@@ -79,7 +84,7 @@ def main(output=None):
     chooser = random.Random(25480438)
     kinds = {2: [], 3: [], 4: []}
     for kind in range(162):
-        record = MISSIONS + kind * 0x380
+        record = MISSIONS + kind * RECORD
         faction = struct.unpack_from('<I', image, record + 8)[0]
         if struct.unpack_from('<I', image, record)[0] and faction in kinds:
             special = image[record + 0x34] == 2 or any(struct.unpack_from('<8I', image, record + 0x14))
@@ -91,15 +96,15 @@ def main(output=None):
         blockers = [struct.unpack_from('<I', image, DIFFICULTY + FALLBACK[faction] + i * 4)[0] for i in range(8)]
         for difficulty in range(1, 11):
             for kind in chosen:
-                excluded = [x for x in struct.unpack_from('<8I', image, MISSIONS + kind * 0x380 + 0x14) if x]
+                excluded = [x for x in struct.unpack_from('<8I', image, MISSIONS + kind * RECORD + 0x14) if x]
                 initials = [[], [9], [31, 10]] + [[x] for x in excluded[:1]] + [[x] for x in blockers[:1] if x]
                 seeds = [0, 1, 0x7fffffff, 0x80000000, 0xffffffff] + [chooser.getrandbits(32) for _ in range(24)]
                 for initial in initials:
                     for seed in seeds:
                         cases.append((faction, difficulty, kind, seed, initial,
                                       resolve(image, faction, difficulty, kind, seed, initial)))
-    ranges = [(HASHES, 32 * 4), (DIFFICULTY, 10 * 0x330), (MISSIONS, 162 * 0x380), (CATEGORIES, 14 * 0xa8)]
-    lines = ['return {build=25480438,ranges={']
+    ranges = [(HASHES, 32 * 4), (DIFFICULTY, 10 * ROW), (MISSIONS, 162 * RECORD), (CATEGORIES, 14 * 0xa8)]
+    lines = ['return {build=%d,ranges={' % O.build]
     for rva, size in ranges:
         lines.append("{rva=%d,hex='%s'}," % (rva, image[rva:rva + size].hex()))
     lines.append('},cases={')

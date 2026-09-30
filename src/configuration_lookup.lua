@@ -1,4 +1,5 @@
 -- 7bb8c0 key folding and the primary/fallback tables from 12e7990.
+local O=...
 return function(read,u,pointer,manager)
     local ffi=require('ffi');local bit=require('bit')
     local function mul(a,b)return tonumber(ffi.cast('uint32_t',ffi.new('uint64_t',a)*b))end
@@ -14,7 +15,7 @@ return function(read,u,pointer,manager)
         return value
     end
     local function lookup(key)
-        for _,offset in ipairs({0x12078,0xc050})do
+        for _,offset in ipairs(O.configuration.tables)do
             local header=read(manager+offset,20)
             local count=u(header,8)
             assert(count<=65536 and (count==0 or bit.band(count,count-1)==0),'Invalid configuration table capacity')

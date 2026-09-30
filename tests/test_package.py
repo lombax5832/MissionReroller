@@ -52,8 +52,13 @@ def test_runtime_host():
     subprocess.run([sys.executable, '-B', str(ROOT / 'tests/test_runtime_host.py')], check=True)
 
 
+def test_offsets():
+    subprocess.run([sys.executable, '-B', str(ROOT / 'tests/test_offsets.py')], check=True)
+
+
 if __name__ == '__main__':
     test_package()
+    test_offsets()
     test_runtime_host()
     test_dialog()
     print('test_package: passed')

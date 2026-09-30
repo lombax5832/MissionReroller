@@ -3,7 +3,7 @@
 -- A runtime factory: the assembler runs this file as function(host,lib,hooks).
 local M,emit,read,pointer,u=host.M,host.emit,host.read,host.pointer,host.u
 local reroll_session=host.reroll_session
-local map=host.map
+local map,O=host.map,host.O
 local Constellations,Planet=lib.Constellations,lib.Planet
 local api,game
 host.when_initialized(function(n)api,game=n.api,n.game end)
@@ -40,15 +40,15 @@ do
         if index==255 then return nil end
         local owner=assert(api.pointer(entry),'Missing stamp owner')
         if u(entry,8)~=0xadc32faa then return pointer(owner)end
-        if variant~=255 then return pointer(pointer(owner+0x28)+variant*0x18+8)+index*0x1c8 end
+        if variant~=255 then return pointer(pointer(owner+0x28)+variant*0x18+8)+index*O.stamp.size end
     end
     local function level_inputs(controller,offset,kind)
         local level=api.pointer(api.read(controller+offset,8))
         if not level then return nil end
-        local head=api.read(level+0x8bc570,4)
+        local head=api.read(level+O.level.kind,4)
         if not head or u(head,0)~=kind then return nil end
-        local explicit=read(level+0x8bc654,16);local n=u(explicit,12)
-        local result={offset=offset,tags={},explicit={},stamps=u(read(level+0x11a715c,4),0),stamp='none',valid=n<=3}
+        local explicit=read(level+O.level.explicit_tags,16);local n=u(explicit,12)
+        local result={offset=offset,tags={},explicit={},stamps=u(read(level+O.level.stamp_count,4),0),stamp='none',valid=n<=3}
         local function add(tag)
             if tag<32 then result.tags[#result.tags+1]=tag else result.valid=false end
         end
@@ -58,7 +58,7 @@ do
         if n>3 then result.explicit[#result.explicit+1]='count='..n end
         local loaded=read(controller,8)~=string.rep('\0',8)
         if result.stamps~=0 then
-            local entry=read(level+0x8996b0,0x108)
+            local entry=read(level+O.level.stamps,O.level.stamp_size)
             local record=stamp_record(entry)
             local where=string.format('(type=%08x variant=%d index=%d%s)',u(entry,8),entry:byte(0xa2),entry:byte(0xa3),
                 loaded and '' or ' preview')
@@ -75,7 +75,7 @@ do
         local tagged={}
         pcall(function()
             for i=1,math.min(result.stamps,256)-1 do
-                local record=stamp_record(read(level+0x8996b0+i*0x108,0x108))
+                local record=stamp_record(read(level+O.level.stamps+i*O.level.stamp_size,O.level.stamp_size))
                 local tag=record and u(read(record+0xd0,4),0) or 0
                 if tag~=0 and #tagged<8 then tagged[#tagged+1]=i..':'..tag end
             end
@@ -85,7 +85,7 @@ do
     end
     -- Static stamp records reachable from the loaded definitions (f70f20).
     local function survey(controller)
-        local manager=api.pointer(read(controller+0x2d0,8))
+        local manager=api.pointer(read(controller+O.level_controller.stamp_manager,8))
         if not manager then return false end
         local sets=u(read(manager+0xbc,4),0);assert(sets<=4096,'Stamp set count exceeds bound')
         local records,tagged,counts,examples,truncated=0,0,{},{},false
@@ -100,11 +100,11 @@ do
                     local n,base=u(head,0x10),api.pointer(head,8)
                     if base and n>0 then
                         if n>512 or records+n>8000 then truncated=true;break end
-                        local bytes=read(base,n*0x1c8)
+                        local bytes=read(base,n*O.stamp.size)
                         for k=0,n-1 do
-                            if bytes:sub(k*0x1c8+9,k*0x1c8+16)~=string.rep('\0',8)then
+                            if bytes:sub(k*O.stamp.size+9,k*O.stamp.size+16)~=string.rep('\0',8)then
                                 records=records+1
-                                local tag=u(bytes,k*0x1c8+0xd0)
+                                local tag=u(bytes,k*O.stamp.size+0xd0)
                                 if tag~=0 then
                                     tagged=tagged+1;counts[tag]=(counts[tag] or 0)+1
                                     if #examples<12 then examples[#examples+1]=string.format('%08x/%d/%d=%d',u(read(set,4),0),j,k,tag)end
@@ -124,28 +124,28 @@ do
     end
     local function observe()
         if not map.on_top()then return end
-        local b=pointer(game+0x347cee8)
-        local row=u(read(b+0x17a2a0,4),0)
+        local b=pointer(game+O.rva.board)
+        local row=u(read(b+O.board.selection_row,4),0)
         if row>=110 then return end
-        local op=read(b+0xf7280+row*92,92)
+        local op=read(b+O.board.operations+row*92,92)
         if op:byte(53)==0 then return end
-        local preview=read(b+0x4168d0,0xe8)
+        local preview=read(b+O.board.mission_preview,0xe8)
         local seed,difficulty,kind=u(preview,0),preview:byte(10),preview:byte(27)+preview:byte(28)*256
         if difficulty<1 or difficulty>10 or kind>=162 then return end
         local key=seed..':'..kind..':'..difficulty..':'..u(preview,12)
         if seen[key]then return end
         local planet=op:byte(17)+op:byte(18)*256
-        if planet>=512 or u(read(b+0x101438+planet*0x118+0x18,4),0)~=u(preview,12)then return end
-        local count=u(read(b+0xffc08,4),0);assert(count<=330,'Mission count overflow')
-        local rows=count>0 and read(b+0xf9a10,count*76) or '';local member=false
+        if planet>=512 or u(read(b+O.board.campaign+planet*O.campaign.definition_stride+0x18,4),0)~=u(preview,12)then return end
+        local count=u(read(b+O.board.mission_count,4),0);assert(count<=330,'Mission count overflow')
+        local rows=count>0 and read(b+O.board.missions,count*76) or '';local member=false
         for i=0,count-1 do
             if u(rows,i*76+40)==row and u(rows,i*76+48)==kind and u(rows,i*76+52)==seed then member=true;break end
         end
         if not member then return end
-        local controller=pointer(pointer(game+0x3326340)+0xae288)
+        local controller=pointer(pointer(game+O.rva.ui_root)+O.ui_root.level_controller)
         -- The preview loads asynchronously; wait for the matching descriptor.
         local level=read(controller+8,28)==preview:sub(1,28)
-            and (level_inputs(controller,0x2c8,kind) or level_inputs(controller,0x288,kind))
+            and (level_inputs(controller,O.level_controller.level,kind) or level_inputs(controller,O.level_controller.previous_level,kind))
         if not level then
             attempts[key]=(attempts[key] or 0)+1
             if attempts[key]<20 then return end

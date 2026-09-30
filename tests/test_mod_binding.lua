@@ -1,6 +1,7 @@
 -- The MODS tab binding: registration with a stubbed Mod Bindings Menu, the
 -- per-frame activation, and naming the bound key from a simulated binding map.
-local B=dofile(assert(arg[1]))
+local H=dofile((arg[0]:match('^(.*[/\\])') or '')..'harness.lua')
+local B=H.module(assert(arg[1]))
 local function le(n,size)local out={};for i=1,size do out[i]=string.char(n%256);n=math.floor(n/256)end;return table.concat(out)end
 -- Simulated memory: segments of bytes at numeric addresses.
 local segments={}
@@ -24,7 +25,7 @@ local function bind(mappings,at)
     local map={}
     for i=0,255 do map[i+1]=le(i==(at or 7) and code or 12*65536+i,4)..le(0,4)..string.rep('\0',320)end
     local record=le(code,4)..le(#mappings,4)..table.concat(mappings)
-    map[(at or 7)+1]=record..string.rep('\0',328-#record)
+    map[(at or 7)+1]=record..string.rep('\0',B.BUCKET-#record)
     segments[3]={buckets,table.concat(map)}
 end
 bind({mapping(B.KEYBOARD,B.KEYBOARD_BASE+0x77),mapping(2,16)})

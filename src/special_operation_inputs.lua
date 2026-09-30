@@ -1,6 +1,7 @@
 -- Capture the supported 11e44d0 campaign-event path without native calls.
 -- Reads definitions, never generated operation rows. Unsupported resolution
 -- paths fail explicitly rather than guessing event eligibility.
+local O=...
 return function(read,u,pointer)
     local ffi=require('ffi')
     return function(board,planet,definitions,include_base)
@@ -21,11 +22,11 @@ return function(read,u,pointer)
             local value=pointer(take(address,8))
             return value
         end
-        local campaign=board+0x101438
-        local n=count(campaign+0x70048,512)
+        local campaign=board+O.board.campaign
+        local n=count(campaign+O.campaign.special_event_count,512)
         local relevant={}
         for i=0,n-1 do
-            local at=campaign+0x6c048+i*32
+            local at=campaign+O.campaign.special_events+i*32
             -- Progress counters elsewhere in this record are not generation
             -- inputs and can change independently of the selected planet.
             if u(take(at,4),0)==planet and take(at+20,1):byte()~=0 then
@@ -35,13 +36,13 @@ return function(read,u,pointer)
         end
         local output={}
         if #relevant==0 then return output,table.concat(parts)end
-        local enabled=take(campaign+0x46050+planet*0x130,1):byte()~=0
-        local limit=count(definitions+0xa1834,8)
-        local bindings=take(campaign+0x23018,count(campaign+0x26018,512)*24)
-        local templates=ptr(board+0x1f8908)
+        local enabled=take(campaign+O.campaign.planet_enabled+planet*O.campaign.planet_stride,1):byte()~=0
+        local limit=count(definitions+O.definitions.special_pool_count,8)
+        local bindings=take(campaign+O.campaign.operation_bindings,count(campaign+O.campaign.operation_binding_count,512)*24)
+        local templates=ptr(board+O.board.special_templates)
         if not templates then return output,table.concat(parts)end
-        local total=count(board+0x1f8918,4096)
-        local ids_pointer=ptr(board+0x1f8910)
+        local total=count(board+O.board.special_template_count,4096)
+        local ids_pointer=ptr(board+O.board.special_template_ids)
         assert(total==0 or ids_pointer,'Missing special template IDs')
         local ids=total>0 and take(ids_pointer,total*4) or ''
         for _,event in ipairs(relevant)do

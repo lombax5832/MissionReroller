@@ -15,7 +15,7 @@ import build_identity_probe as build
 
 def main():
     source = build.source()
-    assert source.startswith(('-- HD2-Addon: '+build.build_combined.MODULE+'\n').encode())
+    assert source.startswith(('-- HD2-Addon: '+build.build.RELEASE_MODULE+'\n').encode())
     for forbidden in (b'WriteProcessMemory', b'VirtualProtect', b'VirtualAlloc', b'OpenProcess',
                       b'CreateRemoteThread', b'os.execute', b'io.popen', b'ffi.cast(\'void (*)',
                       b'artifacts/', b'emulate_seed', b'candidate_path', b'io.open'):
@@ -33,7 +33,7 @@ def main():
         with zipfile.ZipFile(output) as package:
             assert len(package.namelist()) == 4
             assert source in package.read(next(name for name in package.namelist() if name.endswith('.patch_0')))
-            assert json.loads(package.read('manifest.json'))['Guid'] == build.build_combined.GUID
+            assert json.loads(package.read('manifest.json'))['Guid'] == build.build.RELEASE_GUID
     print('Read-only Lua probe package passed; no fixture or companion dependency')
 
 

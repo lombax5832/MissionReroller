@@ -1,5 +1,7 @@
 -- Usage: luajit test_constellation_runtime.lua <built dialog entry>
 local H=dofile((arg[0]:match('^(.*[/\\])') or '')..'harness.lua')
+-- The entry's offsets, from the src folder beside tests/.
+local O=H.offsets((arg[0]:match('^(.*[/\\])') or '')..'../src')
 local up=H.up
 local function word(n)return string.char(n%256,math.floor(n/256)%256,math.floor(n/65536)%256,math.floor(n/16777216)%256)end
 local logs={}
@@ -29,31 +31,31 @@ H.natives(update,{api={read=read,pointer=decode,time=function()return 0 end},gam
 jit.flush()
 local game,board,root,controller,level,screens=0x10000000,0x20000000,0x30000000,0x40000000,0x50000000,0x70000000
 local owner,variants,records,manager,sets=0x80000000,0x81000000,0x82000000,0x83000000,0x84000000
-link(game+0x347ce28,screens);poke(screens+0x429c,word(15)..string.rep('\0',16)..word(1))
-link(game+0x347cee8,board);link(game+0x3326340,root);link(root+0xae288,controller)
-link(game+0x347cdf8,0x90000000);link(game+0x347cd98,0x91000000);link(game+0x347cef0,0x92000000)
-link(game+0x346d518,0x93000000)
-for i=0,31 do poke(game+0x21e1920+i*4,word(0x5000+i))end
-local row=game+0x328d2a0+9*0x330
-poke(row+0x110,word(1));poke(row+0x114,word(4)..'\0\0\128\63')
-poke(game+0x3773420+72*0x380+8,word(2))
-poke(board+0x12444c,word(300));poke(board+0x101438+268*0x118+0x18,word(0xabc))
+link(game+O.rva.screen_owner,screens);poke(screens+O.screen_owner.stack,word(15)..string.rep('\0',16)..word(1))
+link(game+O.rva.board,board);link(game+O.rva.ui_root,root);link(root+O.ui_root.level_controller,controller)
+link(game+O.rva.configuration,0x90000000);link(game+O.rva.effect_manager,0x91000000);link(game+O.rva.session,0x92000000)
+link(game+O.rva.global_effects,0x93000000)
+for i=0,31 do poke(game+O.rva.enemy_tags+i*4,word(0x5000+i))end
+local row=game+O.rva.difficulty_rows+9*O.difficulty_row.size
+poke(row+O.difficulty_row.constellation_draws,word(1));poke(row+O.difficulty_row.constellation_candidates[1],word(4)..'\0\0\128\63')
+poke(game+O.rva.mission_types+72*O.mission_type.size+8,word(2))
+poke(board+O.board.campaign+O.campaign.planet_count,word(300));poke(board+O.board.campaign+268*O.campaign.definition_stride+0x18,word(0xabc))
 local seed=123456
 local function descriptor(kind)
     return word(seed)..word(0)..string.char(2,10,0,0)..word(0xabc)..string.rep('\0',10)..string.char(kind%256,math.floor(kind/256))
 end
-poke(board+0x17a2a0,word(3))
-local operation=board+0xf7280+3*92
+poke(board+O.board.selection_row,word(3))
+local operation=board+O.board.operations+3*92
 poke(operation+16,string.char(268%256,1));poke(operation+24,string.char(5));poke(operation+52,string.char(1))
-poke(board+0x4168d0,descriptor(72))
-poke(board+0xffc08,word(1))
-poke(board+0xf9a10+40,word(3));poke(board+0xf9a10+48,word(72));poke(board+0xf9a10+52,word(seed))
+poke(board+O.board.mission_preview,descriptor(72))
+poke(board+O.board.mission_count,word(1))
+poke(board+O.board.missions+40,word(3));poke(board+O.board.missions+48,word(72));poke(board+O.board.missions+52,word(seed))
 -- Predicted operations receive base tags from the mission seed alone.
 local Planet=up(ready,'Planet')
 local annotate=bind(Planet.bind(read,up(ready,'u'),decode,game,board,268))
 local op={difficulty=10,effect_id=4294967295,missions={{native_type=72,seed=seed},{native_type=72,seed=99}}}
 annotate(op);assert(op.missions[1].tags[4] and op.missions[2].tags[4] and not op.missions[1].tags[2])
-poke(game+0x3773420+73*0x380+8,word(0))
+poke(game+O.rva.mission_types+73*O.mission_type.size+8,word(0))
 local generic={difficulty=10,missions={{native_type=73,seed=1}}}
 annotate(generic,0,5);assert(generic.missions[1].tags==nil,'Missions without a faction stay unresolved')
 -- Busy states and an absent preview log nothing.
@@ -67,11 +69,11 @@ session.finish('search_exhausted')
 for _=1,5 do poll()end
 assert(#logs==before,'A preview that has not loaded must be retried quietly')
 -- Loaded preview with a tagged first stamp.
-poke(controller,word(1));poke(controller+8,descriptor(72));link(controller+0x2c8,level);link(controller+0x2d0,manager)
-poke(level+0x8bc570,word(72));poke(level+0x11a715c,word(1))
-link(level+0x8996b0,owner);poke(level+0x8996b8,word(0xadc32faa));poke(level+0x8996b0+0xa1,string.char(0,1))
+poke(controller,word(1));poke(controller+8,descriptor(72));link(controller+O.level_controller.level,level);link(controller+O.level_controller.stamp_manager,manager)
+poke(level+O.level.kind,word(72));poke(level+O.level.stamp_count,word(1))
+link(level+O.level.stamps,owner);poke(level+O.level.stamps+8,word(0xadc32faa));poke(level+O.level.stamps+0xa1,string.char(0,1))
 link(owner+0x28,variants);link(variants+8,records);poke(variants+0x10,word(2));poke(owner+0x30,word(1));poke(owner,word(0xfeed))
-poke(records+8,word(1));poke(records+0x1c8+8,word(1));poke(records+0x1c8+0xd0,word(13))
+poke(records+8,word(1));poke(records+O.stamp.size+8,word(1));poke(records+O.stamp.size+0xd0,word(13))
 poke(manager+0xbc,word(1));link(manager+0x38,sets);link(sets,owner)
 poll()
 local text=table.concat(logs,'\n')
@@ -82,48 +84,48 @@ assert(text:find('CONSTELLATION_STAMP_SURVEY sets=1 records=2 tagged=1 tags=[13:
 before=#logs;poll();poll();assert(#logs==before,'Each previewed mission is logged once')
 -- The alternate level slot, explicit tags and no stamp.
 seed=777
-poke(board+0x4168d0,descriptor(72));poke(controller+8,descriptor(72));poke(board+0xf9a10+52,word(seed))
-link(controller+0x2c8,0);link(controller+0x288,level)
-poke(level+0x11a715c,word(0));poke(level+0x8bc654,word(9));poke(level+0x8bc660,word(1))
+poke(board+O.board.mission_preview,descriptor(72));poke(controller+8,descriptor(72));poke(board+O.board.missions+52,word(seed))
+link(controller+O.level_controller.level,0);link(controller+O.level_controller.previous_level,level)
+poke(level+O.level.stamp_count,word(0));poke(level+O.level.explicit_tags,word(9));poke(level+O.level.explicit_tags+12,word(1))
 poll();text=table.concat(logs,'\n')
 assert(text:find('seed=777',1,true) and text:find('level=288 explicit=[9] stamps=0 stamp=none later_tagged=[]',1,true),text)
-poke(level+0x8bc660,word(0))
-seed=778;poke(board+0x4168d0,descriptor(72));poke(controller+8,descriptor(72));poke(board+0xf9a10+52,word(seed))
+poke(level+O.level.explicit_tags+12,word(0))
+seed=778;poke(board+O.board.mission_preview,descriptor(72));poke(controller+8,descriptor(72));poke(board+O.board.missions+52,word(seed))
 poll();text=table.concat(logs,'\n')
 assert(text:find('seed=778',1,true) and text:match('seed=778[^\n]*agree=true'),text)
 -- Values outside the tag table are logged raw and left unresolved.
-seed=781;poke(board+0x4168d0,descriptor(72));poke(controller+8,descriptor(72));poke(board+0xf9a10+52,word(seed))
-poke(level+0x8bc654,word(77));poke(level+0x8bc660,word(1))
+seed=781;poke(board+O.board.mission_preview,descriptor(72));poke(controller+8,descriptor(72));poke(board+O.board.missions+52,word(seed))
+poke(level+O.level.explicit_tags,word(77));poke(level+O.level.explicit_tags+12,word(1))
 poll();assert(table.concat(logs,'\n'):match('seed=781[^\n]*explicit=%[77%] stamps=0 stamp=none later_tagged=%[%] full=unresolved agree=unknown'))
-poke(level+0x8bc654,word(0));poke(level+0x8bc660,word(0))
+poke(level+O.level.explicit_tags,word(0));poke(level+O.level.explicit_tags+12,word(0))
 -- A first stamp without a record contributes nothing; later stamps never do,
 -- but tagged ones are listed.
-seed=782;poke(board+0x4168d0,descriptor(72));poke(controller+8,descriptor(72));poke(board+0xf9a10+52,word(seed))
-poke(level+0x11a715c,word(3));poke(level+0x8996b0+0xa1,string.char(255,255))
-link(level+0x8996b0+2*0x108,owner);poke(level+0x8996b0+2*0x108+8,word(0xadc32faa));poke(level+0x8996b0+2*0x108+0xa1,string.char(0,1))
-poke(level+0x8996b0+0x108+0xa1,string.char(255,255))
+seed=782;poke(board+O.board.mission_preview,descriptor(72));poke(controller+8,descriptor(72));poke(board+O.board.missions+52,word(seed))
+poke(level+O.level.stamp_count,word(3));poke(level+O.level.stamps+0xa1,string.char(255,255))
+link(level+O.level.stamps+2*O.level.stamp_size,owner);poke(level+O.level.stamps+2*O.level.stamp_size+8,word(0xadc32faa));poke(level+O.level.stamps+2*O.level.stamp_size+0xa1,string.char(0,1))
+poke(level+O.level.stamps+O.level.stamp_size+0xa1,string.char(255,255))
 poll();assert(table.concat(logs,'\n'):match('seed=782[^\n]*stamps=3 stamp=none%(type=adc32faa variant=255 index=255%) later_tagged=%[2:13%][^\n]*agree=true'),table.concat(logs,'\n'))
-poke(level+0x11a715c,word(0))
+poke(level+O.level.stamp_count,word(0))
 -- A map preview leaves the controller unloaded; its first stamp still counts.
-seed=783;poke(board+0x4168d0,descriptor(72));poke(controller+8,descriptor(72));poke(board+0xf9a10+52,word(seed))
-poke(controller,word(0));poke(level+0x11a715c,word(1));poke(level+0x8996b0+0xa1,string.char(0,1))
+seed=783;poke(board+O.board.mission_preview,descriptor(72));poke(controller+8,descriptor(72));poke(board+O.board.missions+52,word(seed))
+poke(controller,word(0));poke(level+O.level.stamp_count,word(1));poke(level+O.level.stamps+0xa1,string.char(0,1))
 poll();assert(table.concat(logs,'\n'):match('seed=783[^\n]*stamps=1 stamp=13%(type=adc32faa variant=0 index=1 preview%)[^\n]*Shriekers[^\n]*agree=false'),table.concat(logs,'\n'))
-poke(controller,word(1));poke(level+0x11a715c,word(0))
+poke(controller,word(1));poke(level+O.level.stamp_count,word(0))
 -- A level describing another mission is never used; it is reported unavailable.
-seed=779;poke(board+0x4168d0,descriptor(72));poke(controller+8,descriptor(72));poke(board+0xf9a10+52,word(seed))
-poke(level+0x8bc570,word(71))
+seed=779;poke(board+O.board.mission_preview,descriptor(72));poke(controller+8,descriptor(72));poke(board+O.board.missions+52,word(seed))
+poke(level+O.level.kind,word(71))
 for _=1,19 do poll()end
 assert(not table.concat(logs,'\n'):find('seed=779',1,true))
 poll();assert(table.concat(logs,'\n'):match('seed=779[^\n]*level=unavailable agree=unknown'))
 -- Missions outside the highlighted operation and read failures stay silent or report once.
-seed=780;poke(board+0x4168d0,descriptor(72));poke(controller+8,descriptor(72))
+seed=780;poke(board+O.board.mission_preview,descriptor(72));poke(controller+8,descriptor(72))
 before=#logs;for _=1,25 do poll()end;assert(#logs==before,'Preview must belong to the highlighted operation')
-poke(board+0xffc08,word(400));poll();poll()
+poke(board+O.board.mission_count,word(400));poll();poll()
 local blocked=0;for _,line in ipairs(logs)do if line:find('CONSTELLATION_CHECK_BLOCKED',1,true)then blocked=blocked+1 end end
 assert(blocked==1,'Diagnostic failures are reported once and never raised')
 -- Search path: candidate operations are tagged through the frozen reader,
 -- and displayed operations are tagged before the existing-match check.
-poke(board+0xffc08,word(1))
+poke(board+O.board.mission_count,word(1))
 local advance=up(tick,'advance_prediction_search')
 local s={board=board,planet=268,seed=500,fingerprint='stable',operations=string.rep('\0',110*92),
     decoded={operations={{row=3,operation_id=5,seed=1,difficulty=10,missions={{native_type=72,seed=5,level_index=1}}}}}}
@@ -135,7 +137,7 @@ up(ready,'Planet',{capture=function()return function()return {passed=true,indepe
     bind=function(take,...)
         local planet=Planet.bind(take,...)
         planet.predictor=function()return function(candidate,difficulty)
-            take(board+0x12444c,4);evaluated=candidate
+            take(board+O.board.campaign+O.campaign.planet_count,4);evaluated=candidate
             return {{valid=true,row=7,id=1,category=0,faction=2,difficulty=10,effect_id=4294967295,modifiers={},
                 missions={{native_type=72,seed=candidate,level_index=1},{native_type=72,seed=candidate+1,level_index=2}}},
                 -- The complete board also holds another difficulty.

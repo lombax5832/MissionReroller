@@ -3,9 +3,9 @@
 local M,emit,read,pointer,page,u,hex=host.M,host.emit,host.read,host.pointer,host.page,host.u,host.hex
 local reroll_session=host.reroll_session
 local map,write=host.map,host.write
-local snapshot,participants,expected_code=host.snapshot,host.participants,host.expected_code
+local snapshot,participants,verify_code,O=host.snapshot,host.participants,host.verify_code,host.O
 local Search,make_publication,make_ui_selection=lib.Search,lib.make_publication,lib.make_ui_selection
-local selection_signatures,verify_predicted_board=lib.selection_signatures,lib.verify_predicted_board
+local verify_predicted_board=lib.verify_predicted_board
 local api,game,ffi
 host.when_initialized(function(n)api,game,ffi=n.api,n.game,n.ffi end)
 local on_existing_match,on_search_match,advance_live_publication
@@ -14,19 +14,25 @@ local function word(n)
     return string.char(n%256,math.floor(n/256)%256,math.floor(n/65536)%256,math.floor(n/16777216)%256)
 end
 local function rawhex(s)return (s:gsub('..',function(v)return string.char(tonumber(v,16))end))end
+-- The code selection runs through (src/offsets.lua), checked again before each use.
+local SELECTION={'select_operation','select_campaign_row','selection_dispatch','selection_listener'}
+local function check_selection(what)
+    local ok,err=pcall(verify_code,SELECTION)
+    assert(ok,what..': '..tostring(err))
+end
 local function ownership(b)
-    assert(pointer(game+0x347cee8)==b,'Board changed')
-    local session=pointer(game+0x347cef0)
-    assert(M.dialog_enabled or u(read(session+0x162d8,4),0)==1,'Expected one source owner')
+    assert(pointer(game+O.rva.board)==b,'Board changed')
+    local session=pointer(game+O.rva.session)
+    assert(M.dialog_enabled or u(read(session+O.session.player_count,4),0)==1,'Expected one source owner')
     -- Alone the local player is the only participant. In a lobby the local
     -- player must be its host: a participant who owns the board.
     local source,sources,known=participants(session)
-    local local_owner=read(session+0xb398,8)
+    local local_owner=read(session+O.session.local_player,8)
     assert(known[local_owner],'Source is not local owner')
-    assert(read(b+0x1f8078,8)==local_owner,'Not local selection owner')
-    local count=u(read(b+0x1f80d0,4),0)
+    assert(read(b+O.board.selection_owner,8)==local_owner,'Not local selection owner')
+    local count=u(read(b+O.board.owner_count,4),0)
     assert(count<=5,'Invalid owner count')
-    local entries=count>0 and read(b+0x1f8080,count*16) or '';local ids={}
+    local entries=count>0 and read(b+O.board.owners,count*16) or '';local ids={}
     for i=0,count-1 do
         local id=entries:sub(i*16+1,i*16+8)
         assert(id~=string.rep('\0',8) and not ids[id],'Invalid owner entries');ids[id]=true
@@ -35,41 +41,40 @@ local function ownership(b)
     local capacity=count
     for _,id in ipairs(sources)do if not ids[id]then capacity=capacity+1 end end
     assert(capacity<=5,'Owner queue has no capacity for local source')
-    page(b+0x78e84,4,0x20000);page(b+0x1f8080,capacity*16,0x20000)
-    page(b+0x1f80d0,4,0x20000)
-    assert(hex(read(game+0x12d5670,#expected_code/2))==expected_code,'Publication signature changed')
+    page(b+O.board.seed,4,0x20000);page(b+O.board.owners,capacity*16,0x20000)
+    page(b+O.board.owner_count,4,0x20000)
+    local ok,err=pcall(verify_code,{'campaign_helpers'})
+    assert(ok,'Publication signature changed: '..tostring(err))
     return tostring(session)..hex(source)
 end
-local function write_seed(b,seed)write(b+0x78e84,word(seed),'Seed')end
+local function write_seed(b,seed)write(b+O.board.seed,word(seed),'Seed')end
 local function notify(b)
-    ffi.cast('void (*)(void *, uint32_t)',game+0x12d57e0)(b,2)
+    ffi.cast('void (*)(void *, uint32_t)',game+O.rva.publish_seed)(b,2)
 end
 local function select_match(s)
-    for _,sig in ipairs(selection_signatures)do
-        assert(hex(read(game+sig[1],#sig[2]/2))==sig[2],'Selection signature changed')
-    end
+    check_selection('Selection signature changed')
     local final=assert(snapshot(true),'Selection context unavailable')
     assert(final.fingerprint==s.fingerprint,'State changed before selection')
     ownership(s.board)
-    assert(read(s.board+0x78e60,8)==s.selection:sub(1,8),'Selection context not published')
-    page(s.board+0x78e60,36,0x20000);page(s.board+0x17a298,36,0x20000)
+    assert(read(s.board+O.board.selection_context,8)==s.selection:sub(1,8),'Selection context not published')
+    page(s.board+O.board.selection_context,36,0x20000);page(s.board+O.board.selection,36,0x20000)
     local op
     for _,value in ipairs(s.decoded.operations)do if value.row==candidate.row then op=value end end
     assert(op and op.seed==candidate.operation_seed and op.difficulty==candidate.difficulty,'Predicted operation missing')
     ui_selection=make_ui_selection({map=map,read=read,word=word,
         page=function(a,n)page(a,n,0x20000)end,
         signature=function()
-            local sig='44896308c7430cffffffffe8e859e4ff'
-            assert(hex(read(game+0x148c348,#sig/2))==sig,'Normal UI click signature mismatch')
+            local ok,err=pcall(verify_code,{'map_click'})
+            assert(ok,'Normal UI click signature mismatch: '..tostring(err))
         end,
         -- The selection checks its own write; a restore is not re-read.
         write=function(a,bytes)write(a,bytes,'Map UI',false)end})
     ui_selection:apply(s.planet,candidate.difficulty,candidate.row)
-    ffi.cast('void (*)(uintptr_t, uint32_t)',game+0x12d1d40)(0,candidate.row)
-    assert(read(s.board+0x78e60,8)==s.selection:sub(1,8),'Planet fields changed during selection')
-    assert(u(read(s.board+0x78e68,4),0)==candidate.row,'Native selection rejected')
-    assert(u(read(s.board+0x78e6c,4),0)==4294967295,'Mission unexpectedly selected')
-    assert(hex(read(s.board+0x78e88,92))==s.active,'Active operation changed on selection')
+    ffi.cast('void (*)(uintptr_t, uint32_t)',game+O.rva.select_operation)(0,candidate.row)
+    assert(read(s.board+O.board.selection_context,8)==s.selection:sub(1,8),'Planet fields changed during selection')
+    assert(u(read(s.board+O.board.selected_row,4),0)==candidate.row,'Native selection rejected')
+    assert(u(read(s.board+O.board.selected_mission,4),0)==4294967295,'Mission unexpectedly selected')
+    assert(hex(read(s.board+O.board.active_operation,92))==s.active,'Active operation changed on selection')
     selector={started=api.time(),context=s.context,planets=s.selection:sub(1,8)}
     emit('PREDICTION_VERIFIED selected_row='..candidate.row..' active_preserved=true')
 end
@@ -100,14 +105,15 @@ on_search_match=function(job,now)
             assert(current,'Publication requires stable viewed-planet data and an idle backend: '..tostring(reason))
             assert(current.board==before.board and current.fingerprint==before.fingerprint,'Publication baseline changed')
             assert(current.seed~=e.seed,'Candidate is already installed')
-            assert(read(before.board+0x78e60,8)==before.selection:sub(1,8),'Canonical map planet differs')
+            assert(read(before.board+O.board.selection_context,8)==before.selection:sub(1,8),'Canonical map planet differs')
             assert(u(before.selection,4)==e.planet,'Viewed planet changed')
             local displayed_planet,displayed_difficulty=map.viewed()
             emit(string.format('PUBLICATION_UI planet=%u expected_planet=%u difficulty=%u expected_difficulty=%u campaign_row=%u',displayed_planet,e.planet,displayed_difficulty,e.difficulty,u(before.selection,8)))
             assert(displayed_planet==e.planet,'Keep the viewed planet open with operation icons visible until the search completes (UI planet='..displayed_planet..', expected='..e.planet..')')
             assert(displayed_difficulty==e.difficulty,'Display difficulty '..e.difficulty..' before starting (UI difficulty='..displayed_difficulty..')')
-            for _,sig in ipairs(selection_signatures)do assert(hex(read(game+sig[1],#sig[2]/2))==sig[2],'Selection signature changed')end
-            assert(hex(read(game+0x148c348,16))=='44896308c7430cffffffffe8e859e4ff','Map click signature changed')
+            check_selection('Selection signature changed')
+            local ok,err=pcall(verify_code,{'map_click'})
+            assert(ok,'Map click signature changed: '..tostring(err))
             assert(Search.find({operations=e.operations},e.difficulty,e.required,e.modifiers,e.constellations,e.scope),'Predicted filter no longer matches')
             before.owner_guard=ownership(before.board)
             local final=assert(snapshot(true),'Publication context unavailable')
@@ -118,13 +124,13 @@ on_search_match=function(job,now)
             publication_used=true
             emit(string.format('PUBLISH_BEGIN previous_seed=%u candidate_seed=%u primary_planet=%u viewed_planet=%u',before.seed,seed,u(before.selection,0),u(before.selection,4)))
             write_seed(before.board,seed);notify(before.board)
-            assert(hex(read(before.board+0x78e88,92))==before.active,'Active operation changed')
+            assert(hex(read(before.board+O.board.active_operation,92))==before.active,'Active operation changed')
             emit('PUBLISH_RETURN active_preserved=true')
         end,
         restore=function(before,seed)
             assert(ownership(before.board)==before.owner_guard,'Restore owner changed; refusing stale write')
-            assert(hex(read(before.board+0x78e88,92))==before.active,'Restore active operation changed')
-            local current=u(read(before.board+0x78e84,4),0)
+            assert(hex(read(before.board+O.board.active_operation,92))==before.active,'Restore active operation changed')
+            local current=u(read(before.board+O.board.seed,4),0)
             assert(current==seed or current==before.seed,'External seed change; refusing overwrite')
             write_seed(before.board,before.seed);notify(before.board)
             emit('RESTORE_SEED previous_seed='..before.seed)
