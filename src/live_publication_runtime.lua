@@ -88,11 +88,11 @@ end
 on_existing_match=function(s,op,now)
     ffi.cdef[[int WriteProcessMemory(void *, void *, const void *, size_t, size_t *);]]
     candidate={seed=s.seed,planet=s.planet,row=op.row,difficulty=op.difficulty,operation_seed=op.seed}
-    select_match(s);M.status='selection_pending'
+    select_match(s);reroll_session.advance('selection_pending')
     emit('EXISTING_MATCH row='..op.row..' seed='..s.seed..' publication=false')
 end
 on_search_match=function(job,now)
-    if publication_used and not M.dialog_enabled then M.status='publication_blocked';emit('PUBLICATION_BLOCKED one publication per test session; restart to test again');return end
+    if publication_used and not M.dialog_enabled then reroll_session.finish('publication_blocked');emit('PUBLICATION_BLOCKED one publication per test session; restart to test again');return end
     local s=job.baseline;local match=job.operation
     candidate={seed=job.seed,planet=s.planet,row=match.row,difficulty=match.difficulty,operation_seed=match.seed,operations=job.operations,required=job.required or {[1]=true,[2]=true,[3]=true},modifiers=job.modifiers,
         constellations=job.constellations,scope=job.scope}
@@ -144,25 +144,25 @@ on_search_match=function(job,now)
     if not ok then
         local attempted=transaction.used
         cleanup('Publication failed')
-        M.status=attempted and 'publication_failed' or 'publication_blocked'
+        reroll_session.finish(attempted and 'publication_failed' or 'publication_blocked')
         emit('PUBLICATION_BLOCKED '..tostring(err));return
     end
-    M.status='publication_pending'
+    reroll_session.advance('publication_pending')
 end
 advance_live_publication=function(action,now)
     if not transaction and not selector then return false end
-    if action=='cancel' then cleanup('Cancelled or stopped');M.status='publication_cancelled';return true end
+    if action=='cancel' then cleanup('Cancelled or stopped');reroll_session.finish('publication_cancelled');return true end
     if transaction and transaction.state=='pending' then
         local s=snapshot(true)
         if s then local again=snapshot(true);if not again or again.fingerprint~=s.fingerprint then s=nil end end
         local state=transaction:poll(s,now)
         if state=='restored' then
-            emit('PUBLICATION_RESTORED '..tostring(transaction.reason));transaction=nil;M.status='publication_restored';return true
+            emit('PUBLICATION_RESTORED '..tostring(transaction.reason));transaction=nil;reroll_session.finish('publication_restored');return true
         elseif state=='verified' then
             -- The regenerated board is correct. Selection failure must not undo
             -- a verified board; the user can still select its operation manually.
             transaction:commit();transaction=nil
-            select_match(assert(s));M.status='selection_pending'
+            select_match(assert(s));reroll_session.advance('selection_pending')
         end
     end
     if selector then
@@ -174,7 +174,7 @@ advance_live_publication=function(action,now)
             and u(s.selection,12)==4294967295 then
             ui_selection:commit();ui_selection=nil;selector=nil
             emit('PUBLICATION_STATE_VERIFIED seed='..s.seed..' row='..candidate.row..' map_ui_row_confirmed=true mission_unselected=true')
-            M.status='publication_test_passed'
+            reroll_session.finish('publication_test_passed')
         end
     end
     return true

@@ -27,6 +27,10 @@ up(ready,'candidate_factory',function(take)return function(seed,difficulty,accep
     return {{valid=true,row=29,difficulty=10,missions={{native_type=0,seed=seed,level_index=1},
         {native_type=22,seed=seed,level_index=2},{native_type=match and 7 or 28,seed=seed,level_index=3}}}}
 end end,true)
+-- The capture hands each run to the search. Open it in the session first, as
+-- identity_probe_runtime does, once the idle pipeline has settled the last.
+local session=up(tick,'reroll_session');local on_ready=ready
+ready=function(...)session.settle();session.advance('waiting_for_stable_inputs');return on_ready(...)end
 local function frame()
     now=now+0.01;local a,b,c=update();assert(a==1 and b==nil and c==3)
 end
@@ -91,7 +95,7 @@ match=true;ready(busy,2000000,now);for _=1,100 do frame()end
 assert(MissionRerollerExperiment.status=='search_matched','The whole planet is searched past the operation in progress')
 live=s;match=false;limited(16);MissionRerollerExperiment.search_options.scope={region=1}
 MissionRerollerExperiment.search_options.scope={region=9}
-assert(not pcall(ready,s,2000000,now),'An invalid city is refused')
+assert(not pcall(on_ready,s,2000000,now),'An invalid city is refused')
 MissionRerollerExperiment.search_options=nil
 match=false;ready(s,2000000,now);frame();focused=true;down=true;frame()
 assert(MissionRerollerExperiment.status=='search_cancelled','Shortcut must cancel without arming another job')
@@ -113,4 +117,5 @@ assert(table.concat(logs):find('FILTER_BLOCKED Constellation filters unavailable
 MissionRerollerExperiment.search_options=nil
 ready(s,2000000,now);local a,b,c=shutdown();assert(a==4 and b==nil and c==6 and closed)
 assert(MissionRerollerExperiment.status=='search_cancelled')
+assert(not table.concat(logs):find('SESSION_',1,true),'Every phase change follows the session rules: '..tostring(table.concat(logs):match('SESSION_[^%c]*')))
 print('Search runtime: two-stage prediction, budget, resumed ranges, background progress, matched log, shortcut cancellation, timeout, context loss, baseline rejection and shutdown passed')

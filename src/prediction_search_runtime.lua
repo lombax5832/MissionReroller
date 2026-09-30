@@ -52,7 +52,7 @@ on_prediction_ready=function(s,definitions,now)
     M.search_report=nil
     local constellations
     if request.constellations and next(request.constellations.groups)then
-        if not bind_constellations then M.status='search_failed';emit('FILTER_BLOCKED Constellation filters unavailable');return end
+        if not bind_constellations then reroll_session.finish('search_failed');emit('FILTER_BLOCKED Constellation filters unavailable');return end
         constellations={groups={}}
         for group,tags in pairs(request.constellations.groups)do
             local copy={};for tag,value in pairs(tags)do copy[tag]=value end
@@ -61,7 +61,7 @@ on_prediction_ready=function(s,definitions,now)
     end
     if validate_search_request then
         local ok,err=pcall(validate_search_request,s,request)
-        if not ok then M.status='search_failed';emit('FILTER_BLOCKED '..tostring(err));return end
+        if not ok then reroll_session.finish('search_failed');emit('FILTER_BLOCKED '..tostring(err));return end
     end
     if M.dialog_enabled and on_existing_match then
         if constellations then
@@ -69,7 +69,7 @@ on_prediction_ready=function(s,definitions,now)
                 local annotate=bind_constellations(read,s.board,s.planet)
                 for _,op in ipairs(s.decoded.operations)do annotate(op,u(s.operations,op.row*92+28),op.operation_id)end
             end)
-            if not ok then M.status='search_failed';emit('FILTER_BLOCKED '..tostring(err));return end
+            if not ok then reroll_session.finish('search_failed');emit('FILTER_BLOCKED '..tostring(err));return end
         end
         local existing=Search.find(s.decoded,request.difficulty,required,modifiers,constellations,scope)
         if existing then M.search_attempts=0;on_existing_match(s,existing,now);return end
@@ -78,7 +78,7 @@ on_prediction_ready=function(s,definitions,now)
     -- seed can change it, so searching would only exhaust the budget.
     local fixed_row,fixed_difficulty=M.active_row(s)
     if scope and fixed_row and fixed_difficulty==request.difficulty and Search.in_scope(fixed_row,scope)then
-        M.status='search_failed';M.search_report='This operation is in progress; its missions are fixed'
+        reroll_session.finish('search_failed');M.search_report='This operation is in progress; its missions are fixed'
         emit('FILTER_BLOCKED operation in progress row='..fixed_row..'; its missions cannot be rerolled');return
     end
     local function baseline(frozen_read)
@@ -137,7 +137,7 @@ on_prediction_ready=function(s,definitions,now)
         return ready,reason
     end
     slices,step_time,context_time=0,0,0
-    search_started=now;last_progress=now;max_slice=0;M.search_result=nil;M.status='search_running'
+    search_started=now;last_progress=now;max_slice=0;M.search_result=nil;reroll_session.advance('search_running')
     wait_started=nil;wait_total=0;last_wait_poll=-math.huge
     local names={};for id,opt in ipairs(Search.options)do if required[id]then names[#names+1]=opt.name end end
     local modifier_rules={};for id,mode in pairs(modifiers)do modifier_rules[#modifier_rules+1]=string.format('%u:%s',id,mode)end
@@ -181,10 +181,10 @@ advance_prediction_search=function(action,now)
         (step_time-context_time)*1000,context_time*1000,tostring(compiled))
     if job.status=='running' then
         if job.waiting then
-            M.status='search_waiting_backend'
+            reroll_session.advance('search_waiting_backend')
             if not wait_started then wait_started=now;emit('LUA_SEARCH_WAIT '..tostring(job.wait_reason))end
         else
-            M.status='search_running'
+            reroll_session.advance('search_running')
             if wait_started then
                 wait_total=wait_total+now-wait_started;wait_started=nil
                 emit(string.format('LUA_SEARCH_RESUMED wait_seconds=%.3f; revalidating captured inputs',wait_total))
@@ -195,7 +195,7 @@ advance_prediction_search=function(action,now)
             emit(string.format('LUA_SEARCH_PROGRESS attempts=%d seeds_per_second=%.0f phase=%s max_slice_ms=%.3f %s',job.attempts,job.attempts/elapsed,job.phase,max_slice,timing))
         end
     else
-        M.search_result=job;M.status='search_'..job.status
+        M.search_result=job;if job.status=='matched' then reroll_session.advance('search_matched')else reroll_session.finish('search_'..job.status)end
         if job.status=='matched' then
             resume=nil
             local missions={};for _,mission in ipairs(job.operation.missions)do missions[#missions+1]=string.format('%d/%u/level%d',mission.native_type,mission.seed,mission.level_index)end

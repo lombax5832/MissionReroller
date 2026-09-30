@@ -246,6 +246,9 @@ local before=calls;down=false;frame();down=true
 local frames=0
 repeat frame_reads=0;frame();frames=frames+1;most=math.max(most,frame_reads)until calls>before or frames>60
 assert(calls==before+1 and MissionRerollerExperiment.status=='composition_test_passed','A sliced capture must still pass')
+-- Without a search stage the run ends at its last checkpoint.
+local session=up(tick,'reroll_session')
+local view=session.view();assert(not view.running and view.outcome=='composition_test_passed',view.phase)
 assert(reads==4*2*5 and most<=2 and frames>=20,string.format('Polls must spread over frames: reads=%d most=%d frames=%d',reads,most,frames))
 -- A new request mid-poll discards the poll in flight.
 down=false;frame();down=true;frame();assert(reads>40 and calls==before+1)
@@ -256,5 +259,6 @@ fake_probe.capture=plain
 up(update,'tick',function()error('synthetic failure')end,true)
 jit.flush() -- debug.setupvalue changes test wiring after the long retry loop.
 frame();assert(MissionRerollerExperiment.status:find('synthetic failure',1,true),MissionRerollerExperiment.status)
+assert(session.view().outcome=='stopped' and not table.concat(logs):find('SESSION_',1,true),'Every phase change follows the session rules')
 local a,c,d=shutdown();assert(a=='shutdown' and c==nil and d==8 and closed)
 print('Lua probe: cache capture, mismatches, stable inputs, repeat, timeout, background progress, duplicate guard and wrapper returns passed')

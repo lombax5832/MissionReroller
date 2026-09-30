@@ -62,8 +62,10 @@ annotate(generic,0,5);assert(generic.missions[1].tags==nil,'Missions without a f
 local now=0
 local function poll()now=now+1;observe(now)end
 local before=#logs
-M.status='search_running';poll();assert(#logs==before,'The observer must not run during a search')
-M.status='ready'
+local session=up(observe,'reroll_session')
+session.advance('waiting_for_stable_inputs');session.advance('search_running')
+poll();assert(#logs==before,'The observer must not run during a search')
+session.finish('search_exhausted')
 for _=1,5 do poll()end
 assert(#logs==before,'A preview that has not loaded must be retried quietly')
 -- Loaded preview with a tagged first stamp.
@@ -139,12 +141,15 @@ up(ready,'candidate_factory',function(take)return function(candidate,difficulty)
         not difficulty and {valid=true,row=1,id=2,category=0,faction=2,difficulty=4,effect_id=4294967295,modifiers={},
             missions={{native_type=72,seed=candidate+2,level_index=1}}} or nil}
 end end,true)
-up(ready,'on_existing_match',function(_,op)existing=op end,true)
+up(ready,'on_existing_match',function(_,op)existing=op;session.finish('publication_test_passed')end,true)
 up(advance,'on_search_match',function(job)matched=job end,true)
 jit.flush()
 local function search(required,groups)
     matched,existing,evaluated=nil,nil,nil
     M.search_options={difficulty=10,required=required,constellations={groups=groups},limit=256}
+    -- A run enters the search as the capture hands it over; the last one
+    -- ended at its match, as the idle pipeline would settle it.
+    session.settle();session.advance('waiting_for_stable_inputs')
     ready(s,0x60000000,now)
     for _=1,4000 do
         if M.status~='search_running' then break end
@@ -171,4 +176,6 @@ assert(M.status=='search_matched' and table.concat(logs,'\n'):find('LUA_SEARCH_C
 search({},{[0]={[2]='accept'}});assert(M.status=='search_exhausted')
 family.ids[#family.ids]=nil
 M.search_options=nil
+text=table.concat(logs,'\n')
+assert(not text:find('SESSION_',1,true),'Every phase change follows the session rules: '..tostring(text:match('SESSION_[^\n]*')))
 print('Constellation runtime: search tagging, annotation, preview observer, stamp survey, alternate level slot and fail-quiet diagnostics passed')
