@@ -198,18 +198,62 @@ to do, and which log lines prove it worked or failed.
 3. After the user's in-game test, commit `Record the v<ver> in-game result`,
    changing the entry to **Validated in game** with the date and the log lines
    that prove it. Only the user's logs count as validation.
-4. Publish by pushing a tag `v<ver>` on the commit to ship
-   (`git tag v<ver>; git push origin v<ver>`). `.github/workflows/release.yml`
-   then builds with the tag's version (`RELEASE_TAG`: the ZIP name, its
-   `manifest.json` and the in-game banner), runs `test_package.py`,
-   creates the GitHub release with the ZIP and adds a new version of the
-   main file on Nexus Mods (mod 16762). The notes for both are the
-   `docs/HISTORY.md` entries for that version (`scripts/release_notes.py`).
-   A tag publishes to players, so only the user decides when to push one.
-   The workflow pins the loader, KnowYourConstellation and LuaJIT commits;
-   bump them there when a newer loader should ship. If the file uploads but
-   the changelog fails, run `.github/workflows/nexus-changelog.yml` by hand
-   with the tag.
+4. Publish with **Publishing a tag** below. A tag publishes to players, so
+   only the user decides when to push one.
+
+### Publishing a tag
+
+Pushing `v<ver>` runs `.github/workflows/release.yml` on the tagged commit.
+It builds with the tag's version (`RELEASE_TAG` sets the ZIP name, its
+`manifest.json` and the in-game banner), runs `test_package.py`, creates the
+GitHub release, then uploads the ZIP as a new version of the main file on
+Nexus Mods (mod 16762, file `vars.NEXUSMODS_FILE_ID`, key
+`secrets.NEXUSMODS_API_KEY`) and posts a changelog. Both sets of notes come
+from `docs/HISTORY.md` through `scripts/release_notes.py`.
+
+1. **Write the changelog.** The notes for `v<ver>` are every
+   `docs/HISTORY.md` paragraph whose first line starts with `**` and names
+   `v<ver>` in its bold heading, running to the next such heading:
+   `**Not yet validated in game: v<ver> <title>.**` The status prefix
+   (`Not yet validated in game:`, `Validated in game:`, `Next in-game test:`)
+   is dropped, so players read `**v<ver> <title>.**`. Write it for players,
+   what changes for them first. A body line starting with `**` and naming a
+   version ends the entry early, so start bullets with `- `. Done when
+   `python -B scripts/release_notes.py v<ver>` prints the whole entry and
+   nothing more.
+2. **Check the tagged build** from the main checkout:
+   `$env:RELEASE_TAG='v<ver>'; python -B scripts/build.py; python -B tests/test_package.py; Remove-Item Env:RELEASE_TAG`.
+   Done when it writes `releases/Mission-Reroller-v<ver>.zip` and prints
+   `test_package: passed`.
+3. **Push `main`.** The workflow builds the tagged commit, so the release
+   commit and its `docs/HISTORY.md` entry must be on it. Done when
+   `git status` shows `main` level with `origin/main`.
+4. **Tag**, with the user's go-ahead: `git tag v<ver>; git push origin v<ver>`.
+   Only `vX.Y.Z` triggers the workflow; `v1.2.3-rc1` publishes nothing.
+5. **Watch the run:** `gh run list --workflow release.yml --limit 1`, then
+   `gh run watch <id> --exit-status`. Done when the run succeeds,
+   `gh release view v<ver>` lists the ZIP and the notes, and
+   https://www.nexusmods.com/helldivers2/mods/16762?tab=files shows v<ver> as
+   the main file with its changelog.
+
+When the run fails, read `gh run view <id> --log-failed` and match the step:
+
+- **Before `GitHub release`** (notes, build, tests): nothing reached
+  players. Fix it on `main` and release the next patch version with its own
+  entry and tag; moving a pushed tag is the user's call.
+- **`GitHub release`, or `Nexus Mods` before `Mod file version created
+  successfully`**: a rerun stops at `gh release create` once the release
+  exists. With the user's go-ahead, `gh release delete v<ver> --yes` (the
+  tag stays) and `gh run rerun <id>`.
+- **Only the changelog** (`Mod file version created successfully`, then
+  `Failed to add changelog entries`): the file is live. Fix
+  `docs/HISTORY.md` on `main` if needed, push, and run
+  `gh workflow run nexus-changelog.yml -f tag=v<ver>`; it reads the entries
+  and `NEXUS_MOD_ID` from `main`. The changelog endpoint takes the unique
+  mod ID in `NEXUS_MOD_ID`, not 16762 (`Mod not found: 16762`).
+
+The workflow pins the loader, KnowYourConstellation and LuaJIT commits;
+bump them there when a newer loader should ship.
 
 Read `docs/HISTORY.md` before reworking a subsystem; it records why things
 are the way they are.
