@@ -1,8 +1,8 @@
 -- The reroll shortcut on Mod Bindings Menu's MODS tab, so the player can
 -- rebind it in the game's own options. The binding is registered lazily,
--- read every frame like a key, and its bound keyboard key is named for the
--- hint beside BACK. Without the menu nothing here does anything, and the
--- built-in Ctrl+Shift+F8 chord always works.
+-- read every frame like a key, and its bound key is named for the hint
+-- beside BACK. The menu has no default keys for automatic bindings, so the
+-- runtime uses F8 while this binding has none, and without the menu.
 local B={}
 B.ID,B.LABEL,B.CATEGORY='ipodalexei.mission_reroller.reroll','Reroll operations','Mission Reroller'
 -- Steam build 25480438, as Mod Bindings Menu v2.0 reads them: the game's
@@ -97,13 +97,15 @@ function B.new(env)
         end
         if #keys>0 then return table.concat(keys,' / ') end
         if other then return 'CONTROLLER' end
-        return nil
+        return false
     end
-    -- The bound key's name, nil while the menu is absent, the binding is
-    -- unbound, or its native action is unknown. Only read once the menu
-    -- reports native input ready, after it has removed developer defaults.
+    -- The bound keys' names and 'bound', or nil and 'unbound' when the
+    -- binding has no keys, or nil and 'unknown' while the menu is absent,
+    -- not ready, or the binding's native action or map cannot be read. Only
+    -- read once the menu reports native input ready, after it has removed
+    -- developer defaults.
     function self:keys()
-        if self.status~='registered' or not self.ready or not code then return nil end
+        if self.status~='registered' or not self.ready or not code then return nil,'unknown' end
         local ok,keys=pcall(function()
             if not bucket or env.u(env.read(bucket,4),0)~=code then bucket=find_bucket() end
             if not bucket then return nil end
@@ -112,8 +114,10 @@ function B.new(env)
             last_blob,last_keys=blob,decode(blob)
             return last_keys
         end)
-        if not ok then bucket,last_blob,last_keys=nil,nil,nil;return nil end
-        return keys
+        if not ok then bucket,last_blob,last_keys=nil,nil,nil;return nil,'unknown' end
+        if keys==nil then return nil,'unknown' end
+        if keys==false then return nil,'unbound' end
+        return keys,'bound'
     end
     return self
 end

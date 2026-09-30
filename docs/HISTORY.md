@@ -12,6 +12,13 @@ gate had set. The gate now takes its flags back and counts the drift, a lost
 ownership closes the dialog instead of stopping the mod, and the log names
 the flag that moved. Not yet tested after a resolution change.
 
+**Next in-game test: [v0.21.0 F8 on the map only](KEYBIND_HINT_TEST.md#rebinding).**
+The shortcut is F8 instead of Ctrl+Shift+F8, and a key bound on the MODS
+tab replaces it. It only acts with the galactic map on top of the screen
+stack and its BACK hint shown, so the options page, and presumably the ESC
+menu, block it. Ignored presses log the screen stack, which will confirm
+the ESC menu's screen type. Not yet tested in game.
+
 **Next in-game test: [v0.21.0 rebinding on the MODS tab](KEYBIND_HINT_TEST.md#rebinding).**
 With Mod Bindings Menu installed the mod registers Reroll operations under
 a Mission Reroller header on the game's MODS binding tab; the bound key

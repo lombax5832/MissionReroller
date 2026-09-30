@@ -9,9 +9,13 @@ do
     -- scripts/survey_map_widgets.py on 2026-09-29. nil draws no hint.
     local HINT_WIDGET=1696
     local hint_blocked=false
-    -- The dialog opens on Ctrl+Shift+F8, and on the Reroll operations binding
-    -- of Mod Bindings Menu's MODS tab when that mod is installed. The hint
-    -- names the bound key, or the chord while nothing is bound.
+    -- The dialog opens and closes on the Reroll operations binding of Mod
+    -- Bindings Menu's MODS tab, or on F8 while that binding has no key or the
+    -- menu is not installed. The hint names the key in use. The shortcut
+    -- only acts on the galactic map, never with another screen such as the
+    -- options or ESC menu above it.
+    local DEFAULT_KEY=0x77
+    local screens_logged
     -- One section is open at a time, or none. The enemy section shows the
     -- rules of one group: a checked mission, or 0 for any mission.
     local modifiers,section,mission_page,group_choice={},'missions',1,0
@@ -93,10 +97,21 @@ do
     -- its flags at +0 (0x10 visible), unscaled size at +36, inherited opacity
     -- at +84, scale at +100/+140 and solved bottom-left position at +148/+156.
     local single
+    -- The screen stack, bottom first, for the log.
+    local function screens()
+        local screen=read(pointer(game+0x347ce28)+0x429c,24);local depth=u(screen,20)
+        if depth<1 or depth>5 then return 'depth '..depth end
+        local list={};for i=1,depth do list[i]=u(screen,(i-1)*4)end
+        return table.concat(list,',')
+    end
+    -- Whether the galactic map (15) is the top screen.
+    local function map_on_top()
+        local screen=read(pointer(game+0x347ce28)+0x429c,24);local depth=u(screen,20)
+        return depth>=1 and depth<=5 and u(screen,(depth-1)*4)==15
+    end
     local function back_hint()
         if not HINT_WIDGET then return nil end
-        local screen=read(pointer(game+0x347ce28)+0x429c,24);local depth=u(screen,20)
-        if depth<1 or depth>5 or u(screen,(depth-1)*4)~=15 then return nil end
+        if not map_on_top()then return nil end
         local entry=read(pointer(game+0x3326e68)+25224,24)
         if u(entry,0)~=1 or u(entry,16)~=226 then return nil end
         local owner=api.pointer(entry,8)
@@ -188,33 +203,57 @@ do
             report_tone=M.search_report and 'warn' or tones[M.status] or 'bad'
             if M.status=='publication_test_passed' and router then router:close()end
         end
+        local pulse=binding and focused and binding:step() or false
+        local keys,bind_state=nil,'unknown'
+        if binding then keys,bind_state=binding:keys()end
+        -- The map is on screen when it is the top screen and its BACK hint is
+        -- fully shown. Without a readable hint the top screen alone decides.
         -- The hint is cosmetic: a failure disables it for the session and is
         -- logged once, without stopping the mod.
-        local bound=binding and focused and binding:step() or false
+        local function block(err)hint_blocked=true;pcall(function()hint:clear()end);emit('HINT_BLOCKED '..tostring(err))end
+        local anchor,on_map=nil,false
+        if focused then
+            if not hint_blocked then
+                local ok,value=pcall(back_hint)
+                if ok then anchor=value else block(value)end
+            end
+            if anchor then on_map=true
+            else
+                local top_ok,top=pcall(map_on_top)
+                on_map=top_ok and top and (hint_blocked or not HINT_WIDGET)or false
+            end
+        end
         if hint and not hint_blocked then
             local ok,err=pcall(function()
-                local anchor=focused and back_hint()
-                if anchor then hint:show(anchor,face(),binding and binding:keys() or nil)else hint:clear()end
+                if anchor then hint:show(anchor,face(),keys)else hint:clear()end
             end)
-            if not ok then hint_blocked=true;pcall(function()hint:clear()end);emit('HINT_BLOCKED '..tostring(err))end
+            if not ok then block(err)end
         end
         if not focused then
             if router then dialog_release('focus lost; search continues')end
             if gap.queued then gap.queued=nil;report,report_tone='Search cancelled','idle' end
             key_down=true;return
         end
-        local down=bound or user32.GetAsyncKeyState(0x11)<0 and user32.GetAsyncKeyState(0x10)<0 and user32.GetAsyncKeyState(0x77)<0
-        if down and not key_down then
+        -- A bound key replaces F8; an unreadable binding keeps both.
+        local down=pulse or bind_state~='bound' and user32.GetAsyncKeyState(DEFAULT_KEY)<0
+        local pressed=down and not key_down
+        key_down=down
+        if pressed and not on_map then
+            local ok,list=pcall(screens)
+            local line='SHORTCUT_IGNORED screens='..(ok and list or '?')
+            if line~=screens_logged then screens_logged=line;emit(line)end
+        elseif pressed then
             if router then close()
             else
                 catalogue_key=nil;section,mission_page='missions',1;gap={}
                 local ok,region=pcall(pointed_region)
                 scope=ok and region and {region=region} or nil
                 router=make_router(gate);router:open()
-                emit('MODAL_OPEN scope='..(scope and 'region '..scope.region or 'planet'))
+                local ok,list=pcall(screens)
+                emit('MODAL_OPEN scope='..(scope and 'region '..scope.region or 'planet')..' key='..(keys or 'F8')
+                    ..' screens='..(ok and list or '?'))
             end
         end
-        key_down=down
         if not router then return end
         local cx,cy,cw,ch=cursor.client(user32.GetForegroundWindow())
         local width,height=stingray.Gui.resolution()
@@ -396,5 +435,5 @@ do
         stingray.Script.set_temp_byte_count(temp);assert(ok,err)
     end
     M.dialog_enabled=true
-    emit('Mission filters: Ctrl+Shift+F8 or the Reroll operations binding on the MODS tab; native cursor; docked panel; key hint beside BACK '..(HINT_WIDGET and 'at widget '..HINT_WIDGET or 'disabled')..'; alone or hosting a lobby; all checked families in one operation; map difficulty; constellations per mission; repeat searches allowed')
+    emit('Mission filters: F8 or the Reroll operations binding on the MODS tab, on the galactic map only; native cursor; docked panel; key hint beside BACK '..(HINT_WIDGET and 'at widget '..HINT_WIDGET or 'disabled')..'; alone or hosting a lobby; all checked families in one operation; map difficulty; constellations per mission; repeat searches allowed')
 end

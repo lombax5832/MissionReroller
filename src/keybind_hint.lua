@@ -3,9 +3,9 @@
 -- is that hint's solved rectangle {x,y,w,h,scale} with the origin at the
 -- bottom-left corner, as the engine's Gui reports it. Everything is sized
 -- from the anchor, so the hint follows the game's own UI scale. The cap
--- reads the key given to show, or the built-in chord without one.
+-- reads the key given to show, or the default F8 without one.
 local H={}
-H.KEYS,H.LABEL='CTRL + SHIFT + F8','REROLL OPERATIONS'
+H.KEYS,H.LABEL='F8','REROLL OPERATIONS'
 -- In the anchor's scale, from the game's own BACK hint as surveyed: its cap
 -- is 57.9 units wide around 41.9 units of text (8 of padding a side), the
 -- label starts 15 units after the cap, and both texts are 15.75 units tall
