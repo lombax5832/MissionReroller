@@ -5,13 +5,15 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
-**Next in-game test: v0.22.0 mod list in the log.** On the first frame the
+**Validated in game: v0.22.0 mod list in the log.** On the first frame the
 log lists the loaders (`LOADER`) and every Lua mod they started or failed to
 start (`MODS`, then one `MOD` line each, sorted by name). Bingus Shared
 Loader records no versions, so a version is the `version` field of the mod's
 `require` result or of its global, named after the entry's last path segment
 (`mod_bindings_menu` becomes `ModBindingsMenu`); otherwise `unknown`. Our own
-global now carries `version`. Not yet seen in game.
+global now carries `version`. On 2026-09-30 the log listed the loader
+(version 17) and three started mods, each with its version:
+`skip_intro_animation` 2, `memory_explorer` 0.2.0 and ours 0.22.0.
 
 **Next in-game test: [v0.21.0 input ownership after a resolution change](INPUT_OWNERSHIP.md).**
 Changing the resolution and then opening the dialog stopped the mod with
@@ -20,17 +22,20 @@ gate had set. The gate now takes its flags back and counts the drift, a lost
 ownership closes the dialog instead of stopping the mod, and the log names
 the flag that moved. Not yet tested after a resolution change.
 
-**Next in-game test: [v0.22.0 F7 on the map only](KEYBIND_HINT_TEST.md#rebinding).**
+**Validated in game: [v0.22.0 F7 on the map only](KEYBIND_HINT_TEST.md#rebinding).**
 The shortcut is F7 instead of Ctrl+Shift+F8, and a key bound on the MODS
 tab replaces it. It only acts with the galactic map on top of the screen
 stack and its BACK hint shown, so the options page, and presumably the ESC
 menu, block it. Ignored presses log the screen stack, which will confirm
-the ESC menu's screen type. Not yet tested in game.
+the ESC menu's screen type. On 2026-09-30, without Mod Bindings Menu
+installed, F7 opened the panel on the map three times (`MODAL_OPEN
+scope=planet key=F7 screens=15`) with no `STOPPED` line, so F7 works
+without the menu. Whether the ESC menu blocks it is still unconfirmed.
 The default moved from F8 to F7 because the Fast Enter Hellpod mod uses F8
 by default, and keyboard input reaches every addon and the game, so one press
 would have triggered both.
 
-**Next in-game test: [v0.21.0 rebinding on the MODS tab](KEYBIND_HINT_TEST.md#rebinding).**
+**Validated in game: [v0.21.0 rebinding on the MODS tab](KEYBIND_HINT_TEST.md#rebinding).**
 With Mod Bindings Menu installed the mod registers Reroll operations under
 a Mission Reroller header on the game's MODS binding tab; the bound key
 opens and closes the panel beside Ctrl+Shift+F8, and the hint beside BACK
@@ -40,7 +45,8 @@ LuaJIT VM, the first C declaration of a function wins, and Mod Bindings
 Menu declares VirtualQuery with its own struct. The mod now passes a void
 pointer to VirtualQuery (the cursor calls go through `src/window_cursor.lua`,
 below), and
-`tests/test_ffi_conflicts.lua` reproduces the conflict. Not yet retested.
+`tests/test_ffi_conflicts.lua` reproduces the conflict. On retest the user
+confirmed that a key bound on the MODS tab works and is kept.
 
 **Validated in game: [v0.21.0 key hint beside BACK](KEYBIND_HINT_TEST.md).**
 A `CTRL + SHIFT + F8  REROLL OPERATIONS` hint drawn to the right of the war
