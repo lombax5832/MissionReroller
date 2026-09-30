@@ -16,11 +16,14 @@ local user={GetForegroundWindow=function()return nil end,
     GetAsyncKeyState=function(k)return ((k==1 and mouse)or(k==0x76 and key)or(k==0x1B and esc))and -1 or 0 end}
 -- The native handles the runtimes get from the adapter on the first frame.
 H.natives(update,{user32=user,game=0,api={pointer=function()end}})
--- The galactic map is the top screen with its BACK hint shown, unless a test says otherwise.
-local map_top,map_anchor,stack=true,{x=48,y=32,w=118,h=40,scale=1},'15'
-up(dialog,'map_on_top',function()return map_top end,true)
-up(dialog,'back_hint',function()return map_top and map_anchor or nil end,true)
-up(dialog,'screens',function()return stack end,true)
+-- The galactic map is the top screen with its BACK hint shown, unless a test
+-- says otherwise. The runtimes read the map through the host's map screen;
+-- the test replaces its reads.
+local map_top,map_anchor,stack=true,{x=48,y=32,w=118,h=40,scale=1},{15}
+local map=up(dialog,'map')
+map.on_top=function()return map_top end
+map.back_hint=function()return map_top and map_anchor or nil end
+map.screens=function()return stack end
 up(dialog,'cursor',{client=function()return x,820-y,1200,820 end},true)
 local acquired,released=0,0;local held=false;local last_model,last_selected
 up(dialog,'gate',{acquire=function()assert(not held);held=true;acquired=acquired+1;return true end,
@@ -56,7 +59,8 @@ end
 local compatibility=dofile(arg[2]..'/mission_compatibility.lua')
 local city_rows={29,49};local pointed;local catalogue_scope;local in_progress
 local reachable={[compatibility.mask({[2]=true,[4]=true})]=true,[compatibility.mask({[4]=true,[9]=true})]=true}
-up(dialog,'pointed_region',function()return pointed end,true)
+-- The operation row under the cursor: the first of the pointed city's rows.
+map.pointed_row=function()return pointed and 30+pointed*10 end
 up(dialog,'context',function()
     local decoded={operations={}};for i,row in ipairs(city_rows)do decoded.operations[i]={row=row,difficulty=10}end
     return {planet=planet,context='stable',fingerprint=tostring(planet),on_ship_planet=true,decoded=decoded,active=in_progress},10
@@ -288,12 +292,7 @@ up(real_context,'snapshot',function(preview)
     if unavailable then return nil,'waiting for pending backend requests' end
     return {planet=viewed,selection=word(ship)..word(viewed),fingerprint=ship..':'..viewed,sc=3}
 end,true)
-up(real_context,'pointer',function()return 100000 end,true)
-up(real_context,'read',function(address,n)
-    assert(n==4)
-    if address==100000+0x4ef8 then return word(ui_planet)end
-    assert(address==100000+0x4f14);return word(10)
-end,true)
+map.viewed=function()return ui_planet,10 end
 up(dialog,'context',real_context,true)
 jit.flush() -- Discard traces compiled against the previous injected context.
 session.finish('cancelled');frame();toggle();frame()
@@ -381,7 +380,7 @@ up(dialog,'dialog_release')('test cleanup')
 local hint_anchor,hint_last,hint_shown,hint_cleared,hint_keys={x=48,y=32,w=118,h=40,scale=1},nil,0,0,nil
 up(dialog,'hint',{show=function(_,anchor,f,keys)assert(f.font=='a');hint_last=anchor;hint_shown=hint_shown+1;hint_keys=keys end,
     clear=function()hint_last=nil;hint_cleared=hint_cleared+1 end},true)
-up(dialog,'back_hint',function()return hint_anchor end,true)
+map.back_hint=function()return hint_anchor end
 frame();assert(hint_last==hint_anchor and hint_shown==1 and hint_keys==nil,'Hint shown on the map with the dialog closed, with the chord')
 toggle();assert(hint_last==hint_anchor and hint_shown>1,'Hint stays while the dialog is open')
 -- The MODS tab binding opens and closes the dialog, only while focused. A
@@ -400,24 +399,24 @@ local before=stepped;frame(false);assert(stepped==before,'The binding is not rea
 frame();assert(stepped==before+1)
 -- Off the map, as with the options or ESC menu above it, neither key acts,
 -- and the screens are logged once per distinct stack.
-up(dialog,'back_hint',function()return map_top and map_anchor or nil end,true)
+map.back_hint=function()return map_top and map_anchor or nil end
 local logged=#logs
-map_top,stack=false,'15,26';toggle();assert(not held,'F7 ignored off the map')
+map_top,stack=false,{15,26};toggle();assert(not held,'F7 ignored off the map')
 assert(#logs==logged+1 and logs[#logs]=='SHORTCUT_IGNORED screens=15,26\n',logs[#logs])
 pulse=true;frame();pulse=false;frame();assert(not held and #logs==logged+1,'The binding is ignored off the map, logged once')
-map_top,stack=true,'15';toggle();assert(held,'Back on the map F7 opens it')
+map_top,stack=true,{15};toggle();assert(held,'Back on the map F7 opens it')
 map_top=false;toggle();assert(held,'Off the map F7 does not close it either')
 key=true;frame();map_top=true;frame();key=false;frame();assert(held,'A key held while returning to the map does not act')
 map_anchor=nil;toggle();assert(held,'The map without its BACK hint does not act');map_anchor={x=48,y=32,w=118,h=40,scale=1}
 toggle();assert(not held)
 up(dialog,'binding',nil,true);frame();assert(hint_keys==nil)
-up(dialog,'back_hint',function()return hint_anchor end,true)
+map.back_hint=function()return hint_anchor end
 hint_anchor=nil;frame();assert(hint_last==nil and hint_cleared>=1,'Hint cleared when the BACK hint is gone')
 hint_anchor={x=48,y=32,w=118,h=40,scale=1};frame();assert(hint_last==hint_anchor)
 -- Losing focus clears the hint in the frame and again when the dialog is released.
 local cleared=hint_cleared;frame(false);assert(hint_last==nil and hint_cleared>cleared,'Hint cleared without focus')
 frame();assert(hint_last==hint_anchor)
-up(dialog,'back_hint',function()error('Widget moved')end,true)
+map.back_hint=function()error('Widget moved')end
 local logged,shown_before=#logs,hint_shown
 frame();assert(hint_last==nil and #logs==logged+1 and logs[#logs]:find('HINT_BLOCKED',1,true) and logs[#logs]:find('Widget moved',1,true),
     'A hint failure is logged once')

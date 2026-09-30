@@ -10,8 +10,7 @@ CowboyBingusModLoader={api=1,version=18,open_log=function()return {write=functio
 update=function()return 1,nil,3 end;shutdown=function()return 4,nil,6 end
 dofile(arg[1]);local tick=up(update,'tick');local advance=up(tick,'advance_live_publication')
 local match=up(up(tick,'advance_prediction_search'),'on_search_match')
-local ffi=require('ffi');up(match,'ffi',ffi,true)
-local game,board,ui=0x10000000,0x20000000,0x30000000
+local game,board=0x10000000,0x20000000
 up(match,'game',game,true)
 local selection=word(268)..word(268)..word(4294967295)..word(4294967295)..word(0)
 local before={board=board,planet=268,seed=11,selection=selection,active=string.rep('00',92),fingerprint='before',context='same'}
@@ -22,14 +21,13 @@ local actual={row=0,operation_id=1,seed=888,difficulty=10,template_index=3,missi
 local after={board=board,planet=268,seed=22,selection=selection,active=before.active,fingerprint='after',context='same',operations=bytes,decoded={operations={actual},highlighted_operation=0}}
 local live=before;local canonical=11;local writes,notifications,selected=0,0,0;local difficulty=10;local displayed_planet=268
 up(match,'snapshot',function(viewed)assert(viewed==true,'Publication must use viewed-planet snapshots');return live end,true)
-up(match,'pointer',function(address)assert(address==game+0x3326aa0);return ui end,true)
+-- The map UI shows the planet and difficulty, through the host's map screen.
+up(match,'map').viewed=function()return displayed_planet,difficulty end
 local signatures=up(match,'selection_signatures')
 up(match,'read',function(address,n)
     if address==board+0x78e60 then return selection:sub(1,8)end
     if address==board+0x78e84 then return word(canonical)end
     if address==board+0x78e88 then return string.rep('\0',92)end
-    if address==ui+0x4ef8 then return word(displayed_planet)end
-    if address==ui+0x4f14 then return word(difficulty)end
     if address==game+0x148c348 then assert(n==16);return raw('44896308c7430cffffffffe8e859e4ff')end
     for _,sig in ipairs(signatures)do if address==game+sig[1] then return raw(sig[2])end end
     error('Unexpected read '..address)

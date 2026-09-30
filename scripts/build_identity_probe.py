@@ -75,7 +75,7 @@ def source(search=False,publish=False,dialog=False,version=None):
                        ('make_composition_prediction', 'composition_prediction.lua'), ('make_composition_capture', 'composition_capture.lua'),
                        ('make_base_inputs', 'operation_base_inputs.lua'),
                        ('sha256', 'bytes_sha256.lua'), ('ModInventory', 'mod_inventory.lua'),
-                       ('make_reroll_session', 'reroll_session.lua')]:
+                       ('make_reroll_session', 'reroll_session.lua'), ('make_map_screen', 'map_screen.lua')]:
         library(name,file)
     derived('predict_identity','make_identity(make_rng)')
     derived('predict_composition','make_composition_prediction(make_rng,choose_category,choose_level,make_mission_choice(make_rng),make_finalizer(make_rng))')
@@ -86,6 +86,7 @@ def source(search=False,publish=False,dialog=False,version=None):
             library(name,file)
     if publish:
         for name,file in [('make_publication','seed_publication.lua'),('make_ui_selection','ui_operation_selection.lua'),
+                          ('make_guarded_write','guarded_write.lua'),
                           ('selection_signatures','selection_signatures.lua'),('verify_predicted_board','verify_predicted_board.lua')]:
             library(name,file)
     if search:
@@ -100,12 +101,16 @@ def source(search=False,publish=False,dialog=False,version=None):
     # above) and hooks (entry points of the other runtimes, nil for a runtime
     # the build leaves out). No source text is rewritten.
     parts.append('local config='+lua_table(config(search,publish,dialog,version)))
-    parts.append('local host='+factory(root,'experiment_adapter.lua','core,config','core,config'))
+    parts.append('local host='+factory(root,'experiment_adapter.lua','core,config,make_map_screen','core,config,make_map_screen'))
     # The adapter returns nothing when another copy already runs or the loader
     # is too old, after setting M.status; the addon then stays inert.
     parts.append('if not host then return end')
     # The one writer of M.status (src/reroll_session.lua), shared by every runtime.
     parts.append('host.reroll_session=make_reroll_session(host.M,host.emit)')
+    # The one guarded memory write (src/guarded_write.lua), only in the builds
+    # that publish; the read-only builds carry no write.
+    if publish:
+        parts.append('host.write=make_guarded_write(host)')
     parts.append('local lib={'+','.join(f'{name}={name}' for name in libraries)+'}')
     inputs='host,lib,hooks'
     identity_hooks=[]

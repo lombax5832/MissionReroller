@@ -122,6 +122,14 @@ No single file in `src/` is the shipped entry. `scripts/build.py` calls
   `finish` / `settle` / `fail`; the dialog calls `start` / `cancel` / `view`.
   Nothing else writes `M.status`. A new status needs a row in its phase
   table; an unlisted one raises in tests and logs `SESSION_REJECTED` in game.
+- Game-UI reads go through `host.map` (`src/map_screen.lua`, which the
+  adapter receives as `make_map_screen`): the screen stack, the map UI's
+  viewed planet, difficulty and operation rows, and the BACK hint. Its
+  offsets live nowhere else. Writes go through `host.write(address, bytes,
+  what, verify)` (`src/guarded_write.lua`): page check, `WriteProcessMemory`
+  resolved by address, read-back. Only publishing builds add `host.write`;
+  the read-only builds contain no write. Tests replace fields of the shared
+  `host.map` table (`up(dialog,'map').on_top=...`) instead of runtime closures.
 
 `build_combined.py`, `build_experiment.py` and `build_seed_test.py` are older
 research builds: they append the adapter inline through

@@ -1,12 +1,16 @@
 local make=assert(loadfile(arg[1]))()
+-- The real map screen reads the map UI fields at their offsets.
+local make_map=assert(loadfile((arg[1]:gsub('ui_operation_selection%.lua$','map_screen.lua'))))()
 local root=100000;local writes=0;local memory={}
 local function word(n)return string.char(n%256,math.floor(n/256)%256,math.floor(n/65536)%256,math.floor(n/16777216)%256)end
 local function u(b)local a,c,d,e=b:byte(1,4);return a+c*256+d*65536+e*16777216 end
 memory[root+0x4ef8]=word(268);memory[root+0x4f14]=word(10)
 local before=word(4294967295)..word(4294967295)
 memory[root+0x4f00]=before;memory[root+0x4f98]=word(4294967295)
-local a={root=function()return root end,word=word,u32=u,signature=function()end,
- read=function(at,n)return assert(memory[at]):sub(1,n)end,
+local function read(at,n)return assert(memory[at]):sub(1,n)end
+local map=make_map({read=read,u=function(b,o)return u(b:sub(o+1))end,game=function()return 0 end,
+ pointer=function(at)assert(at==0x3326aa0);return root end})
+local a={map=map,word=word,signature=function()end,read=read,
  page=function(at,n)assert(at==root+0x4f00 and n==8)end,
  write=function(at,b)assert(at==root+0x4f00 and #b==8);writes=writes+1;memory[at]=b end}
 local s=make(a)

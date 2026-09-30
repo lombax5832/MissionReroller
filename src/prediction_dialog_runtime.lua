@@ -3,14 +3,15 @@
 -- A runtime factory: the assembler runs this file as function(host,lib,hooks).
 local M,emit,read,pointer,page,u,hex,snapshot=host.M,host.emit,host.read,host.pointer,host.page,host.u,host.hex,host.snapshot
 local reroll_session=host.reroll_session
+local map,write=host.map,host.write
 local Panel,Hint,Binding,Compatibility,FilterCatalogue,EscapeGate=lib.Panel,lib.Hint,lib.Binding,lib.Compatibility,lib.FilterCatalogue,lib.EscapeGate
 local make_gate,make_router,window_signatures,make_cursor=lib.make_gate,lib.make_router,lib.window_signatures,lib.make_cursor
 local Search,Constellations,make_constellation_inputs=lib.Search,lib.Constellations,lib.make_constellation_inputs
 local make_composition_inputs,make_config,make_effects=lib.make_composition_inputs,lib.make_config,lib.make_effects
 local mission_eligible,make_environments=lib.mission_eligible,lib.make_environments
 local default_limit=hooks.default_limit
-local api,game,ffi,kernel,user32
-host.when_initialized(function(n)api,game,ffi,kernel,user32=n.api,n.game,n.ffi,n.kernel,n.user32 end)
+local api,game,ffi,user32
+host.when_initialized(function(n)api,game,ffi,user32=n.api,n.game,n.ffi,n.user32 end)
 local dialog_tick,dialog_release,validate_search_request
 do
     local panel,hint,binding,gate,router,exe,cursor
@@ -23,11 +24,9 @@ do
     -- for the session; the key still closes the dialog.
     local VK_ESCAPE=0x1B
     local escape,escape_down,escape_blocked=nil,true,false
-    -- The key hint sits beside the war table's own BACK hint, a widget of
-    -- the map screen object: the 136x32 design-unit container at local
-    -- (56,16) that holds the key cap and the BACK label, found by
-    -- scripts/survey_map_widgets.py on 2026-09-29. nil draws no hint.
-    local HINT_WIDGET=1696
+    -- The key hint sits beside the war table's own BACK hint
+    -- (src/map_screen.lua). nil draws no hint.
+    local HINT_WIDGET=map.HINT_WIDGET
     local hint_blocked=false
     -- The dialog opens and closes on the Reroll operations binding of Mod
     -- Bindings Menu's MODS tab, or on F7 while that binding has no key or the
@@ -45,9 +44,8 @@ do
     -- limits the dialog and the search to that city.
     local scope
     local function pointed_region()
-        local rows=read(pointer(game+0x3326aa0)+0x4f00,8)
-        local row=u(rows,4);if row>=110 then row=u(rows,0)end
-        if row>=30 and row<110 then return math.floor((row-30)/10)end
+        local row=map.pointed_row()
+        if row and row>=30 then return math.floor((row-30)/10)end
     end
     local function accepts(row)return Search.in_scope(row,scope)end
     -- Constellation rules belong to a checked mission. Without checked
@@ -116,42 +114,11 @@ do
         for _,v in pairs(f)do assert(v~='0000000000000000','Font not ready')end
         return f
     end
-    -- The BACK hint's solved rectangle, or nil when the galactic map is not
-    -- the top screen or the hint is hidden. The map screen object is the one
-    -- inline subscriber of a UI manager event registry; a widget record keeps
-    -- its flags at +0 (0x10 visible), unscaled size at +36, inherited opacity
-    -- at +84, scale at +100/+140 and solved bottom-left position at +148/+156.
-    local single
     -- The screen stack, bottom first, for the log.
     local function screens()
-        local screen=read(pointer(game+0x347ce28)+0x429c,24);local depth=u(screen,20)
-        if depth<1 or depth>5 then return 'depth '..depth end
-        local list={};for i=1,depth do list[i]=u(screen,(i-1)*4)end
+        local list,depth=map.screens()
+        if not list then return 'depth '..depth end
         return table.concat(list,',')
-    end
-    -- Whether the galactic map (15) is the top screen.
-    local function map_on_top()
-        local screen=read(pointer(game+0x347ce28)+0x429c,24);local depth=u(screen,20)
-        return depth>=1 and depth<=5 and u(screen,(depth-1)*4)==15
-    end
-    local function back_hint()
-        if not HINT_WIDGET then return nil end
-        if not map_on_top()then return nil end
-        local entry=read(pointer(game+0x3326e68)+25224,24)
-        if u(entry,0)~=1 or u(entry,16)~=226 then return nil end
-        local owner=api.pointer(entry,8)
-        if not owner then return nil end
-        local w=read(owner+HINT_WIDGET,164)
-        single=single or ffi.new('float[1]')
-        local function f(o)ffi.copy(single,w:sub(o+1,o+4),4);return tonumber(single[0])end
-        if math.floor(u(w,0)/16)%2==0 then return nil end
-        local opacity=f(84)
-        if not (opacity>=0.995 and opacity<=1.01)then return nil end
-        local sx,sy=f(100),f(140)
-        local box={x=f(148),y=f(156),w=f(36)*sx,h=f(40)*sy,scale=sx}
-        for _,v in pairs(box)do if v~=v or v<0 or v>32768 then return nil end end
-        if sx<0.3 or sx>4 or math.abs(sx-sy)>0.01 or box.w<8 or box.h<8 then return nil end
-        return box
     end
     local function check_window()
         for _,sig in ipairs(window_signatures)do
@@ -188,19 +155,10 @@ do
                 assert(u(read(owner+Binding.BINDING_MAP+8,4),0)==EscapeGate.BUCKETS,'Unexpected binding map size')
                 return pointer(owner+Binding.BINDING_MAP)
             end,
-            write=function(a,bytes)
-                page(a,#bytes,0x20000)
-                ffi.cdef[[int WriteProcessMemory(void *, void *, const void *, size_t, size_t *);]]
-                local count=ffi.new('size_t[1]')
-                assert(kernel.WriteProcessMemory(kernel.GetCurrentProcess(),a,bytes,#bytes,count)~=0
-                    and count[0]==#bytes,'Binding map write failed')
-                assert(read(a,#bytes)==bytes,'Binding map write did not persist')
-            end})
+            write=function(a,bytes)write(a,bytes,'Binding map')end})
     end
     local function context()
-        local ui=pointer(game+0x3326aa0)
-        local viewed=u(read(ui+0x4ef8,4),0)
-        local d=u(read(ui+0x4f14,4),0)
+        local viewed,d=map.viewed()
         if viewed>=512 or d<1 or d>10 then return nil,'Choose a planet and map difficulty' end
         local view=viewed..':'..d
         local s,why=snapshot(true)
@@ -259,12 +217,12 @@ do
         local anchor,on_map=nil,false
         if focused then
             if not hint_blocked then
-                local ok,value=pcall(back_hint)
+                local ok,value=pcall(map.back_hint)
                 if ok then anchor=value else block(value)end
             end
             if anchor then on_map=true
             else
-                local top_ok,top=pcall(map_on_top)
+                local top_ok,top=pcall(map.on_top)
                 on_map=top_ok and top and (hint_blocked or not HINT_WIDGET)or false
             end
         end

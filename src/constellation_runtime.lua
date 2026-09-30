@@ -3,6 +3,7 @@
 -- A runtime factory: the assembler runs this file as function(host,lib,hooks).
 local M,emit,read,pointer,u=host.M,host.emit,host.read,host.pointer,host.u
 local reroll_session=host.reroll_session
+local map=host.map
 local Constellations,make_constellation_inputs=lib.Constellations,lib.make_constellation_inputs
 local make_effects,make_config=lib.make_effects,lib.make_config
 local api,game
@@ -124,8 +125,7 @@ do
         return true
     end
     local function observe()
-        local screen=read(pointer(game+0x347ce28)+0x429c,24);local depth=u(screen,20)
-        if depth<1 or depth>5 or u(screen,(depth-1)*4)~=15 then return end
+        if not map.on_top()then return end
         local b=pointer(game+0x347cee8)
         local row=u(read(b+0x17a2a0,4),0)
         if row>=110 then return end
