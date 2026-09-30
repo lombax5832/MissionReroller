@@ -5,6 +5,18 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
+**Next in-game test: v0.23.0 no hitch when a search starts.** Before a
+search the mod checks the board every 0.5 s until four checks agree, each
+check capturing it twice. A capture is about 50 ms of reads offline, and
+both ran in one frame, so the first seconds after `Reroll operations`
+stalled several times. Each check now runs as a coroutine whose reads yield
+once the 16 ms slice of the seed search is used; the stability rules are
+unchanged. On the saved city capture one capture takes 3 to 4 frames, the
+longest about 20 ms, and equals the unsliced capture byte for byte.
+`tests/test_identity_probe.lua` covers a check spread over frames and a
+restart during one. In game, clicking `Reroll operations` should no longer
+freeze the frame.
+
 **Validated in game: v0.22.1 options on Brilliance and Fronteria.** On
 those planets the panel showed `NO PLANET CHOSEN` and the log repeated
 `FILTER_CATALOGUE_BLOCKED ... Unsupported conditional world-modifier
