@@ -2,10 +2,8 @@
 
 ## Status
 
-**Not yet validated in game.** All automated tests pass on branch
-`architecture/host-and-session`, apart from four drivers that already failed on
-`main` (`test_core_package`, `test_preflight`, `test_probe`,
-`test_emulate_seed`).
+**Not yet validated in game.** The build and all 17 test drivers pass on
+branch `architecture/host-and-session`.
 
 ## What changed
 
