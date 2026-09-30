@@ -1,0 +1,53 @@
+# Post one version's docs/HISTORY.md entries as its Nexus Mods changelog,
+# for when the release run uploaded the file but the changelog failed.
+# Actions > Nexus changelog > Run workflow, with the tag (v1.2.3).
+name: Nexus changelog
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Version tag whose HISTORY entries to post (v1.2.3)
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  changelog:
+    runs-on: ubuntu-latest
+    steps:
+      # The branch it runs from, so the mod ID is the current one even for
+      # a tag cut before it changed.
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Post the changelog
+        env:
+          TAG: ${{ inputs.tag }}
+          NEXUSMODS_API_KEY: ${{ secrets.NEXUSMODS_API_KEY }}
+        run: |
+          python -B - <<'EOF'
+          import json, os, re, sys, urllib.error, urllib.request
+          sys.path.insert(0, 'scripts')
+          import release_notes
+          text = open('.github/workflows/release.yml', encoding='utf-8').read()
+          mod_id = re.search(r"NEXUS_MOD_ID: '(\d+)'", text).group(1)
+          version = os.environ['TAG'].removeprefix('v')
+          notes = release_notes.entries(version, open('docs/HISTORY.md', encoding='utf-8').read())
+          if not notes:
+              sys.exit(f'docs/HISTORY.md has no entry for v{version}')
+          print(notes)
+          request = urllib.request.Request(
+              f'https://api.nexusmods.com/v3/mods/{mod_id}/changelogs',
+              data=json.dumps({'version': version, 'changelog': notes}).encode(),
+              headers={'Content-Type': 'application/json', 'apikey': os.environ['NEXUSMODS_API_KEY'],
+                       'User-Agent': 'MissionReroller-release'},
+              method='POST')
+          try:
+              with urllib.request.urlopen(request) as response:
+                  print(response.status, response.read().decode())
+          except urllib.error.HTTPError as error:
+              sys.exit(f'{error.code} {error.read().decode()}')
+          EOF
