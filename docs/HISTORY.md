@@ -5,6 +5,21 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
+**Next in-game test: v0.22.1 options on Brilliance and Fronteria.** On
+those planets the panel showed `NO PLANET CHOSEN` and the log repeated
+`FILTER_CATALOGUE_BLOCKED ... Unsupported conditional world-modifier
+environment tags: hash=3778107369`. The environment decoder refused any
+world modifier with environment tags because it did not know which world
+modifiers are active. It now ports the game's collector (1267460): events
+apply by planet, sector, owner or everywhere (12e1210); state-table entries
+require or exclude other modifiers; planet overrides add or remove them; a
+faction-1 planet takes unflagged modifiers only while listed (12672b0). The
+tags of each active modifier join the environment, as in 177e4e0.
+`tests/test_template_environments.lua` covers each rule on synthetic
+memory, and `scripts/check_live_planet.py` replays the viewed planet from
+live memory: the board prediction and the options at every difficulty.
+Not yet seen on Brilliance or Fronteria in game.
+
 **Next in-game test: v0.22.0 mod list in the log.** On the first frame the
 log lists the loaders (`LOADER`) and every Lua mod they started or failed to
 start (`MODS`, then one `MOD` line each, sorted by name). Bingus Shared

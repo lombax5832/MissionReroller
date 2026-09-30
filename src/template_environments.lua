@@ -1,5 +1,5 @@
--- Decode template-environment tags. Unported conditional world modifiers with
--- nonempty tag lists are rejected; empty tag lists cannot affect this result.
+-- Decode template-environment tags (177e4e0): biome, campaign effects, the
+-- active world modifiers (1267460) and the operation's binding.
 return function(read,u,pointer,game,board,effects,biome_definition)
     local ffi=require('ffi')
     local function word(a)return u(read(a,4),0)end
@@ -33,22 +33,52 @@ return function(read,u,pointer,game,board,effects,biome_definition)
                 for i=0,9 do if word(game+0x21df8b8+i*4)==u(effect,28) then add(i);break end end
             end
         end
+        -- The active world modifiers, as 1267460 collects them: at most eight
+        -- definitions in order. The caller adds each one's tags to the result.
+        local present,definitions={},{}
+        local function has(hash)for i=1,#present do if present[i]==hash then return true end end end
+        local function keep(hash,definition)
+            if normal_guard then assert(bit.band(read(definition+0x4c,1):byte(),2)==0,'Unsupported operation-suppressing world modifier')end
+            present[#present+1]=hash;definitions[#definitions+1]=definition
+        end
+        local owner=word(board+0x14747c+planet*0x130)
+        -- 12672b0: unless flagged at +0x110, a modifier on a planet held by
+        -- faction 1 applies only while the planet is listed at board+0x17148c.
+        -- board+0x16d47c is campaign+0x6c044, the planet count.
         local function world(hash)
             if hash==0 then return end
             local definition=world_definition(hash)
-            if definition then
-                if normal_guard then assert(bit.band(read(definition+0x4c,1):byte(),2)==0,'Unsupported operation-suppressing world modifier')end
-                assert(count(definition+0x68,256)==0,
-                    string.format('Unsupported conditional world-modifier environment tags: hash=%u',hash))
+            if not definition then return end
+            if bit.band(read(definition+0x110,1):byte(),1)==0 and planet<=word(board+0x16d47c) and owner==1 then
+                local listed=false
+                for i=0,count(board+0x173c84,1024)-1 do
+                    if word(board+0x17148c+i*20)==planet then listed=true;break end
+                end
+                if not listed then return end
             end
+            if #present<8 and not has(hash) then keep(hash,definition)end
         end
-        -- 1267460's global event-condition resolver is not yet ported. A type
-        -- 17 command is harmless here only if its definition has no tags.
+        -- 12e1210: an event targets one planet, sector or owner, or every
+        -- planet, and optionally only while a given owner holds the planet.
+        local function applies(at)
+            if planet>=word(board+0x12444c) then return false end
+            local kind,target,holder=read(at+0x54,1):byte(),word(at+0x58),word(at+0x5c)
+            local scoped=kind==0 and target==planet or kind==1 and target==word(board+0x147498+planet*0x130)
+                or kind==2 and target==owner or kind==3
+            return scoped and (holder==0 or holder==owner)
+        end
+        -- Type 17 commands of applicable events skip 12672b0's checks and limit.
         local event_manager=ptr(game+0x346d518)
         for i=0,count(event_manager+0x2c80,32)-1 do
             local at=event_manager+i*0x164
-            for j=0,count(at+0x50,5)-1 do
-                if read(at+j*16,1):byte()==17 then world(word(at+j*16+4))end
+            if applies(at) then
+                for j=0,count(at+0x50,5)-1 do
+                    local hash=word(at+j*16+4)
+                    if read(at+j*16,1):byte()==17 and hash~=0 and not has(hash) then
+                        local definition=world_definition(hash)
+                        if definition then keep(hash,definition)end
+                    end
+                end
             end
         end
         if planet<word(campaign+0x6c044) then
@@ -88,19 +118,37 @@ return function(read,u,pointer,game,board,effects,biome_definition)
                 world(biome and word(biome+0x2d0)==11 and 0x1a667694 or 0x1ac602c5)
             end
             local state=word(campaign+0x46170+planet*0x130);if state>1 then state=0 end
-            -- Dependencies between world modifiers can affect their presence.
-            -- Checking every nonempty source conservatively rejects unresolved
-            -- nonempty tag lists, rather than silently assuming no tags.
+            -- Each entry may require one modifier already present and forbid
+            -- another; a flagged entry is skipped where campaign+0x46050 is set.
             for i=0,3 do
                 local at=game+0x32e55e0+state*0x498+i*16;local hash=word(at)
                 if hash==0 then break end
-                world(hash)
+                local required,excluded=word(at+4),word(at+8)
+                if (read(at+12,1):byte()==0 or read(campaign+0x46050+planet*0x130,1):byte()==0)
+                    and (required==0 or has(required)) and not (excluded~=0 and has(excluded)) then world(hash)end
             end
+            -- Planet overrides: type 1 adds a modifier, type 2 removes it the
+            -- way the game does, moving the last entry into the freed slot.
             for i=0,count(board+0x1f897c,8)-1 do
                 local at=board+0x1f891c+i*12
-                if word(at+4)==planet and word(at+8)==1 then world(word(at))end
+                if word(at+4)==planet then
+                    local kind,hash=word(at+8),word(at)
+                    if kind==1 then world(hash)
+                    elseif kind==2 then
+                        local j=1
+                        while j<=#present do
+                            if present[j]==hash then
+                                local n=#present
+                                present[j],definitions[j]=present[n],definitions[n]
+                                present[n],definitions[n]=nil,nil
+                            end
+                            j=j+1
+                        end
+                    end
+                end
             end
         end
+        for _,definition in ipairs(definitions)do array(definition,0x60,256)end
         local binding=effects.binding(planet,operation)
         if binding then array(binding,0x20,256)end
         return result
