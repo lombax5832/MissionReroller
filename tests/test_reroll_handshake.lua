@@ -98,8 +98,8 @@ local function saw(from,list)
 end
 local function start()
     local mark=#shown
-    if not up(dialog,'selected')[2] then action=2;frame()end
-    assert(up(dialog,'selected')[2],'Survey checked')
+    if not up(dialog,'filters').selected[2] then action=2;frame()end
+    assert(up(dialog,'filters').selected[2],'Survey checked')
     action='start';frame()
     assert(M.status=='waiting_for_stable_inputs' and not M.request_search,'The pipeline took the request in the same frame')
     return mark
