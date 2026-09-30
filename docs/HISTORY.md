@@ -5,6 +5,38 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
+**Not yet validated in game: v0.25.0 every offset in one file.** Players
+should see no change; the log's startup line becomes
+`build=25480438 hashes=verified signatures=33 anchors=24 verified`.
+- **`src/offsets.lua`.** The build, both module hashes, 33 code entries
+  (bytes or SHA-256), 26 module-relative globals and 129 struct fields,
+  strides and sizes used to be literals spread over about 30 files, several
+  copied between runtimes. They now live in one table, each with a note of
+  where it came from, and the code reads them through `O` (`O.rva.board`,
+  `O.board.seed`). A game update is an edit of that file.
+- **Checked on the first frame.** The adapter checks every code entry, and
+  for 24 globals the RIP-relative instruction that addresses them, before
+  anything runs; a stale one stops the mod with
+  `offset signature <name> mismatch` or `offset anchor <name> mismatch`.
+  The window and selection signature files and the identity probe's
+  generator hashes are now entries of the table. 45 struct fields are
+  anchored to a checked function that uses them; the rest are marked
+  `unverified=true`.
+- **Updating.** `scripts/check_offsets.py` checks the table against a game
+  dump, suggests new RVAs for stale entries from the previous build's dump,
+  and finds anchors. [UPDATING.md](UPDATING.md) is the runbook.
+  `tests/test_offsets.py`, in the release gate, fails on an offset literal
+  anywhere else in `src/`.
+- **Research builds removed.** The keyboard experiment, combined dialog,
+  seed test, one-shot probe, preflight, input inventory and mouse probe
+  builds held most of the duplicated offsets and are gone; git history
+  keeps them. The release module and GUID moved to `build_core.py`
+  unchanged.
+
+Every capture replay in `artifacts/` gives the same result as before the
+change, and all test drivers pass. The in-game plan is
+[OFFSETS_TEST.md](OFFSETS_TEST.md).
+
 **Not yet validated in game: v0.24.0 runtimes on a host, one reroll session.**
 This release restructures the code; players should see only the fix below.
 - **Runtimes on a host.** The adapter and the five runtimes used to be

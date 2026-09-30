@@ -25,6 +25,13 @@ were removed; the repository history keeps them.
 | `build_search_probe.py` | Read-only cooperative Lua seed search | `docs/LUA_PREDICTION_TEST.md` |
 | `build_live_search.py` | Fixed-filter search, publication and selection | `docs/LIVE_SEARCH_TEST.md` |
 
+## Offsets
+
+| Script | Purpose |
+| --- | --- |
+| `check_offsets.py` | Checks `src/offsets.lua` against a game dump, suggests new RVAs for stale entries from a reference dump, finds anchors (`--find-anchors`), and compares the hashes with the installed game. Runbook: `docs/UPDATING.md`. |
+| `offsets.py` | Reads `src/offsets.lua` for the Python tools (`O.rva`, `O.field`, `O.research`) through `offsets_json.lua` and `HD2_LUAJIT`. |
+
 ## Analysis tools
 
 The remaining scripts read saved captures under the ignored `artifacts/`
