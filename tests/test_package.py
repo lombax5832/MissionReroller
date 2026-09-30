@@ -34,14 +34,27 @@ def test_package():
                 'Addon/' + ARCHIVE + '.stream', 'Addon/' + ARCHIVE + '.gpu_resources'])
             manifest = json.loads(package.read('manifest.json'))
             assert manifest['Guid'] == build.GUID
-            assert manifest['Name'].startswith(build.NAME + ' v' + build.VERSION)
-            assert manifest['Options'][0]['Include'] == ['Addon']
+            assert manifest['Name'] == build.NAME + ' v' + build.VERSION
+            assert 'Bingus Shared Loader v16' in manifest['Description']
+            assert manifest['Options'] == [{'Name': build.NAME, 'Description': manifest['Description'],
+                                            'Include': ['Addon']}]
             archive = package.read('Addon/' + ARCHIVE)
         assert struct.unpack_from('<I', archive)[0] == 0xF0000011
         assert struct.pack('<Q', resource_hash(build.MODULE)) in archive
         offset = archive.index(marker)
         assert struct.unpack_from('<II', archive, offset - 8) == (len(source), 2)
         assert archive[offset:offset + len(source)] == source
+
+
+def test_release_version():
+    assert build.release_version(None) == build.release_version('') == build.DEFAULT_VERSION
+    assert build.release_version('v1.22.3') == build.release_version('1.22.3') == '1.22.3'
+    for tag in ('main', 'v1.2', 'v1.2.3-rc1'):
+        try:
+            build.release_version(tag)
+        except SystemExit:
+            continue
+        raise AssertionError(tag)
 
 
 def test_dialog():
@@ -58,6 +71,7 @@ def test_offsets():
 
 if __name__ == '__main__':
     test_package()
+    test_release_version()
     test_offsets()
     test_runtime_host()
     test_dialog()

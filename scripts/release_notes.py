@@ -1,5 +1,6 @@
 """Print the docs/HISTORY.md entries for one version, for the GitHub release
-and the Nexus Mods changelog. Fails when the tag and build.VERSION disagree.
+and the Nexus Mods changelog. Fails when the tag is not a version or
+docs/HISTORY.md has no entry for it.
 
     python -B scripts/release_notes.py v0.24.0
 """
@@ -30,9 +31,7 @@ def entries(version, text):
 
 def main(tag):
     import build
-    version = tag[1:] if tag.startswith('v') else tag
-    if version != build.VERSION:
-        sys.exit(f'tag {tag} does not match VERSION {build.VERSION} in scripts/build.py')
+    version = build.release_version(tag)
     notes = entries(version, (ROOT / 'docs' / 'HISTORY.md').read_text(encoding='utf-8'))
     if not notes:
         sys.exit(f'docs/HISTORY.md has no entry for v{version}')
