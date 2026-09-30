@@ -1,7 +1,7 @@
 """Package a passive Lua API inventory; never calls discovered engine methods."""
 import sys
 from pathlib import Path
-import build
+import build_core as build
 MODULE='mods/ipodalexei/mission_reroller_input_inventory'
 GUID='64a7fb1b-962a-4733-b48e-52183def07f3'
 SOURCE=build.ROOT/'src'/(MODULE+'.lua')

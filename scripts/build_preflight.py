@@ -1,7 +1,7 @@
 """Package the read-only in-game preflight, separately from the development core."""
 import sys
 from pathlib import Path
-import build
+import build_core as build
 
 MODULE = 'mods/ipodalexei/mission_reroller_preflight'
 GUID = '55866ece-5740-4f1b-bbcb-ae8ee168f58a'

@@ -4,7 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 import struct
-import build
+import build_core as build
 import build_combined
 
 VERSION='0.5.3'

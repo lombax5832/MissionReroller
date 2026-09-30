@@ -1,15 +1,16 @@
 """Build the read-only in-game validation step for the all-Lua generator port."""
 from pathlib import Path
 import sys
-import build
+import build_core as build
 import build_combined
 
 VERSION = '0.8.0'
 
 
-def source(search=False,publish=False,dialog=False):
+def source(search=False,publish=False,dialog=False,version=None):
     assert not publish or search
     assert not dialog or publish
+    assert bool(version)==bool(dialog),'the dialog build names its release version'
     root = build.ROOT/'src'
     core = build.entry_path().read_text().replace('MissionReroller', 'MissionRerollerExperimentCore')
     parts = ['-- HD2-Addon: '+build_combined.MODULE,
@@ -75,7 +76,7 @@ def source(search=False,publish=False,dialog=False):
         runtime=runtime.replace('no refresh or selection will occur','search then publish one verified seed')
         runtime=runtime.replace('; read-only;', '; supervised live publication;')
     if dialog:
-        runtime=runtime.replace('0.10.1 search, publish and select','0.20.2 docked dialog').replace('Ctrl+Shift+F9','Ctrl+Shift+F8')
+        runtime=runtime.replace('0.10.1 search, publish and select',version+' docked dialog').replace('Ctrl+Shift+F9','Ctrl+Shift+F8')
     parts.append(runtime)
     return ('\n'.join(parts)+'\n').encode()
 

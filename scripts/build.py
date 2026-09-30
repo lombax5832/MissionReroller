@@ -1,22 +1,26 @@
-"""Package the development core; native reroll and war-table UI are unavailable."""
-import os
+"""Package the Mission Reroller release: the docked dialog, seed search and publication."""
 from pathlib import Path
 import sys
 
 sys.dont_write_bytecode = True
-ROOT = Path(__file__).resolve().parents[1]
-LOADER = Path(os.environ.get('BINGUS_LOADER_ROOT', ROOT.parent / 'BingusSharedLoader'))
-sys.path.insert(0, str(LOADER / 'scripts'))
-from build_addon import build_addon
+import build_core
+import build_combined
+import build_identity_probe as probe
 
-MODULE = 'mods/ipodalexei/mission_reroller'
-NAME = 'Mission Reroller Development'
-VERSION = '0.2.0'
-GUID = 'dffa499a-e5de-48ef-9c5a-70f5fa96edc6'
+# The module and GUID are those of every published Mission Reroller ZIP since
+# v0.4.0; keep them so mod managers treat a new version as an update.
+MODULE = build_combined.MODULE
+GUID = build_combined.GUID
+NAME = 'Mission Reroller'
+VERSION = '0.20.2'
+SUMMARY = ('docked dialog; alone or hosting a lobby; all mission types; city scope; '
+           'fast seed search; mission, modifier and constellation filters')
+ROOT = build_core.ROOT
 
 
-def entry_path():
-    return ROOT / 'src' / (MODULE + '.lua')
+def source():
+    """The single plaintext entry the loader runs, assembled from src/."""
+    return probe.source(search=True, publish=True, dialog=True, version=VERSION)
 
 
 def release_path():
@@ -25,9 +29,8 @@ def release_path():
 
 def main(output=None):
     output = Path(output) if output else release_path()
-    build_addon(MODULE, entry_path().read_bytes(), GUID, output,
-                f'{NAME} - v{VERSION} (no native rerolls or UI)')
-    print('Built development core: ' + str(output))
+    build_core.build_addon(MODULE, source(), GUID, output, f'{NAME} v{VERSION} ({SUMMARY})')
+    print(output)
     return output
 
 

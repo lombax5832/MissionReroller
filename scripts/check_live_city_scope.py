@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT.parent / 'MemoryExplorer/server'))
 sys.path.insert(0, str(ROOT / 'scripts'))
 import memory_mcp as mcp
-import build_dialog
+import build
 
 
 def main(difficulty='10'):
@@ -36,7 +36,7 @@ def main(difficulty='10'):
     lua = os.environ.get('HD2_LUAJIT', str(ROOT.parent / 'tools/src/LuaJIT/src/luajit.exe'))
     with tempfile.TemporaryDirectory() as temporary:
         entry = Path(temporary) / 'dialog.lua'
-        entry.write_bytes(build_dialog.probe.source(search=True, publish=True, dialog=True))
+        entry.write_bytes(build.source())
         missing = Path(temporary) / 'missing.txt'
         capture = folder / 'capture.lua'
         for _ in range(4000):

@@ -1,7 +1,7 @@
 """Package the manually triggered single-call experiment."""
 import sys
 from pathlib import Path
-import build
+import build_core as build
 
 MODULE = 'mods/ipodalexei/mission_reroller_probe'
 GUID = 'db14ae46-a60b-41aa-b939-f550d4bb6fa8'

@@ -1,6 +1,6 @@
 import sys
 from pathlib import Path
-import build
+import build_core as build
 MODULE='mods/ipodalexei/mission_reroller_mouse_probe'
 GUID='958ad855-954c-4ac7-bd24-d979421b75df'
 def source():

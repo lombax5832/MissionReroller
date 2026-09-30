@@ -6,8 +6,8 @@ import tempfile
 import zipfile
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'scripts'))
-import build_dialog as build
-source=build.probe.source(search=True,publish=True,dialog=True)
+import build
+source=build.source()
 for forbidden in (b'VirtualProtect',b'VirtualAlloc',b'OpenProcess',b'CreateRemoteThread',b'io.open',b'os.execute',b'io.popen',b'candidate_path'):
     assert forbidden not in source,forbidden
 # The dialog build draws the docked panel; older builds keep the centred one.

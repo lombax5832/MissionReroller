@@ -1,7 +1,7 @@
 """Assemble one plaintext addon from independently testable local modules."""
 import sys
 from pathlib import Path
-import build
+import build_core as build
 MODULE = 'mods/ipodalexei/mission_reroller_experiment'
 GUID = '1b378e53-cb80-44f0-a05c-909834932ea1'
 VERSION = '0.3.1'

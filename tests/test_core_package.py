@@ -1,6 +1,7 @@
-"""Validate the release package: declaration, forbidden APIs, ZIP layout, then the dialog tests."""
+"""Validate the inert development core: discovery, archive boundaries and Lua behavior."""
 from pathlib import Path
 import json
+import os
 import struct
 import subprocess
 import sys
@@ -10,31 +11,29 @@ import zipfile
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
-import build
+import build_core as build
 from archive import ARCHIVE, resource_hash
 
 
 def test_package():
-    source = build.source()
+    source = build.entry_path().read_bytes()
     marker = ('-- HD2-Addon: ' + build.MODULE + '\n').encode()
     assert source.startswith(marker)
     assert b'\0' not in source and b'\x1b' not in source
-    assert b"rawget(_G,'MissionRerollerExperiment')" in source
-    assert ('Mission Reroller ' + build.VERSION + ' docked dialog').encode() in source
-    # The release reads and writes the game's own process through the loader's
-    # FFI, but never allocates, reprotects, opens processes or runs programs.
-    for forbidden in (b'VirtualAlloc', b'VirtualProtect', b'OpenProcess', b'CreateRemoteThread',
-                      b'LoadLibrary', b'io.open', b'os.execute', b'io.popen', b'candidate_path'):
+    assert b"rawget(_G, 'MissionReroller')" in source
+    # This development package must remain unable to perform native actions.
+    for forbidden in (b'VirtualAlloc', b'VirtualProtect', b'WriteProcessMemory',
+                      b'ReadProcessMemory', b'CreateRemoteThread', b'OpenProcess',
+                      b'LoadLibrary', b"require('ffi')", b'os.execute', b'io.popen'):
         assert forbidden not in source, forbidden
     with tempfile.TemporaryDirectory() as folder:
-        output = build.main(Path(folder) / 'release.zip')
+        output = build.main(Path(folder) / 'development.zip')
         with zipfile.ZipFile(output) as package:
             assert sorted(package.namelist()) == sorted([
                 'manifest.json', 'Addon/' + ARCHIVE,
                 'Addon/' + ARCHIVE + '.stream', 'Addon/' + ARCHIVE + '.gpu_resources'])
             manifest = json.loads(package.read('manifest.json'))
             assert manifest['Guid'] == build.GUID
-            assert manifest['Name'].startswith(build.NAME + ' v' + build.VERSION)
             assert manifest['Options'][0]['Include'] == ['Addon']
             archive = package.read('Addon/' + ARCHIVE)
         assert struct.unpack_from('<I', archive)[0] == 0xF0000011
@@ -44,11 +43,17 @@ def test_package():
         assert archive[offset:offset + len(source)] == source
 
 
-def test_dialog():
-    subprocess.run([sys.executable, '-B', str(ROOT / 'tests/test_dialog.py')], check=True)
+def test_lua():
+    lua = os.environ.get('HD2_LUAJIT', str(ROOT.parent / 'tools/src/LuaJIT/src/luajit.exe'))
+    subprocess.run([lua, str(ROOT / 'tests/test_reroller.lua'), str(build.entry_path())], check=True)
+
+
+def test_capture_reader():
+    subprocess.run([sys.executable, '-B', str(ROOT / 'tests/test_capture.py')], check=True)
 
 
 if __name__ == '__main__':
     test_package()
-    test_dialog()
-    print('test_package: passed')
+    test_lua()
+    test_capture_reader()
+    print('test_core_package: passed')
