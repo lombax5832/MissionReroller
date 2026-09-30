@@ -1,7 +1,5 @@
-local function up(fn,name,value,set)
-    for i=1,100 do local key,v=debug.getupvalue(fn,i);if key==name then if set then debug.setupvalue(fn,i,value)end;return v end;if not key then break end end
-    error('Missing upvalue '..name)
-end
+local H=dofile((arg[0]:match('^(.*[/\\])') or '')..'harness.lua')
+local up=H.up
 local logs={};local closed=false
 CowboyBingusModLoader={api=1,version=18,open_log=function()return {write=function(_,s)logs[#logs+1]=s end,flush=function()end,close=function()closed=true end}end}
 update=function()return 1,nil,3 end;shutdown=function()return 4,nil,6 end
@@ -12,11 +10,12 @@ local good=true;local match=true;local evaluations=0;local live=s;local unavaila
 local narrowed,complete=0,0;local first
 local function limited(limit)MissionRerollerExperiment.search_options={difficulty=10,required={[1]=true,[2]=true,[3]=true},limit=limit}end
 up(tick,'probe',{},true)
-up(tick,'api',{pointer=function()return nil end,time=function()return now end},true)
-up(tick,'ffi',ffi,true);up(tick,'kernel',{GetCurrentProcessId=function()return 42 end},true)
-up(tick,'user32',{GetForegroundWindow=function()return 1 end,GetWindowThreadProcessId=function(_,pid)pid[0]=focused and 42 or 1 end,
-    GetAsyncKeyState=function()return down and -1 or 0 end},true)
-up(tick,'snapshot',function()return live,unavailable end,true)
+H.natives(update,{api={pointer=function()return nil end,time=function()return now end},
+    ffi=ffi,kernel={GetCurrentProcessId=function()return 42 end},
+    user32={GetForegroundWindow=function()return 1 end,GetWindowThreadProcessId=function(_,pid)pid[0]=focused and 42 or 1 end,
+        GetAsyncKeyState=function()return down and -1 or 0 end}})
+local function snapshot()return live,unavailable end
+up(tick,'snapshot',snapshot,true);up(ready,'snapshot',snapshot,true)
 up(ready,'read',function(_,n)return string.rep('\0',n)end,true)
 up(ready,'composition_factory',function(take)return function()take(65536,1);return {passed=good,independent_bases=true}end end,true)
 local accepted

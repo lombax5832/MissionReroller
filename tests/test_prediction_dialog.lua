@@ -1,7 +1,5 @@
-local function up(fn,name,value,set)
-    for i=1,100 do local k,v=debug.getupvalue(fn,i);if k==name then if set then debug.setupvalue(fn,i,value)end;return v end;if not k then break end end
-    error('Missing upvalue '..name)
-end
+local H=dofile((arg[0]:match('^(.*[/\\])') or '')..'harness.lua')
+local up=H.up
 local ffi=require('ffi')
 local logs={}
 CowboyBingusModLoader={api=1,version=18,open_log=function()return {write=function(_,s)logs[#logs+1]=s end,flush=function()end,close=function()end}end}
@@ -12,7 +10,8 @@ local real_context=up(dialog,'context');local real_catalogue=up(dialog,'catalogu
 local key,mouse=false,false;local x,y=0,0
 local user={GetForegroundWindow=function()return nil end,
     GetAsyncKeyState=function(k)return ((k==1 and mouse)or(k==0x76 and key))and -1 or 0 end}
-up(dialog,'user32',user,true)
+-- The native handles the runtimes get from the adapter on the first frame.
+H.natives(update,{user32=user,game=0,api={pointer=function()end}})
 -- The galactic map is the top screen with its BACK hint shown, unless a test says otherwise.
 local map_top,map_anchor,stack=true,{x=48,y=32,w=118,h=40,scale=1},'15'
 up(dialog,'map_on_top',function()return map_top end,true)
@@ -283,7 +282,6 @@ up(real_context,'snapshot',function(preview)
     return {planet=viewed,selection=word(ship)..word(viewed),fingerprint=ship..':'..viewed,sc=3}
 end,true)
 up(real_context,'pointer',function()return 100000 end,true)
-up(real_context,'game',0,true)
 up(real_context,'read',function(address,n)
     assert(n==4)
     if address==100000+0x4ef8 then return word(ui_planet)end
@@ -439,7 +437,6 @@ assert(up(dialog,'report')=='Dialog closed: input ownership lost. Press the shor
 up(dialog,'dialog_release')('ownership cleanup');gate.held=real_held
 -- A constellation input failure must leave mission and modifier filters usable.
 local built={faction=2,missions={{id=2,name='Survey'}},constellation_groups={}}
-up(real_catalogue,'api',{pointer=function()end},true)
 up(real_catalogue,'make_composition_inputs',function()return {effects={},config={}}end,true)
 up(real_catalogue,'make_constellation_inputs',function()error('Missing global effects')end,true)
 up(real_catalogue,'FilterCatalogue',{build=function(_,_,_,_,_,_,tags)assert(tags==nil);return built end,

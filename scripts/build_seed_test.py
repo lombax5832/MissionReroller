@@ -61,7 +61,7 @@ def source():
                       ('selection_signatures','selection_signatures.lua')]:
         parts.append('local '+name+'=(function()\n'+(root/file).read_text()+'\nend)()')
     parts.append('local candidate={}\nlocal candidate_path='+json.dumps(CANDIDATE_FILE.as_posix()))
-    parts.extend((root/file).read_text() for file in ['experiment_adapter.lua','seed_test_runtime.lua'])
+    parts.extend([build.inline_adapter(),(root/'seed_test_runtime.lua').read_text()])
     return ('\n'.join(parts)+'\n').encode()
 
 def write_candidate(candidate):

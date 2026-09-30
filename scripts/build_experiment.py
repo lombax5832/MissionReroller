@@ -16,7 +16,7 @@ def source():
               'local core=(function()\n' + core + '\nend)()',
               'local Search=(function()\n' + (root/'search_session.lua').read_text() + '\nend)()',
               'local make_panel=(function()\n' + (root/'filter_panel.lua').read_text() + '\nend)()',
-              (root/'experiment_adapter.lua').read_text(),
+              build.inline_adapter(),
               (root/'experiment_runtime.lua').read_text()]
     return ('\n'.join(pieces) + '\n').encode('utf-8')
 

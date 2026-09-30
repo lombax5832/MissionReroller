@@ -1,4 +1,12 @@
 -- Publish one verified Lua search result through the previously tested local path.
+-- A runtime factory: the assembler runs this file as function(host,lib,hooks).
+local M,emit,read,pointer,page,u,hex=host.M,host.emit,host.read,host.pointer,host.page,host.u,host.hex
+local snapshot,participants,expected_code=host.snapshot,host.participants,host.expected_code
+local Search,make_publication,make_ui_selection=lib.Search,lib.make_publication,lib.make_ui_selection
+local selection_signatures,verify_predicted_board=lib.selection_signatures,lib.verify_predicted_board
+local api,game,ffi,kernel
+host.when_initialized(function(n)api,game,ffi,kernel=n.api,n.game,n.ffi,n.kernel end)
+local on_existing_match,on_search_match,advance_live_publication
 local transaction,selector,ui_selection,candidate,publication_used
 local function word(n)
     return string.char(n%256,math.floor(n/256)%256,math.floor(n/65536)%256,math.floor(n/16777216)%256)
@@ -180,3 +188,4 @@ advance_live_publication=function(action,now)
     return true
 end
 emit('Live publication enabled: alone on ship; keep the viewed planet open; verified match opens automatically')
+return {on_existing_match=on_existing_match,on_search_match=on_search_match,advance_live_publication=advance_live_publication}
