@@ -29,6 +29,13 @@ not independently confirm the constellation the game then uses; Know Your
 Constellation was not installed in that session. The any-mission page was
 not exercised.
 
+## Result, 2026-09-29 session (v0.19.0 exclusion)
+
+The user validated constellation exclusion in game in a separate session: a
+search with excluded constellations matched and opened an operation that
+did not carry them. No log from that session was reviewed for this note, so
+the stamp caveat under *What this test decides* still stands as written.
+
 ## Install
 
 Install `releases/Mission-Reroller-v0.19.0.zip`, which contains these filters and

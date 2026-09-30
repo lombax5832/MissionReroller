@@ -2,11 +2,15 @@
 
 ## Status
 
-Not validated in game. Only offline tests were run, against synthetic memory.
-Nobody has run this build, or any earlier one, with a second player in the
-session. Every earlier finding of this project was made alone on the ship, and
+Validated in game on 2026-09-29 in a lobby of two. The user hosted, searched
+and published; the other player reported that their war table showed the
+rerolled operation. Whether the operation was then started together, step 5
+below, was not reported. Lobbies of three and four, a guest running the mod,
+and a player joining during a search have not been exercised. Before this
+session every finding of this project was made alone on the ship, and
 [NETWORK_RESEED_PATH.md](NETWORK_RESEED_PATH.md) says of its own result that
-it must not be generalized to multiplayer.
+it must not be generalized to multiplayer; the two-player result is the first
+that does.
 
 The docked dialog and its quiet data gaps are those of v0.20.1, which the
 user confirmed working in game. See [DOCKED_DIALOG_TEST.md](DOCKED_DIALOG_TEST.md).
