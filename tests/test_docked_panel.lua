@@ -144,12 +144,12 @@ panel:show({},{},face,{x=spot.x+5,y=spot.y+5},m)
 assert(r.find('INCOMPATIBLE WITH SELECTED MISSIONS OR MODIFIER RULES') and not r.find('CLICK TO CYCLE: ANY, REQUIRED, EXCLUDED'))
 panel:show({},{},face,nowhere,m);assert(r.find('CLICK TO CYCLE: ANY, REQUIRED, EXCLUDED'),'The reason leaves with the pointer')
 -- A search: the strip appears, only the counter changes per frame, the strip goes again.
-running(m);m.status='Searching seeds';m.tone='busy';m.detail='12 of 262,144 seeds searched'
+running(m);m.status='Searching seeds';m.tone='busy';m.detail='12 of 1,000,000 seeds searched'
 panel:show({},{},face,nowhere,m)
-assert(r.find('2 SEARCH SEEDS') and r.find('CANCEL SEARCH') and r.find('12 OF 262,144 SEEDS SEARCHED'))
+assert(r.find('2 SEARCH SEEDS') and r.find('CANCEL SEARCH') and r.find('12 OF 1,000,000 SEEDS SEARCHED'))
 assert(r.destroyed==0,'Starting a search keeps the GUI')
-r.updates=0;measured=r.measured;m.detail='4,108 of 262,144 seeds searched';panel:show({},{},face,nowhere,m)
-assert(r.updates==1 and r.measured==measured and r.find('4,108 OF 262,144 SEEDS SEARCHED'),'The counter is one text')
+r.updates=0;measured=r.measured;m.detail='4,108 of 1,000,000 seeds searched';panel:show({},{},face,nowhere,m)
+assert(r.updates==1 and r.measured==measured and r.find('4,108 OF 1,000,000 SEEDS SEARCHED'),'The counter is one text')
 m.running,m.locked,m.step,m.can_start,m.can_clear,m.ready=false,false,nil,true,true,true
 m.status='Search cancelled';m.tone='idle';m.detail=''
 panel:show({},{},face,nowhere,m)

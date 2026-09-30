@@ -57,7 +57,7 @@ the same GUID, so your manager treats it as the same mod.
      none is checked. Each constellation cycles ANY, ACCEPTED, EXCLUDED. The
      list shows only what that mission can draw at the map difficulty.
 4. Press **REROLL OPERATIONS**. The mod searches campaign seeds inside the
-   game, up to 262,144 per request, showing its four steps and the seeds
+   game, up to 1,000,000 per request, showing its four steps and the seeds
    searched. On a match it publishes the seed, verifies the regenerated
    board, closes the panel and opens the matching operation. The difficulty
    is the one set on the map.
