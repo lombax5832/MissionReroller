@@ -11,9 +11,9 @@ local tick=up(update,'tick');local dialog=up(tick,'dialog_tick');local M=Mission
 local session=up(dialog,'reroll_session')
 local function take()assert(M.request_search,'No request to take');M.request_search=nil;session.advance('waiting_for_stable_inputs')end
 local real_context=up(dialog,'context');local real_catalogue=up(dialog,'catalogue_for')
-local key,mouse=false,false;local x,y=0,0
+local key,mouse,esc=false,false,false;local x,y=0,0
 local user={GetForegroundWindow=function()return nil end,
-    GetAsyncKeyState=function(k)return ((k==1 and mouse)or(k==0x76 and key))and -1 or 0 end}
+    GetAsyncKeyState=function(k)return ((k==1 and mouse)or(k==0x76 and key)or(k==0x1B and esc))and -1 or 0 end}
 -- The native handles the runtimes get from the adapter on the first frame.
 H.natives(update,{user32=user,game=0,api={pointer=function()end}})
 -- The galactic map is the top screen with its BACK hint shown, unless a test says otherwise.
@@ -442,6 +442,42 @@ lost=false;gate.reason=nil;toggle();assert(held,'The dialog opens again')
 -- With no planet shown that message yields to the planet prompt; it is kept for when one is.
 assert(up(dialog,'report')=='Dialog closed: input ownership lost. Press the shortcut to reopen','The loss is reported')
 up(dialog,'dialog_release')('ownership cleanup');gate.held=real_held
+-- Escape closes the dialog. The game's Escape mappings are taken away while
+-- it is open and come back only once the key is up, so the war table never
+-- sees the press. A simulated gate stands in for src/escape_gate.lua.
+local escape_gate,holds,releases={held=false,actions=''},0,0
+function escape_gate:hold()assert(not self.held);holds=holds+1;self.held=true;self.actions='1:9';return 1 end
+function escape_gate:release()if not self.held then return 0,0 end;self.held=false;releases=releases+1;return 1,0 end
+up(up(dialog,'restore_escape'),'escape',escape_gate,true)
+local logged=#logs
+toggle();assert(held and escape_gate.held and holds==1,'Opening takes Escape from the game')
+assert(logs[logged+1]=='ESCAPE_HELD mappings=1 actions=1:9\n' and logs[logged+2]:find('MODAL_OPEN',1,true),logs[logged+1])
+esc=true;frame();frame();assert(not held,'Escape closes the dialog')
+frame();assert(escape_gate.held and releases==0,'Escape stays away from the game while it is down')
+esc=false;frame();assert(not escape_gate.held and releases==1 and logs[#logs]=='ESCAPE_RESTORED buckets=1\n','Released, Escape goes back to the game')
+esc=true;frame();esc=false;frame();assert(not held and holds==1,'Escape does nothing with the dialog closed')
+esc=true;toggle();assert(held,'Escape held while opening does not close it');esc=false;frame();assert(held)
+esc=true;frame();frame();esc=false;frame();assert(not held and not escape_gate.held and holds==2)
+toggle();esc=true;frame();frame();assert(not held and escape_gate.held)
+toggle();assert(held and holds==3,'Reopened before Escape is up, the map stays as held')
+esc=false;frame();assert(held and escape_gate.held,'Releasing Escape with the dialog open keeps it')
+esc=true;frame();frame();esc=false;frame();assert(not held and not escape_gate.held)
+toggle();esc=true;frame(false);assert(not held and not escape_gate.held,'Losing focus gives Escape back at once')
+esc=false;frame()
+-- Clicking CLOSE or pressing F7 gives Escape back as well.
+toggle();click('close');frame();assert(not held and not escape_gate.held)
+toggle();toggle();assert(not held and not escape_gate.held and releases==6)
+-- A map that cannot be changed leaves Escape to the game for the session;
+-- the key still closes the dialog.
+escape_gate.hold=function()error('Unexpected binding map size',0)end
+logged=#logs
+toggle();assert(held and logs[logged+1]:find('ESCAPE_BLOCKED Unexpected binding map size',1,true),logs[logged+1])
+esc=true;frame();frame();esc=false;frame();assert(not held,'Escape still closes the dialog')
+toggle();toggle();assert(not held)
+local blocked=0;for i=logged+1,#logs do if logs[i]:find('ESCAPE_BLOCKED',1,true)then blocked=blocked+1 end end
+assert(blocked==1,'A blocked map is not retried')
+assert(not tostring(M.status):find('STOPPED',1,true),'A blocked map does not stop the mod')
+up(up(dialog,'restore_escape'),'escape',nil,true);up(up(dialog,'hold_escape'),'escape_blocked',false,true)
 -- A constellation input failure must leave mission and modifier filters usable.
 local built={faction=2,missions={{id=2,name='Survey'}},constellation_groups={}}
 up(real_catalogue,'make_composition_inputs',function()return {effects={},config={}}end,true)
@@ -454,4 +490,4 @@ assert(real_catalogue({planet=268,board=0},10)==built and real_catalogue({planet
 assert(#logs==before+1 and logs[#logs]:find('CONSTELLATION_CATALOGUE_BLOCKED',1,true) and logs[#logs]:find('Missing global effects',1,true),
     'Constellation failures are logged once and do not block the catalogue')
 assert(not table.concat(logs):find('SESSION_',1,true),'Every phase change followed the session rules')
-print('Dialog: sections, groups, paging, locked states, city scope, constellation acceptance and exclusion per mission, real mouse router, filters, empty request, map difficulty, alt-tab, cancel, close, reopen, repeat and key hint passed')
+print('Dialog: sections, groups, paging, locked states, city scope, constellation acceptance and exclusion per mission, real mouse router, filters, empty request, map difficulty, alt-tab, cancel, close, Escape, reopen, repeat and key hint passed')

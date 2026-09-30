@@ -3,18 +3,26 @@
 -- A runtime factory: the assembler runs this file as function(host,lib,hooks).
 local M,emit,read,pointer,page,u,hex,snapshot=host.M,host.emit,host.read,host.pointer,host.page,host.u,host.hex,host.snapshot
 local reroll_session=host.reroll_session
-local Panel,Hint,Binding,Compatibility,FilterCatalogue=lib.Panel,lib.Hint,lib.Binding,lib.Compatibility,lib.FilterCatalogue
+local Panel,Hint,Binding,Compatibility,FilterCatalogue,EscapeGate=lib.Panel,lib.Hint,lib.Binding,lib.Compatibility,lib.FilterCatalogue,lib.EscapeGate
 local make_gate,make_router,window_signatures,make_cursor=lib.make_gate,lib.make_router,lib.window_signatures,lib.make_cursor
 local Search,Constellations,make_constellation_inputs=lib.Search,lib.Constellations,lib.make_constellation_inputs
 local make_composition_inputs,make_config,make_effects=lib.make_composition_inputs,lib.make_config,lib.make_effects
 local mission_eligible,make_environments=lib.mission_eligible,lib.make_environments
 local default_limit=hooks.default_limit
-local api,game,ffi,user32
-host.when_initialized(function(n)api,game,ffi,user32=n.api,n.game,n.ffi,n.user32 end)
+local api,game,ffi,kernel,user32
+host.when_initialized(function(n)api,game,ffi,kernel,user32=n.api,n.game,n.ffi,n.kernel,n.user32 end)
 local dialog_tick,dialog_release,validate_search_request
 do
     local panel,hint,binding,gate,router,exe,cursor
     local selected,difficulty,key_down={},10,true
+    -- Escape closes the dialog. While it is open the game's own Escape
+    -- mappings are taken out of its binding map (src/escape_gate.lua), so
+    -- the war table does not go BACK as well. They are put back once the
+    -- dialog has closed and Escape is up, so the game never sees the press
+    -- that closed it. A map that cannot be read leaves Escape to the game
+    -- for the session; the key still closes the dialog.
+    local VK_ESCAPE=0x1B
+    local escape,escape_down,escape_blocked=nil,true,false
     -- The key hint sits beside the war table's own BACK hint, a widget of
     -- the map screen object: the 136x32 design-unit container at local
     -- (56,16) that holds the key cap and the BACK label, found by
@@ -85,6 +93,23 @@ do
         if running or gap.queued then report,report_tone='Search cancelled','idle' end
         if running then reroll_session.cancel()end;running=false;gap.queued=nil;router:close()
     end
+    local function escape_key()return user32.GetAsyncKeyState(VK_ESCAPE)<0 end
+    local function hold_escape()
+        -- Still held from a close whose Escape has not been released.
+        if not escape or escape_blocked or escape.held then return end
+        local ok,value=pcall(escape.hold,escape)
+        if ok then emit('ESCAPE_HELD mappings='..value..' actions='..(escape.actions~='' and escape.actions or 'none'))return end
+        escape_blocked=true;emit('ESCAPE_BLOCKED '..tostring(value))
+        -- Put back whatever was written before the failure.
+        if escape.held then local restored=escape:release();emit('ESCAPE_RESTORED buckets='..restored)end
+    end
+    -- Raises when a bucket cannot be written back, which stops the mod.
+    local function restore_escape(force)
+        if not (escape and escape.held)then return end
+        if not force and escape_key()then return end
+        local restored,skipped=escape:release()
+        emit('ESCAPE_RESTORED buckets='..restored..(skipped>0 and ' changed='..skipped or ''))
+    end
     local function face()
         local function hash(a)local b=read(a,8);return string.format('%08x%08x',u(b,4),u(b,0))end
         local f={font=hash(game+0x3772268),material=hash(pointer(game+0x37c5478)+24),atlas=hash(game+0x3772ee8)}
@@ -144,6 +169,10 @@ do
         router=nil
         if panel then panel:clear()end
         if hint then pcall(function()hint:clear()end)end
+        -- A normal close waits for Escape to be released; every other
+        -- release puts the mappings back now.
+        local ok,err=pcall(restore_escape,reason~='closed')
+        if not ok then emit('ESCAPE_RESTORE_FAILED '..tostring(err))end
         local drifts=gate and gate.drifts or 0
         emit('MODAL_RELEASE '..reason..(drifts>0 and ' reasserted='..drifts..' last='..tostring(gate.reason) or ''))
     end
@@ -153,6 +182,20 @@ do
             menu=function()return rawget(_G,'ModBindingsMenu')end})
         cursor=make_cursor(ffi)
         gate=make_gate(stingray.Window,check_window)
+        escape=EscapeGate.new({read=read,u=u,
+            buckets=function()
+                local owner=pointer(game+Binding.INPUT_OWNER)
+                assert(u(read(owner+Binding.BINDING_MAP+8,4),0)==EscapeGate.BUCKETS,'Unexpected binding map size')
+                return pointer(owner+Binding.BINDING_MAP)
+            end,
+            write=function(a,bytes)
+                page(a,#bytes,0x20000)
+                ffi.cdef[[int WriteProcessMemory(void *, void *, const void *, size_t, size_t *);]]
+                local count=ffi.new('size_t[1]')
+                assert(kernel.WriteProcessMemory(kernel.GetCurrentProcess(),a,bytes,#bytes,count)~=0
+                    and count[0]==#bytes,'Binding map write failed')
+                assert(read(a,#bytes)==bytes,'Binding map write did not persist')
+            end})
     end
     local function context()
         local ui=pointer(game+0x3326aa0)
@@ -198,6 +241,7 @@ do
     end
     dialog_tick=function(focused,now)
         if not panel then init()end
+        if not router then restore_escape(not focused)end
         local run=reroll_session.view()
         if running and not run.running then
             running=false;report=M.search_report or run.caption
@@ -250,12 +294,17 @@ do
                 local ok,region=pcall(pointed_region)
                 scope=ok and region and {region=region} or nil
                 router=make_router(gate);router:open()
+                -- An Escape held while opening does not close the dialog.
+                escape_down=true;hold_escape()
                 local ok,list=pcall(screens)
                 emit('MODAL_OPEN scope='..(scope and 'region '..scope.region or 'planet')..' key='..(keys or 'F7')
                     ..' screens='..(ok and list or '?'))
             end
         end
         if not router then return end
+        local escape_now=escape_key()
+        local escape_pressed=escape_now and not escape_down and router.opened
+        escape_down=escape_now
         local cx,cy,cw,ch=cursor.client(user32.GetForegroundWindow())
         local width,height=stingray.Gui.resolution()
         local x=cx*width/cw;local y=height-cy*height/ch
@@ -397,7 +446,7 @@ do
             dialog_release('input ownership lost')
             return
         end
-        if action=='close' then close()
+        if action=='close' or escape_pressed then close()
         elseif action=='cancel' then
             if gap.queued then gap.queued=nil else reroll_session.cancel();running=false end
             report,report_tone='Search cancelled','idle'
@@ -437,6 +486,6 @@ do
         stingray.Script.set_temp_byte_count(temp);assert(ok,err)
     end
     M.dialog_enabled=true
-    emit('Mission filters: F7 or the Reroll operations binding on the MODS tab, on the galactic map only; native cursor; docked panel; key hint beside BACK '..(HINT_WIDGET and 'at widget '..HINT_WIDGET or 'disabled')..'; alone or hosting a lobby; all checked families in one operation; map difficulty; constellations per mission; repeat searches allowed')
+    emit('Mission filters: F7 or the Reroll operations binding on the MODS tab, on the galactic map only; Escape closes; native cursor; docked panel; key hint beside BACK '..(HINT_WIDGET and 'at widget '..HINT_WIDGET or 'disabled')..'; alone or hosting a lobby; all checked families in one operation; map difficulty; constellations per mission; repeat searches allowed')
 end
 return {dialog_tick=dialog_tick,dialog_release=dialog_release,validate_search_request=validate_search_request}

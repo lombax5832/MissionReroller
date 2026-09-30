@@ -61,8 +61,9 @@ the same GUID, so your manager treats it as the same mod.
    searched. On a match it publishes the seed, verifies the regenerated
    board, closes the panel and opens the matching operation. The difficulty
    is the one set on the map.
-5. **CANCEL SEARCH** stops a search. **CLEAR** resets the choices. **CLOSE**
-   or the shortcut closes the panel; Escape does not.
+5. **CANCEL SEARCH** stops a search. **CLEAR** resets the choices. **CLOSE**,
+   Escape or the shortcut closes the panel. Escape closes only the panel: the
+   war table does not go back as well.
 
 If no seed matches within the budget, the panel reads `No match; search
 again to continue`. Searching again with an unchanged request continues
@@ -95,7 +96,9 @@ OPERATIONS`. Tell your lobby before you reroll. Tested with two players.
   always present.
 - **Illuminate missions and difficulty 1** draw no constellations, so their
   enemy force lists are empty.
-- **The panel takes the mouse only.** Keyboard input still reaches the game.
+- **The panel takes the mouse and Escape only.** Other keys still reach the
+  game. While the panel is open the game's own Escape bindings are set aside
+  and come back when it closes and Escape is released.
 
 ## Troubleshooting
 
@@ -109,6 +112,7 @@ The mod's log is `MissionRerollerExperiment.log` in
 | The hint beside BACK shows F7 after binding another key | The hint reads the game's live binding once Mod Bindings Menu reports native input ready. If it never changes, send the `BINDING_REGISTERED` line from the mod's log. |
 | The panel shows `OPEN A PLANET ON THE WAR TABLE FIRST` | View a planet, then reopen the panel. |
 | The panel shows `UPDATING PLANET DATA` for long | The game is waiting on the backend. Your choices are kept; the search starts on fresh data. |
+| Escape also takes the war table back | The mod's log has an `ESCAPE_BLOCKED` line with the reason, or `ESCAPE_HELD mappings=0` if the game has no Escape binding to set aside. Send the line. The panel still closes on Escape. |
 | The log has a `STOPPED:` line | The mod found something it did not expect and released the mouse without writing anything further. Send the line with a bug report. |
 | `game.dll hash mismatch` or `executable hash mismatch` | The game was updated. Wait for a release for the new build. |
 
