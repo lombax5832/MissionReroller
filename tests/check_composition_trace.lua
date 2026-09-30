@@ -19,8 +19,8 @@ local lookup_factory=dofile(root..'/configuration_lookup.lua')
 local checked=0
 local effects=dofile(root..'/campaign_effects.lua')(read,u,pointer,tonumber(fixture.game),tonumber(fixture.board))
 local effect_checks=0
-local inputs=dofile(root..'/composition_inputs.lua')(read,u,pointer,tonumber(fixture.game),tonumber(fixture.board),
-    lookup_factory,dofile(root..'/campaign_effects.lua'),dofile(root..'/mission_eligibility.lua'),dofile(root..'/template_environments.lua'))
+local Planet=dofile((arg[0]:match('^(.*[/\\])') or '')..'harness.lua').planet_model(root)
+local inputs=Planet.bind(read,u,pointer,tonumber(fixture.game),tonumber(fixture.board),fixture.planet).inputs()
 local enabled_checks=0
 local category_checks=0
 local choose_category=dofile(root..'/mission_category_choice.lua')

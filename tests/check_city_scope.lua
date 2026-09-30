@@ -36,9 +36,8 @@ CowboyBingusModLoader={api=1,version=18,open_log=function()return nil end}
 update=function()end
 dofile(arg[3])
 local ready=up(up(update,'tick'),'on_prediction_ready')
-local candidate_factory=up(ready,'candidate_factory');local make_job=up(ready,'make_search_job')
+local Planet=up(ready,'Planet');local make_job=up(ready,'make_search_job')
 local Search=module('search_session');local Catalogue=module('filter_catalogue')
-local Constellations=module('constellation_prediction')
 local game=ffi.cast('uint8_t*',tonumber(fixture.game));local board=tonumber(fixture.board)
 local planet=u(read(board+0x17a298,8),4);assert(planet<512,'No viewed planet')
 local seed=u(read(board+0x78e84,4),0)
@@ -75,16 +74,15 @@ local snapshot={board=board,planet=planet,seed=seed,operations=bytes,decoded=dec
 print(string.format('planet=%d seed=%u operations=%d city regions=[%s] difficulty=%d',planet,seed,#decoded.operations,table.concat(regions,','),difficulty))
 assert(#regions>0,'View a planet with a city or megafactory')
 -- The displayed board, cities included, is what the predictor produces.
-local predict=candidate_factory(read,u,pointer,game,board,definitions,planet)
+local predict=Planet.bind(read,u,pointer,game,board,planet).predictor(definitions)
 local ok,why=module('verify_predicted_board')(snapshot,predict(seed),u)
 assert(ok,'Displayed board differs from its prediction: '..tostring(why))
 print('Displayed board, city operations included, equals its prediction')
-local inputs=module('composition_inputs')(read,u,pointer,game,board,module('configuration_lookup'),module('campaign_effects'),module('mission_eligibility'),module('template_environments'))
-local tags=module('constellation_inputs')(read,u,pointer,game,board,inputs.effects,inputs.config)
+local model=Planet.bind(read,u,pointer,game,board,planet)
 local function catalogue(scope)
     local function accepts(row)return Search.in_scope(row,scope)end
-    local result=Catalogue.build(inputs,snapshot,difficulty,u,Search.options,module('mission_compatibility'),nil,nil,scope and accepts)
-    Catalogue.constellations(result,tags,Constellations.names,planet,difficulty,Search.options)
+    local result,err=model.catalogue(snapshot,difficulty,scope and accepts)
+    assert(not err,tostring(err))
     return result
 end
 local function names(list)local out={};for i,item in ipairs(list)do out[i]=item.name end;return table.concat(out,'; ')end
@@ -114,9 +112,10 @@ print(string.format('All %d displayed missions have a name and are offered for t
 local function run(required,groups,scope)
     local function accepts(row)return Search.in_scope(row,scope)end
     local job=make_job(read,function()end,function(take)
-        local bound=candidate_factory(take,u,pointer,game,board,definitions,planet)
+        local frozen=Planet.bind(take,u,pointer,game,board,planet)
+        local bound=frozen.predictor(definitions)
         local annotate=up(ready,'bind_constellations')
-        local tag=annotate and annotate(take,board,planet)
+        local tag=annotate and annotate(frozen)
         local function evaluate(candidate,level,rows)
             local operations=bound(candidate,level,rows)
             if tag then for _,op in ipairs(operations)do tag(op)end end
@@ -129,17 +128,6 @@ local function run(required,groups,scope)
     while job.status=='running' do job:step(function()end)end
     return job,os.clock()-started
 end
--- bind_constellations reads through the adapter's api table and game base.
-local function inject(fn,name,value)
-    for i=1,100 do
-        local key=debug.getupvalue(fn,i)
-        if key==name then debug.setupvalue(fn,i,value);return end
-        if not key then break end
-    end
-    error('Missing upvalue '..name)
-end
-inject(up(ready,'bind_constellations'),'api',{pointer=pointer,read=read})
-inject(up(ready,'bind_constellations'),'game',game)
 jit.flush()
 for _,region in ipairs(regions)do
     local scope={region=region};local row=30+region*10+difficulty-1

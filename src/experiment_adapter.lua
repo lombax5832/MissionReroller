@@ -115,6 +115,11 @@ local function pointer(a)
     assert(value,'missing pointer')
     return value
 end
+-- The galactic map screen: its screen stack, map UI and BACK hint. It reads
+-- through the adapter's own locals, so the native handles reach it too.
+local map_screen=make_map_screen({read=function(a,n)return read(a,n)end,pointer=function(a)return pointer(a)end,u=u,
+    pointer_at=function(bytes,offset)return api.pointer(bytes,offset)end,
+    game=function()return game end,ffi=function()return ffi end})
 local function page(a,n,kind)
     local m=ffi.new('MRE_MEMORY_BASIC_INFORMATION[1]')
     -- C declarations are shared by every addon in the VM and the first one
@@ -171,9 +176,8 @@ local function snapshot(viewed_planet)
     local session=pointer(game+0x347cef0)
     local backend=pointer(game+0x347cee0)
     local root=pointer(game+0x3326340)
-    local screen=read(pointer(game+0x347ce28)+0x429c,24)
-    local count=u(screen,20)
-    if count<1 or count>5 or u(screen,(count-1)*4)~=15 then return nil,'open galactic map' end
+    local screen=map_screen.stack()
+    if not map_screen.on_top(screen) then return nil,'open galactic map' end
     local selection=read(b+0x17a298,20)
     local planet=u(selection,viewed_planet and 4 or 0)
     if planet>=512 then return nil,'select planet' end
@@ -227,10 +231,10 @@ local function snapshot(viewed_planet)
         board=b,selection=selection,operations=ops,missions=missions,planet=planet,seed=u(canonical,0),active=hex(canonical:sub(5)),sc=sc,dc=dc,union=union}
 end
 -- Runtime host: what the runtimes may use of the adapter. build_identity_probe
--- wraps this file as function(core,config) and passes the table to each
--- runtime. The older research builds append the file inline without it.
+-- wraps this file as function(core,config,make_map_screen) and passes the
+-- table to each runtime. The older research builds append the file inline without it.
 return {M=M,config=config,emit=emit,hex=hex,u=u,read=read,pointer=pointer,page=page,participants=participants,
-    snapshot=snapshot,initialize=initialize,expected_code=expected_code,
+    snapshot=snapshot,initialize=initialize,expected_code=expected_code,map=map_screen,
     -- The native handles exist once initialize() has run on the first frame;
     -- it passes them to every function registered here.
     when_initialized=function(bind)binders[#binders+1]=bind end,

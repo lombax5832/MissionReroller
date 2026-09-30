@@ -36,9 +36,7 @@ CowboyBingusModLoader={api=1,version=18,open_log=function()return nil end}
 update=function()end
 dofile(arg[3])
 local ready=up(up(update,'tick'),'on_prediction_ready')
-local candidate_factory=up(ready,'candidate_factory')
-local Search=module('search_session');local Catalogue=module('filter_catalogue')
-local Constellations=module('constellation_prediction')
+local Planet=up(ready,'Planet')
 local game=ffi.cast('uint8_t*',tonumber(fixture.game));local board=tonumber(fixture.board)
 local planet=u(read(board+0x17a298,8),4);assert(planet<512,'No viewed planet')
 local seed=u(read(board+0x78e84,4),0)
@@ -69,22 +67,22 @@ table.sort(levels)
 assert(#decoded.operations>0,'The viewed planet has no operations')
 local snapshot={board=board,planet=planet,seed=seed,operations=bytes,decoded=decoded}
 print(string.format('planet=%d seed=%u operations=%d difficulties=[%s]',planet,seed,#decoded.operations,table.concat(levels,',')))
-local inputs=module('composition_inputs')(read,u,pointer,game,board,module('configuration_lookup'),module('campaign_effects'),module('mission_eligibility'),module('template_environments'))
+local model=Planet.bind(read,u,pointer,game,board,planet)
+local inputs=model.inputs()
 local environments=module('template_environments')(read,u,pointer,game,board,inputs.effects,inputs.biome_definition)
 local shown={}
 for _,op in ipairs(decoded.operations)do
     local tags=table.concat(environments(planet,op,true),',')
     if not shown[tags]then shown[tags]=true;print('environment tags: ['..tags..'] (row '..op.row..')')end
 end
-local predict=candidate_factory(read,u,pointer,game,board,definitions,planet)
+local predict=model.predictor(definitions)
 local ok,why=module('verify_predicted_board')(snapshot,predict(seed),u)
 assert(ok,'Displayed board differs from its prediction: '..tostring(why))
 print('Displayed board equals its prediction')
-local tags=module('constellation_inputs')(read,u,pointer,game,board,inputs.effects,inputs.config)
 local function names(list)local out={};for i,item in ipairs(list)do out[i]=item.name end;return table.concat(out,'; ')end
 for _,difficulty in ipairs(levels)do
-    local result=Catalogue.build(inputs,snapshot,difficulty,u,Search.options,module('mission_compatibility'))
-    Catalogue.constellations(result,tags,Constellations.names,planet,difficulty,Search.options)
+    local result,err=model.catalogue(snapshot,difficulty)
+    assert(not err,tostring(err))
     assert(result.faction and #result.missions>0,'No options at difficulty '..difficulty)
     print(string.format('difficulty %d faction %d: missions: %s | modifiers: %s',difficulty,result.faction,names(result.missions),names(result.modifiers)))
 end

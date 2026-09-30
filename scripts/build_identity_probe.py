@@ -75,17 +75,26 @@ def source(search=False,publish=False,dialog=False,version=None):
                        ('make_composition_prediction', 'composition_prediction.lua'), ('make_composition_capture', 'composition_capture.lua'),
                        ('make_base_inputs', 'operation_base_inputs.lua'),
                        ('sha256', 'bytes_sha256.lua'), ('ModInventory', 'mod_inventory.lua'),
-                       ('make_reroll_session', 'reroll_session.lua')]:
+                       ('make_reroll_session', 'reroll_session.lua'), ('make_map_screen', 'map_screen.lua')]:
         library(name,file)
     derived('predict_identity','make_identity(make_rng)')
-    derived('predict_composition','make_composition_prediction(make_rng,choose_category,choose_level,make_mission_choice(make_rng),make_finalizer(make_rng))')
-    derived('composition_factory','make_composition_capture(make_composition_inputs,make_config,make_effects,mission_eligible,make_environments,make_level_inputs,predict_composition,make_base_inputs(predict_identity,make_special_inputs,make_environments))')
+    # The planet model's modules, by the name planet_model.lua uses for each.
+    planet = {'rng':'make_rng','identity':'predict_identity','special_inputs':'make_special_inputs',
+              'levels':'make_level_inputs','level_choice':'choose_level','config':'make_config',
+              'effects':'make_effects','eligible':'mission_eligible','category':'choose_category',
+              'finalizer':'make_finalizer','mission_choice':'make_mission_choice',
+              'environments':'make_environments','composition_inputs':'make_composition_inputs',
+              'composition_prediction':'make_composition_prediction','capture':'make_composition_capture',
+              'base_inputs':'make_base_inputs'}
     if dialog:
-        for name,file in [('Panel','docked_panel.lua'),('Hint','keybind_hint.lua'),('Binding','mod_binding.lua'),('EscapeGate','escape_gate.lua'),('Compatibility','mission_compatibility.lua'),('FilterCatalogue','filter_catalogue.lua'),('make_gate','window_mouse_gate.lua'),('make_router','modal_pointer.lua'),('window_signatures','window_signatures.lua'),('make_cursor','window_cursor.lua'),
+        for name,file in [('Panel','docked_panel.lua'),('Hint','keybind_hint.lua'),('Binding','mod_binding.lua'),('EscapeGate','escape_gate.lua'),('Compatibility','mission_compatibility.lua'),('FilterCatalogue','filter_catalogue.lua'),('FilterRequest','filter_request.lua'),('make_gate','window_mouse_gate.lua'),('make_router','modal_pointer.lua'),('window_signatures','window_signatures.lua'),('make_cursor','window_cursor.lua'),
                           ('Constellations','constellation_prediction.lua'),('make_constellation_inputs','constellation_inputs.lua')]:
             library(name,file)
+        planet.update({'constellation_inputs':'make_constellation_inputs','catalogue':'FilterCatalogue',
+                       'compatibility':'Compatibility','options':'Search.options','labels':'Constellations.names'})
     if publish:
         for name,file in [('make_publication','seed_publication.lua'),('make_ui_selection','ui_operation_selection.lua'),
+                          ('make_guarded_write','guarded_write.lua'),
                           ('selection_signatures','selection_signatures.lua'),('verify_predicted_board','verify_predicted_board.lua')]:
             library(name,file)
     if search:
@@ -93,19 +102,26 @@ def source(search=False,publish=False,dialog=False,version=None):
                            ('Search','search_session.lua'), ('make_candidate_predictor','candidate_predictor.lua'),
                            ('make_prediction_job','prediction_search_job.lua')]:
             library(name,file)
-        derived('candidate_factory','make_candidate_predictor(make_composition_inputs,make_config,make_effects,mission_eligible,make_environments,make_level_inputs,make_base_inputs(predict_identity,make_special_inputs,make_environments),predict_composition)')
         derived('make_search_job','make_prediction_job(make_frozen_reads,make_seed_search,Search)')
+        planet['predictor']='make_candidate_predictor'
+    # One construction path for every planet's prediction (src/planet_model.lua).
+    derived('Planet','(function()\n'+(root/'planet_model.lua').read_text()+'\nend)()({'
+            +','.join(f'{key}={value}' for key,value in sorted(planet.items()))+'})')
     # The adapter and each runtime run as a function of explicit inputs:
     # host (the adapter's services and the build's config), lib (the modules
     # above) and hooks (entry points of the other runtimes, nil for a runtime
     # the build leaves out). No source text is rewritten.
     parts.append('local config='+lua_table(config(search,publish,dialog,version)))
-    parts.append('local host='+factory(root,'experiment_adapter.lua','core,config','core,config'))
+    parts.append('local host='+factory(root,'experiment_adapter.lua','core,config,make_map_screen','core,config,make_map_screen'))
     # The adapter returns nothing when another copy already runs or the loader
     # is too old, after setting M.status; the addon then stays inert.
     parts.append('if not host then return end')
     # The one writer of M.status (src/reroll_session.lua), shared by every runtime.
     parts.append('host.reroll_session=make_reroll_session(host.M,host.emit)')
+    # The one guarded memory write (src/guarded_write.lua), only in the builds
+    # that publish; the read-only builds carry no write.
+    if publish:
+        parts.append('host.write=make_guarded_write(host)')
     parts.append('local lib={'+','.join(f'{name}={name}' for name in libraries)+'}')
     inputs='host,lib,hooks'
     identity_hooks=[]

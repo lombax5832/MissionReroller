@@ -7,7 +7,7 @@ local reroll_session=host.reroll_session
 local initialize,config=host.initialize,host.config
 local make_rng,sha256,make_probe,predict_identity=lib.make_rng,lib.sha256,lib.make_probe,lib.predict_identity
 local make_special_inputs,make_level_inputs,make_level_verification=lib.make_special_inputs,lib.make_level_inputs,lib.make_level_verification
-local choose_level,composition_factory,ModInventory=lib.choose_level,lib.composition_factory,lib.ModInventory
+local choose_level,Planet,ModInventory=lib.choose_level,lib.Planet,lib.ModInventory
 local dialog_tick,dialog_release,observe_constellations=hooks.dialog_tick,hooks.dialog_release,hooks.observe_constellations
 local on_prediction_ready,advance_prediction_search=hooks.on_prediction_ready,hooks.advance_prediction_search
 local advance_live_publication,search_clock=hooks.advance_live_publication,hooks.search_clock
@@ -56,7 +56,7 @@ local function prepare()
     assert(hex(read(game+0x23c6780,8))=='000000000000f03d','RNG scaling constant mismatch')
     probe=make_probe(sliced_read,u,predict_identity,make_special_inputs(sliced_read,u,api.pointer),
         function(cached_read)return make_level_inputs(cached_read,u,game)end,
-        make_level_verification(make_rng,choose_level),composition_factory(sliced_read,u,api.pointer,game))
+        make_level_verification(make_rng,choose_level),Planet.capture(sliced_read,u,api.pointer,game))
     reroll_session.advance('ready_read_only')
     emit('LUA_IDENTITY_READY signatures=verified read_only='..tostring(M.read_only))
 end
@@ -84,13 +84,13 @@ local function tick()
     if observe_constellations then observe_constellations(now)end
     local down=focused and user32.GetAsyncKeyState(0x11)<0 and user32.GetAsyncKeyState(0x10)<0 and user32.GetAsyncKeyState(0x78)<0
     if M.dialog_enabled then down=false end
-    if M.cancel_requested then
-        M.cancel_requested=nil;armed=nil
+    if reroll_session.take_cancel() then
+        armed=nil
         if advance_prediction_search then advance_prediction_search('cancel',now)end
         if advance_live_publication then advance_live_publication('cancel',now)end
         reroll_session.finish('cancelled')
     end
-    local requested=M.request_search;M.request_search=nil
+    local requested=reroll_session.take_request()
     if requested or (down and not key_down) then
         if advance_live_publication and advance_live_publication('cancel',now) then key_down=down;return end
         if advance_prediction_search and advance_prediction_search('cancel',now) then key_down=down;return end

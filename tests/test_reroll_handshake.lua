@@ -40,11 +40,11 @@ up(tick,'snapshot',fake_snapshot,true);up(ready,'snapshot',fake_snapshot,true);u
 up(tick,'observe_constellations',nil,true)
 -- The search predicts boards through frozen reads; nothing here matches.
 up(ready,'read',function(_,n)return string.rep('\0',n)end,true)
-up(ready,'composition_factory',function(take)return function()take(65536,1);return {passed=true,independent_bases=true}end end,true)
-up(ready,'candidate_factory',function(take)return function(seed)
-    take(65536,1)
-    return {{valid=true,row=3,difficulty=10,missions={{native_type=0,seed=seed,level_index=1}}}}
-end end,true)
+up(ready,'Planet',{capture=function(take)return function()take(65536,1);return {passed=true,independent_bases=true}end end,
+    bind=function(take)return {predictor=function()return function(seed)
+        take(65536,1)
+        return {{valid=true,row=3,difficulty=10,missions={{native_type=0,seed=seed,level_index=1}}}}
+    end end}end},true)
 -- Selecting the matching operation writes the map UI; the fake confirms it.
 up(existing,'select_match',function(snap)
     up(advance,'selector',{started=now,context=snap.context,planets=snap.selection:sub(1,8)},true)
@@ -59,8 +59,10 @@ local catalogue={faction=2,slots=3,compatibility=compatibility,profiles={{masks=
     constellation_groups={[0]={list={},set={}},[2]={list={},set={}}}}
 up(dialog,'context',function()return s,10 end,true)
 up(dialog,'catalogue_for',function()return catalogue end,true)
-up(dialog,'map_on_top',function()return true end,true)
-up(dialog,'back_hint',function()return nil end,true)
+-- The galactic map is the top screen; its BACK hint is not read.
+local map=up(dialog,'map')
+map.on_top=function()return true end
+map.back_hint=function()return nil end
 up(dialog,'cursor',{client=function()return 0,0,1200,820 end},true)
 up(dialog,'face',function()return {font='a',material='b',atlas='c'}end,true)
 local shown={}
@@ -98,10 +100,10 @@ local function saw(from,list)
 end
 local function start()
     local mark=#shown
-    if not up(dialog,'selected')[2] then action=2;frame()end
-    assert(up(dialog,'selected')[2],'Survey checked')
+    if not up(dialog,'filters').selected[2] then action=2;frame()end
+    assert(up(dialog,'filters').selected[2],'Survey checked')
     action='start';frame()
-    assert(M.status=='waiting_for_stable_inputs' and not M.request_search,'The pipeline took the request in the same frame')
+    assert(M.status=='waiting_for_stable_inputs' and not session.take_request(),'The pipeline took the request in the same frame')
     return mark
 end
 
@@ -109,7 +111,7 @@ end
 open();frame();assert(last().status=='Choose what the operation must contain')
 composition={passed=true,operations=1,templates=1,modifiers=1,checked=1,errors={},independent_bases=true,bases=1}
 local mark=start()
-M.search_options.limit=256
+session.view().request.limit=256
 local result=until_idle()
 local ok,missing=saw(mark,{{'Checking planet data',1},{'Searching seeds',2}});assert(ok,missing)
 assert(M.status=='search_exhausted' and result.status=='No match in 256 seeds; search again to continue' and result.tone=='warn',result.status)
@@ -141,7 +143,7 @@ mark=start()
 frame();assert(last().running and last().status=='Checking planet data' and last().step==1)
 action='cancel';frame();frame()
 assert(not last().running and last().status=='Search cancelled' and last().tone=='idle')
-assert(M.status=='cancelled' and not M.cancel_requested and not session.view().running)
+assert(M.status=='cancelled' and not session.take_cancel() and not session.view().running)
 for _=1,12 do frame()end;assert(M.status=='cancelled','The cancelled capture never completes')
 
 local text=table.concat(logs)

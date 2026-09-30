@@ -3,16 +3,15 @@
 -- A runtime factory: the assembler runs this file as function(host,lib,hooks).
 local M,emit,read,pointer,u=host.M,host.emit,host.read,host.pointer,host.u
 local reroll_session=host.reroll_session
-local Constellations,make_constellation_inputs=lib.Constellations,lib.make_constellation_inputs
-local make_effects,make_config=lib.make_effects,lib.make_config
+local map=host.map
+local Constellations,Planet=lib.Constellations,lib.Planet
 local api,game
 host.when_initialized(function(n)api,game=n.api,n.game end)
 local bind_constellations,observe_constellations
 do
-    local function bind(take,board,planet)
-        local manager=assert(api.pointer(take(game+0x347cdf8,8)),'Missing configuration manager')
-        local inputs=make_constellation_inputs(take,u,api.pointer,game,board,
-            make_effects(take,u,api.pointer,game,board),make_config(take,u,api.pointer,manager))
+    -- A Planet.bind result: its tag inputs decode through its reads.
+    local function bind(model)
+        local inputs,planet=model.constellation_inputs(),model.index
         return function(op,category,id)
             local effect=op.effect_id or inputs.effect_id(category,id,planet)
             local initial=inputs.campaign(planet,effect)
@@ -124,8 +123,7 @@ do
         return true
     end
     local function observe()
-        local screen=read(pointer(game+0x347ce28)+0x429c,24);local depth=u(screen,20)
-        if depth<1 or depth>5 or u(screen,(depth-1)*4)~=15 then return end
+        if not map.on_top()then return end
         local b=pointer(game+0x347cee8)
         local row=u(read(b+0x17a2a0,4),0)
         if row>=110 then return end
@@ -153,7 +151,7 @@ do
             if attempts[key]<20 then return end
         end
         seen[key]=true;logged=logged+1
-        local _,inputs=bind(read,b,planet)
+        local _,inputs=bind(Planet.bind(read,u,api.pointer,game,b,planet))
         local record=inputs.mission(kind)
         local faction=preview:byte(9)
         assert(faction==record.faction and faction>=2 and faction<=4,'Preview faction differs from mission record')

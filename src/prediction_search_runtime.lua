@@ -4,8 +4,7 @@
 -- validate_search_request, which the assembler adds once the dialog exists.
 local M,emit,read,u,snapshot,config=host.M,host.emit,host.read,host.u,host.snapshot,host.config
 local reroll_session=host.reroll_session
-local Search,composition_factory=lib.Search,lib.composition_factory
-local candidate_factory,make_search_job=lib.candidate_factory,lib.make_search_job
+local Search,Planet,make_search_job=lib.Search,lib.Planet,lib.make_search_job
 local bind_constellations,on_existing_match,on_search_match=hooks.bind_constellations,hooks.on_existing_match,hooks.on_search_match
 local api,game,ffi,kernel
 host.when_initialized(function(n)api,game,ffi,kernel=n.api,n.game,n.ffi,n.kernel end)
@@ -34,16 +33,6 @@ local function search_clock()
     end
     return precise and precise() or api.time()
 end
--- The operation in progress keeps its seed and missions whatever the campaign
--- seed becomes (operation_identity preserves its row). Returns its row and
--- difficulty when it belongs to the snapshot's planet.
-M.active_row=function(s)
-    local record=s and s.active
-    if type(record)~='string' or #record~=184 then return nil end
-    local function byte(at)return tonumber(record:sub(at*2+1,at*2+2),16)end
-    if byte(52)==0 or byte(16)+byte(17)*256~=s.planet then return nil end
-    return byte(0)+byte(1)*256+byte(2)*65536+byte(3)*16777216,byte(32)
-end
 local function request_key(difficulty,required,modifiers,constellations,scope)
     local parts={'d'..difficulty,'r'..(scope and scope.region or 'all')}
     for id in pairs(required)do parts[#parts+1]='m'..id end
@@ -55,12 +44,12 @@ local function request_key(difficulty,required,modifiers,constellations,scope)
 end
 on_prediction_ready=function(s,definitions,now)
     assert(definitions,'Missing captured definitions')
-    local request=M.search_options or {difficulty=10,required={[1]=true,[2]=true,[3]=true}}
+    local request=reroll_session.view().request or {difficulty=10,required={[1]=true,[2]=true,[3]=true}}
     local required={};for id,value in pairs(request.required)do required[id]=value end
     local modifiers={};for id,value in pairs(request.modifiers or {})do modifiers[id]=value end
     local limit=request.limit or default_limit
     local scope=Search.scope(request.scope)
-    M.search_report=nil
+    reroll_session.report(nil)
     local constellations
     if request.constellations and next(request.constellations.groups)then
         if not bind_constellations then reroll_session.finish('search_failed');emit('FILTER_BLOCKED Constellation filters unavailable');return end
@@ -78,25 +67,25 @@ on_prediction_ready=function(s,definitions,now)
     if M.dialog_enabled and on_existing_match then
         if constellations then
             local ok,err=pcall(function()
-                local annotate=bind_constellations(read,s.board,s.planet)
+                local annotate=bind_constellations(Planet.bind(read,u,api.pointer,game,s.board,s.planet))
                 for _,op in ipairs(s.decoded.operations)do annotate(op,u(s.operations,op.row*92+28),op.operation_id)end
             end)
             if not ok then reroll_session.finish('search_failed');emit('FILTER_BLOCKED '..tostring(err));return end
         end
         local existing=Search.find(s.decoded,request.difficulty,required,modifiers,constellations,scope)
-        if existing then M.search_attempts=0;on_existing_match(s,existing,now);return end
+        if existing then reroll_session.progress(0);on_existing_match(s,existing,now);return end
     end
     -- A city has one operation per difficulty. While it is in progress no
     -- seed can change it, so searching would only exhaust the budget.
-    local fixed_row,fixed_difficulty=M.active_row(s)
+    local fixed_row,fixed_difficulty=Search.active_row(s)
     if scope and fixed_row and fixed_difficulty==request.difficulty and Search.in_scope(fixed_row,scope)then
-        reroll_session.finish('search_failed');M.search_report='This operation is in progress; its missions are fixed'
+        reroll_session.finish('search_failed');reroll_session.report('This operation is in progress; its missions are fixed')
         emit('FILTER_BLOCKED operation in progress row='..fixed_row..'; its missions cannot be rerolled');return
     end
     local function baseline(frozen_read)
         local key=frozen_read(s.board+0x101454+s.planet*0x118,4)
         assert(frozen_read(definitions,4)==key,'Planet definitions changed')
-        local result=composition_factory(frozen_read,u,api.pointer,game)(s,definitions)
+        local result=Planet.capture(frozen_read,u,api.pointer,game)(s,definitions)
         assert(result.passed and result.independent_bases,'Frozen baseline prediction mismatch')
     end
     local key=request_key(request.difficulty,required,modifiers,constellations,scope)
@@ -104,9 +93,10 @@ on_prediction_ready=function(s,definitions,now)
     local resumed=resume and resume.key==key and resume.planet==s.planet and resume.baseline==s.seed
     if resumed then first=resume.next end
     current_search=make_search_job(read,baseline,function(frozen_read)
-        local predict=candidate_factory(frozen_read,u,api.pointer,game,s.board,definitions,s.planet)
+        local planet=Planet.bind(frozen_read,u,api.pointer,game,s.board,s.planet)
+        local predict=planet.predictor(definitions)
         -- Tag inputs join the frozen read set and are revalidated with it.
-        local annotate=constellations and bind_constellations(frozen_read,s.board,s.planet)
+        local annotate=constellations and bind_constellations(planet)
         local function accepts(row)return Search.in_scope(row,scope)end
         local function evaluate(seed,difficulty)
             local operations=predict(seed,difficulty,accepts)
@@ -123,7 +113,7 @@ on_prediction_ready=function(s,definitions,now)
     current_search.constellations=constellations
     current_search.scope=scope
     current_search.key=key
-    M.search_attempts=0
+    reroll_session.progress(0)
     local backend_waited,quiet_since=false,nil
     current_search.context_check=function()
         local live,reason=snapshot(true)
@@ -149,7 +139,7 @@ on_prediction_ready=function(s,definitions,now)
         return ready,reason
     end
     slices,step_time,context_time=0,0,0
-    search_started=now;last_progress=now;max_slice=0;M.search_result=nil;reroll_session.advance('search_running')
+    search_started=now;last_progress=now;max_slice=0;reroll_session.result(nil);reroll_session.advance('search_running')
     wait_started=nil;wait_total=0;last_wait_poll=-math.huge
     local names={};for id,opt in ipairs(Search.options)do if required[id]then names[#names+1]=opt.name end end
     local modifier_rules={};for id,mode in pairs(modifiers)do modifier_rules[#modifier_rules+1]=string.format('%u:%s',id,mode)end
@@ -174,7 +164,7 @@ end
 advance_prediction_search=function(action,now)
     if not current_search then return false end
     local job=current_search
-    M.search_attempts=job.attempts or 0
+    reroll_session.progress(job.attempts)
     local waiting=wait_started and now-wait_started or 0
     if action=='cancel' then job:cancel('Cancelled by shortcut or shutdown')
     elseif waiting>=60 or wait_total+waiting>=120 then job:cancel('Backend wait time limit reached')
@@ -186,7 +176,7 @@ advance_prediction_search=function(action,now)
         local spent=search_clock()-started
         slices=slices+1;step_time=step_time+spent;max_slice=math.max(max_slice,spent*1000)
     end
-    M.search_attempts=job.attempts or 0
+    reroll_session.progress(job.attempts)
     local elapsed=math.max(now-search_started-wait_total-waiting,0.001)
     local compiled=rawget(_G,'jit') and type(jit.status)=='function' and jit.status()
     local timing=string.format('elapsed_s=%.2f slices=%d work_ms=%.0f context_ms=%.0f jit=%s',elapsed,slices,
@@ -207,7 +197,7 @@ advance_prediction_search=function(action,now)
             emit(string.format('LUA_SEARCH_PROGRESS attempts=%d seeds_per_second=%.0f phase=%s max_slice_ms=%.3f %s',job.attempts,job.attempts/elapsed,job.phase,max_slice,timing))
         end
     else
-        M.search_result=job;if job.status=='matched' then reroll_session.advance('search_matched')else reroll_session.finish('search_'..job.status)end
+        reroll_session.result(job);if job.status=='matched' then reroll_session.advance('search_matched')else reroll_session.finish('search_'..job.status)end
         if job.status=='matched' then
             resume=nil
             local missions={};for _,mission in ipairs(job.operation.missions)do missions[#missions+1]=string.format('%d/%u/level%d',mission.native_type,mission.seed,mission.level_index)end
@@ -229,7 +219,7 @@ advance_prediction_search=function(action,now)
                 resume={key=job.key,planet=job.baseline.planet,baseline=job.baseline.seed,next=job.next_seed}
             end
             if job.status=='exhausted' or job.error=='Search time limit reached' then
-                M.search_report='No match in '..job.attempts..' seeds; search again to continue'
+                reroll_session.report('No match in '..job.attempts..' seeds; search again to continue')
             end
             emit(string.format('LUA_SEARCH_%s attempts=%d seeds_per_second=%.0f next_seed=%u reason=%s max_slice_ms=%.3f %s',string.upper(job.status),job.attempts,
                 job.attempts/elapsed,job.next_seed,tostring(job.error or 'candidate budget reached'),max_slice,timing))

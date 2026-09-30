@@ -98,8 +98,7 @@ local function select_match(s)
     local op
     for _,value in ipairs(s.decoded.operations)do if value.row==candidate.row then op=value end end
     assert(op and op.seed==candidate.operation_seed and op.difficulty==candidate.difficulty,'Predicted operation missing')
-    ui_selection=make_ui_selection({root=function()return pointer(game+0x3326aa0)end,
-        read=read,u32=function(bytes)return u(bytes,0)end,word=word,
+    ui_selection=make_ui_selection({map=map_screen,read=read,word=word,
         page=function(a,n)page(a,n,0x20000)end,
         signature=function()
             local sig='44896308c7430cffffffffe8e859e4ff'

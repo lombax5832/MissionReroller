@@ -9,18 +9,26 @@ local tick=up(update,'tick');local dialog=up(tick,'dialog_tick');local M=Mission
 -- The pipeline's side of the handshake, played through the real session as
 -- identity_probe_runtime does: take the request and report phases.
 local session=up(dialog,'reroll_session')
-local function take()assert(M.request_search,'No request to take');M.request_search=nil;session.advance('waiting_for_stable_inputs')end
+-- held: a start the pipeline has taken from the session and not yet run.
+local held_request=false
+local function requested()held_request=held_request or session.take_request();return held_request end
+local function drop()requested();held_request=nil end
+local function take()assert(requested(),'No request to take');held_request=nil;session.advance('waiting_for_stable_inputs')end
+local function options()return session.view().request end
 local real_context=up(dialog,'context');local real_catalogue=up(dialog,'catalogue_for')
 local key,mouse,esc=false,false,false;local x,y=0,0
 local user={GetForegroundWindow=function()return nil end,
     GetAsyncKeyState=function(k)return ((k==1 and mouse)or(k==0x76 and key)or(k==0x1B and esc))and -1 or 0 end}
 -- The native handles the runtimes get from the adapter on the first frame.
 H.natives(update,{user32=user,game=0,api={pointer=function()end}})
--- The galactic map is the top screen with its BACK hint shown, unless a test says otherwise.
-local map_top,map_anchor,stack=true,{x=48,y=32,w=118,h=40,scale=1},'15'
-up(dialog,'map_on_top',function()return map_top end,true)
-up(dialog,'back_hint',function()return map_top and map_anchor or nil end,true)
-up(dialog,'screens',function()return stack end,true)
+-- The galactic map is the top screen with its BACK hint shown, unless a test
+-- says otherwise. The runtimes read the map through the host's map screen;
+-- the test replaces its reads.
+local map_top,map_anchor,stack=true,{x=48,y=32,w=118,h=40,scale=1},{15}
+local map=up(dialog,'map')
+map.on_top=function()return map_top end
+map.back_hint=function()return map_top and map_anchor or nil end
+map.screens=function()return stack end
 up(dialog,'cursor',{client=function()return x,820-y,1200,820 end},true)
 local acquired,released=0,0;local held=false;local last_model,last_selected
 up(dialog,'gate',{acquire=function()assert(not held);held=true;acquired=acquired+1;return true end,
@@ -56,7 +64,8 @@ end
 local compatibility=dofile(arg[2]..'/mission_compatibility.lua')
 local city_rows={29,49};local pointed;local catalogue_scope;local in_progress
 local reachable={[compatibility.mask({[2]=true,[4]=true})]=true,[compatibility.mask({[4]=true,[9]=true})]=true}
-up(dialog,'pointed_region',function()return pointed end,true)
+-- The operation row under the cursor: the first of the pointed city's rows.
+map.pointed_row=function()return pointed and 30+pointed*10 end
 up(dialog,'context',function()
     local decoded={operations={}};for i,row in ipairs(city_rows)do decoded.operations[i]={row=row,difficulty=10}end
     return {planet=planet,context='stable',fingerprint=tostring(planet),on_ship_planet=true,decoded=decoded,active=in_progress},10
@@ -103,7 +112,7 @@ assert(last_model.status=='Choose what the operation must contain' and last_mode
 assert(last_model.ready and not last_model.can_start and not last_model.can_clear and last_model.rules==0)
 assert(find('start').enabled==false and find('clear').enabled==false and find('close').enabled,'Nothing set: no reroll and no clear')
 assert(not find('up') and not find('down') and not find('cancel'),'Difficulty follows the map')
-click('start');assert(not M.request_search,'Empty filters must not start')
+click('start');assert(not requested(),'Empty filters must not start')
 click(2);frame();assert(last_model.items[3].enabled==false and last_model.items[1].enabled,'Conflicts disabled; checked mission removable')
 click(9);assert(not last_selected[9],'Disabled conflict must ignore clicks')
 click(2);frame();assert(last_model.items[3].enabled,'Deselecting must re-enable compatible choice')
@@ -118,12 +127,12 @@ click('section:modifiers');frame();assert(last_model.section=='modifiers' and id
 click('section:modifiers');frame();assert(last_model.section==nil)
 click('section:missions');frame();assert(last_model.section=='missions' and ids()=='2 4 9')
 click('start')
-assert(M.request_search and M.search_options.required[2] and M.search_options.required[4])
-assert(not M.search_options.required[1] and M.search_options.difficulty==10)
+assert(requested() and options().required[2] and options().required[4])
+assert(not options().required[1] and options().difficulty==10)
 take();frame()
 assert(last_model.running and last_model.status=='Checking planet data' and last_model.step==1)
 session.advance('capture_retry');frame();assert(last_model.status=='Retrying changed planet data' and last_model.step==1)
-session.advance('search_running');M.search_attempts=2731;frame()
+session.advance('search_running');session.progress(2731);frame()
 assert(last_model.running and last_model.locked and not last_model.can_start and not last_model.can_clear)
 assert(last_model.status=='Searching seeds' and last_model.tone=='busy' and last_model.step==2)
 assert(last_model.detail=='2,731 of 1,000,000 seeds searched',last_model.detail)
@@ -140,24 +149,24 @@ for _,case in ipairs({{'search_waiting_backend',2,'Waiting for game requests'},{
     {'publication_pending',3,'Refreshing operations'},{'selection_pending',4,'Opening matching operation'}})do
     session.advance(case[1]);frame();assert(last_model.running and last_model.step==case[2] and last_model.status==case[3],case[1])
 end
-M.search_attempts=0;frame()
-frame(false);assert(not held and not M.cancel_requested,'Alt-tab must preserve search')
+session.progress(0);frame()
+frame(false);assert(not held and not session.take_cancel(),'Alt-tab must preserve search')
 toggle();assert(acquired==2 and last_model.running)
-click('cancel');assert(M.cancel_requested);M.cancel_requested=nil;session.finish('cancelled');frame()
+click('cancel');assert(session.take_cancel());session.finish('cancelled');frame()
 assert(not last_model.running and last_model.status=='Search cancelled' and last_model.tone=='idle' and last_model.can_start)
 click('section:modifiers');frame()
 click('close');frame();frame();assert(not held)
 toggle();assert(acquired==3 and last_selected[2] and last_selected[4],'Reopening retains filter')
 assert(last_model.section=='missions','Reopening starts on the missions')
-click('start');assert(M.request_search);take();session.advance('search_running');frame()
+click('start');assert(requested());take();session.advance('search_running');frame()
 session.finish('publication_test_passed');frame();frame();frame();assert(not held,'Success closes modal')
-toggle();assert(acquired==4);click('start');assert(M.request_search,'Can start another search')
+toggle();assert(acquired==4);click('start');assert(requested(),'Can start another search')
 take();session.finish('cancelled');frame()
 click('section:modifiers');frame();click('modifier:'..0x1101e25c);frame()
 assert(last_model.items[1].mode=='require' and last_model.summaries.modifiers=='1 rule' and last_model.rules==3)
 assert(last_model.status=='Ready to search','Editing the request discards the last report')
 click('modifier:'..0x1101e25c);frame();assert(last_model.items[1].mode=='exclude')
-click('start');assert(M.search_options.modifiers[0x1101e25c]=='exclude')
+click('start');assert(options().modifiers[0x1101e25c]=='exclude')
 take();session.finish('cancelled');frame()
 -- Survey (2) and Democracy (4) are checked: one group of constellations each.
 click('section:enemies');frame()
@@ -173,9 +182,9 @@ assert(last_model.items[1].mode==nil and last_model.items[2].mode==nil,'Each mis
 click('constellation:4:2');click('constellation:4:6');frame();assert(last_model.items[1].mode=='accept' and last_model.items[2].mode=='accept')
 click('constellation:4:6');frame();assert(last_model.items[2].mode=='exclude','A second click excludes the constellation')
 assert(last_model.summaries.enemies=='3 rules')
-click('start');assert(M.request_search)
-local sent=M.search_options.constellations.groups
-assert(sent[2][4]=='accept' and not sent[2][2] and sent[4][2]=='accept' and sent[4][6]=='exclude' and not sent[0] and M.search_options.required[2])
+click('start');assert(requested())
+local sent=options().constellations.groups
+assert(sent[2][4]=='accept' and not sent[2][2] and sent[4][2]=='accept' and sent[4][6]=='exclude' and not sent[0] and options().required[2])
 take();session.advance('search_running');frame()
 assert(last_model.group==4 and find('constellation:4:2').enabled==false and find('group:2').enabled,'A search locks the rules, not the groups')
 click('constellation:4:2');frame();assert(last_model.items[1].mode=='accept')
@@ -188,7 +197,7 @@ click('constellation:4:2');click('constellation:4:6');click('constellation:4:6')
 assert(last_model.items[1].mode=='exclude' and last_model.items[2].mode=='exclude' and not last_model.ready and not last_model.can_start)
 assert(last_model.status=='Every constellation of this mission is excluded' and last_model.tone=='bad',last_model.status)
 assert(find('start').enabled==false)
-click('start');assert(not M.request_search)
+click('start');assert(not requested())
 click('constellation:4:2');click('constellation:4:6');frame();assert(last_model.ready and not last_model.items[1].mode)
 -- Unchecking a mission removes its group and its constellations.
 click('section:missions');frame();click(4);click('section:enemies');frame()
@@ -206,11 +215,11 @@ assert(tabs()=='Any mission*' and last_model.group==0 and ids()=='constellation:
 assert(last_model.note=='Check a mission to set its own enemies' and last_model.summaries.modifiers=='1 rule')
 click('constellation:0:6');click('constellation:0:2');click('constellation:0:2');frame()
 assert(last_model.items[3].mode=='accept' and last_model.items[1].mode=='exclude' and last_model.can_start)
-click('start');assert(M.request_search and M.search_options.constellations.groups[0][6]=='accept'
-    and M.search_options.constellations.groups[0][2]=='exclude' and next(M.search_options.required)==nil)
+click('start');assert(requested() and options().constellations.groups[0][6]=='accept'
+    and options().constellations.groups[0][2]=='exclude' and next(options().required)==nil)
 take();session.finish('cancelled');frame()
 click('section:missions');frame();click(2);click('start')
-assert(M.request_search and next(M.search_options.constellations.groups)==nil,'Checking a mission discards the any-mission constellations')
+assert(requested() and next(options().constellations.groups)==nil,'Checking a mission discards the any-mission constellations')
 take();session.finish('cancelled');frame()
 click(4);click('section:enemies');frame();click('constellation:2:2');click('group:4');frame();click('constellation:4:6')
 click('section:modifiers');frame()
@@ -218,8 +227,8 @@ planet=269;frame()
 assert(not last_selected[2] and last_selected[4],'Faction changes must prune invalid mission filters')
 assert(#last_model.items==1 and last_model.items[1].id=='modifier:'..0xf6f1b0c7 and not last_model.items[1].mode)
 assert(last_model.status=='Unavailable filters cleared for this planet/difficulty' and last_model.tone=='warn' and last_model.faction==3)
-click('start');assert(next(M.search_options.modifiers)==nil,'Faction changes must prune old modifier rules')
-assert(next(M.search_options.constellations.groups)==nil,'Faction changes must prune constellations and their missions')
+click('start');assert(next(options().modifiers)==nil,'Faction changes must prune old modifier rules')
+assert(next(options().constellations.groups)==nil,'Faction changes must prune constellations and their missions')
 take();session.finish('cancelled');frame()
 click('section:enemies');frame()
 assert(tabs()=='Spread Democracy*' and ids()=='constellation:4:14' and last_model.forced=='',ids())
@@ -227,8 +236,8 @@ click('constellation:4:14');frame();assert(last_model.items[1].mode=='accept')
 click('clear');frame();assert(ids()=='constellation:0:14 constellation:0:15' and not last_model.items[1].mode,'Clear removes missions and constellations')
 assert(not next(last_selected) and not last_model.can_start and not last_model.can_clear and find('start').enabled==false)
 assert(last_model.status=='Choose what the operation must contain')
-M.request_search=nil
-click('start');assert(not M.request_search,'A cleared request must not start')
+drop()
+click('start');assert(not requested(),'A cleared request must not start')
 -- More missions than one page holds.
 planet=270;frame();click('section:missions');frame()
 assert(last_model.pages==2 and last_model.page==1 and #last_model.items==24 and last_model.items[24].id==24)
@@ -241,20 +250,20 @@ click('previous_page');frame();assert(last_model.page==1)
 click('next_page');frame();click(30);frame();assert(not next(last_selected))
 planet=269;frame();assert(last_model.pages==1 and last_model.page==1 and ids()=='4' and not find('next_page'))
 click(4);click('section:modifiers');frame()
-assert(M.search_options.scope==nil and last_model.scope=='planet','Nothing pointed at: whole planet')
+assert(options().scope==nil and last_model.scope=='planet','Nothing pointed at: whole planet')
 -- Opening the dialog on a city's operation limits it to that city.
 session.finish('cancelled');frame()
 -- Closing the dialog cancels a running search, and says so when it reopens.
-click('start');assert(M.request_search);take();session.advance('search_running');frame()
-click('close');assert(M.cancel_requested==true,'Close cancels the search')
-M.cancel_requested=nil;session.finish('cancelled');frame();frame();assert(not held)
+click('start');assert(requested());take();session.advance('search_running');frame()
+click('close');assert(session.take_cancel(),'Close cancels the search')
+session.finish('cancelled');frame();frame();assert(not held)
 toggle();assert(held and not last_model.running and last_model.status=='Search cancelled' and last_model.can_start)
 local opened=acquired
 click('close');frame();frame();assert(not held)
 pointed=1;toggle();assert(acquired==opened+1)
 assert(catalogue_scope==1 and last_model.scope=='city' and last_model.section=='missions',last_model.scope)
 assert(logs[#logs]=='MODAL_OPEN scope=region 1 key=F7 screens=15\n',logs[#logs])
-click('start');assert(M.request_search and M.search_options.scope.region==1 and M.search_options.required[4])
+click('start');assert(requested() and options().scope.region==1 and options().required[4])
 take();session.finish('cancelled');frame()
 pointed=nil;frame();assert(catalogue_scope==1,'The city is fixed while the dialog stays open')
 -- The city's operation in progress cannot be rerolled; other operations can.
@@ -267,7 +276,7 @@ end
 in_progress=record(49,10,planet);frame()
 assert(not last_model.ready and last_model.status:find('in progress',1,true),last_model.status)
 assert(not last_model.can_start and last_model.tone=='warn' and not last_model.locked and find('start').enabled==false and find(4).enabled)
-click('start');assert(not M.request_search,'An operation in progress must not start a search')
+click('start');assert(not requested(),'An operation in progress must not start a search')
 in_progress=record(49,9,planet);frame();assert(last_model.ready,'Another difficulty of the city can be rerolled')
 in_progress=record(29,10,planet);frame();assert(last_model.ready,'An operation outside the city does not block it')
 in_progress=record(49,10,planet+1);frame();assert(last_model.ready,'An operation on another planet does not block it')
@@ -276,7 +285,7 @@ click('close');frame();frame();toggle()
 assert(catalogue_scope==nil and logs[#logs]=='MODAL_OPEN scope=planet key=F7 screens=15\n','Reopening without a city returns to the planet')
 click('close');frame();frame();pointed=3;toggle()
 assert(catalogue_scope==nil and last_model.scope=='planet','A city of another planet is ignored')
-click('start');assert(M.request_search and M.search_options.scope==nil);take();session.finish('cancelled');frame()
+click('start');assert(requested() and options().scope==nil);take();session.finish('cancelled');frame()
 pointed=nil
 up(dialog,'dialog_release')('test cleanup');assert(not held and released==opened+3)
 -- Real context logic: viewed-planet requests, retained presentation through
@@ -288,18 +297,13 @@ up(real_context,'snapshot',function(preview)
     if unavailable then return nil,'waiting for pending backend requests' end
     return {planet=viewed,selection=word(ship)..word(viewed),fingerprint=ship..':'..viewed,sc=3}
 end,true)
-up(real_context,'pointer',function()return 100000 end,true)
-up(real_context,'read',function(address,n)
-    assert(n==4)
-    if address==100000+0x4ef8 then return word(ui_planet)end
-    assert(address==100000+0x4f14);return word(10)
-end,true)
+map.viewed=function()return ui_planet,10 end
 up(dialog,'context',real_context,true)
 jit.flush() -- Discard traces compiled against the previous injected context.
 session.finish('cancelled');frame();toggle();frame()
 assert(#last_model.items==1 and last_model.faction==3,'Remote planet faction catalogue must populate')
 assert(last_model.ready,'Viewed-planet reroll must not require travel')
-click('start');assert(M.request_search,'Remote Start must accept the filter');take();session.finish('cancelled');frame()
+click('start');assert(requested(),'Remote Start must accept the filter');take();session.finish('cancelled');frame()
 -- A short gap in the planet data is not shown: nothing is dimmed, the status
 -- stays, and the request can be edited.
 local before={status=last_model.status,tone=last_model.tone,detail=last_model.detail}
@@ -318,41 +322,41 @@ click('section:missions');frame()
 -- A start during the gap waits, shown as a search in its first step. It never
 -- starts from the retained data.
 click('start');frame()
-assert(not M.request_search,'Retained data must not start a search')
+assert(not requested(),'Retained data must not start a search')
 assert(last_model.running and last_model.locked and last_model.step==1 and last_model.tone=='busy'
     and last_model.status=='Checking planet data' and last_model.detail=='0 of 1,000,000 seeds searched',last_model.status)
 assert(find('cancel').enabled and not find('start') and find(4).enabled==false and find('clear').enabled==false)
 assert(shown('CANCEL SEARCH') and shown('1 CHECK PLANET') and shown('CHECKING PLANET DATA'))
 local searches=#logs
 unavailable=false;frame()
-assert(M.request_search and M.search_options.required[4] and M.search_options.difficulty==10,'Fresh data starts the waiting search')
+assert(requested() and options().required[4] and options().difficulty==10,'Fresh data starts the waiting search')
 assert(#logs==searches+1 and logs[#logs]=='DIALOG_SEARCH planet=269 region=all difficulty=10 players=3\n' and last_model.running)
 take();session.finish('cancelled');frame()
 -- Cancel, close, another planet and a lasting gap each drop a waiting start.
 unavailable=true;frame();click('start');frame();assert(last_model.running)
 click('cancel');frame()
-assert(not last_model.running and not M.cancel_requested and last_model.status=='Search cancelled' and last_model.can_start)
-unavailable=false;frame();frame();assert(not M.request_search,'A cancelled request does not start later')
+assert(not last_model.running and not session.take_cancel() and last_model.status=='Search cancelled' and last_model.can_start)
+unavailable=false;frame();frame();assert(not requested(),'A cancelled request does not start later')
 unavailable=true;frame();click('start');frame();assert(last_model.running)
-click('close');frame();frame();assert(not held and not M.cancel_requested)
+click('close');frame();frame();assert(not held and not session.take_cancel())
 unavailable=false;toggle();frame()
-assert(held and not M.request_search and not last_model.running and last_model.status=='Search cancelled')
+assert(held and not requested() and not last_model.running and last_model.status=='Search cancelled')
 unavailable=true;frame();click('start');frame();assert(last_model.running)
 ui_planet=100;frame();assert(not last_model.running and #last_model.items==0,'Another planet drops the waiting start')
 ui_planet=269;unavailable=false;frame()
-assert(not M.request_search and last_model.status=='Planet changed; search not started' and last_model.tone=='warn' and last_model.can_start)
+assert(not requested() and last_model.status=='Planet changed; search not started' and last_model.tone=='warn' and last_model.can_start)
 unavailable=true;frame();click('start');frame();assert(last_model.running)
 frame(false);toggle();unavailable=false;frame()
-assert(not M.request_search and not last_model.running and last_model.status=='Search cancelled','Alt-tab drops the waiting start')
+assert(not requested() and not last_model.running and last_model.status=='Search cancelled','Alt-tab drops the waiting start')
 -- A gap that lasts is reported, and still does not block the request.
 unavailable=true;for _=1,160 do frame()end
 assert(last_model.status=='Updating planet data. Your choices are kept' and last_model.tone=='warn')
 assert(not last_model.locked and last_model.can_start and find(4).enabled and find('start').enabled)
 click('start');frame();assert(last_model.running and last_model.status=='Checking planet data')
 for _=1,1010 do frame()end
-assert(not last_model.running and not M.request_search and last_model.status=='Updating planet data. Your choices are kept')
+assert(not last_model.running and not requested() and last_model.status=='Updating planet data. Your choices are kept')
 unavailable=false;frame()
-assert(not M.request_search and last_model.status=='Planet data did not arrive; try again' and last_model.tone=='warn')
+assert(not requested() and last_model.status=='Planet data did not arrive; try again' and last_model.tone=='warn')
 assert(last_model.ready and #last_model.items==1 and last_model.can_start and not last_model.locked)
 -- Refreshed data of the same planet keeps the page; only its content counts.
 planet=270;ship=267;frame()
@@ -367,8 +371,8 @@ guest=true;frame()
 assert(last_model.status=='Only the host can reroll operations' and last_model.tone=='warn',last_model.status)
 assert(last_model.locked and #last_model.items==0 and not last_model.can_start and not last_model.running and last_selected[4])
 assert(find('start').enabled==false and find('close').enabled and shown('ONLY THE HOST CAN REROLL OPERATIONS'))
-click('start');frame();assert(not M.request_search and not last_model.running,'A guest cannot queue a search')
-guest=false;frame();assert(last_model.ready and #last_model.items==1 and last_model.can_start and not M.request_search)
+click('start');frame();assert(not requested() and not last_model.running,'A guest cannot queue a search')
+guest=false;frame();assert(last_model.ready and #last_model.items==1 and last_model.can_start and not requested())
 ui_planet=100;frame();assert(#last_model.items==0 and not last_model.ready,'Mismatched map view must not display stale options')
 assert(last_model.locked and last_model.faction==nil and not last_model.can_start and find('start').enabled==false and find('close').enabled)
 ui_planet=600;frame()
@@ -381,7 +385,7 @@ up(dialog,'dialog_release')('test cleanup')
 local hint_anchor,hint_last,hint_shown,hint_cleared,hint_keys={x=48,y=32,w=118,h=40,scale=1},nil,0,0,nil
 up(dialog,'hint',{show=function(_,anchor,f,keys)assert(f.font=='a');hint_last=anchor;hint_shown=hint_shown+1;hint_keys=keys end,
     clear=function()hint_last=nil;hint_cleared=hint_cleared+1 end},true)
-up(dialog,'back_hint',function()return hint_anchor end,true)
+map.back_hint=function()return hint_anchor end
 frame();assert(hint_last==hint_anchor and hint_shown==1 and hint_keys==nil,'Hint shown on the map with the dialog closed, with the chord')
 toggle();assert(hint_last==hint_anchor and hint_shown>1,'Hint stays while the dialog is open')
 -- The MODS tab binding opens and closes the dialog, only while focused. A
@@ -400,24 +404,24 @@ local before=stepped;frame(false);assert(stepped==before,'The binding is not rea
 frame();assert(stepped==before+1)
 -- Off the map, as with the options or ESC menu above it, neither key acts,
 -- and the screens are logged once per distinct stack.
-up(dialog,'back_hint',function()return map_top and map_anchor or nil end,true)
+map.back_hint=function()return map_top and map_anchor or nil end
 local logged=#logs
-map_top,stack=false,'15,26';toggle();assert(not held,'F7 ignored off the map')
+map_top,stack=false,{15,26};toggle();assert(not held,'F7 ignored off the map')
 assert(#logs==logged+1 and logs[#logs]=='SHORTCUT_IGNORED screens=15,26\n',logs[#logs])
 pulse=true;frame();pulse=false;frame();assert(not held and #logs==logged+1,'The binding is ignored off the map, logged once')
-map_top,stack=true,'15';toggle();assert(held,'Back on the map F7 opens it')
+map_top,stack=true,{15};toggle();assert(held,'Back on the map F7 opens it')
 map_top=false;toggle();assert(held,'Off the map F7 does not close it either')
 key=true;frame();map_top=true;frame();key=false;frame();assert(held,'A key held while returning to the map does not act')
 map_anchor=nil;toggle();assert(held,'The map without its BACK hint does not act');map_anchor={x=48,y=32,w=118,h=40,scale=1}
 toggle();assert(not held)
 up(dialog,'binding',nil,true);frame();assert(hint_keys==nil)
-up(dialog,'back_hint',function()return hint_anchor end,true)
+map.back_hint=function()return hint_anchor end
 hint_anchor=nil;frame();assert(hint_last==nil and hint_cleared>=1,'Hint cleared when the BACK hint is gone')
 hint_anchor={x=48,y=32,w=118,h=40,scale=1};frame();assert(hint_last==hint_anchor)
 -- Losing focus clears the hint in the frame and again when the dialog is released.
 local cleared=hint_cleared;frame(false);assert(hint_last==nil and hint_cleared>cleared,'Hint cleared without focus')
 frame();assert(hint_last==hint_anchor)
-up(dialog,'back_hint',function()error('Widget moved')end,true)
+map.back_hint=function()error('Widget moved')end
 local logged,shown_before=#logs,hint_shown
 frame();assert(hint_last==nil and #logs==logged+1 and logs[#logs]:find('HINT_BLOCKED',1,true) and logs[#logs]:find('Widget moved',1,true),
     'A hint failure is logged once')
@@ -480,10 +484,12 @@ assert(not tostring(M.status):find('STOPPED',1,true),'A blocked map does not sto
 up(up(dialog,'restore_escape'),'escape',nil,true);up(up(dialog,'hold_escape'),'escape_blocked',false,true)
 -- A constellation input failure must leave mission and modifier filters usable.
 local built={faction=2,missions={{id=2,name='Survey'}},constellation_groups={}}
-up(real_catalogue,'make_composition_inputs',function()return {effects={},config={}}end,true)
-up(real_catalogue,'make_constellation_inputs',function()error('Missing global effects')end,true)
-up(real_catalogue,'FilterCatalogue',{build=function(_,_,_,_,_,_,tags)assert(tags==nil);return built end,
-    constellations=function()error('Inputs failed before this call')end},true)
+-- The planet model returns the catalogue and the tag input failure
+-- (tests/test_planet_model.lua); the dialog logs the failure once.
+up(real_catalogue,'Planet',{bind=function(_,_,_,_,board,planet)
+    assert(board==0 and planet==268)
+    return {catalogue=function(s,d)assert(s.planet==268 and d==10);return built,'Missing global effects' end}
+end},true)
 jit.flush()
 local before=#logs
 assert(real_catalogue({planet=268,board=0},10)==built and real_catalogue({planet=268,board=0},10)==built)

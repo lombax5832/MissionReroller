@@ -28,13 +28,13 @@ CowboyBingusModLoader={api=1,version=18,open_log=function()return nil end}
 update=function()end
 dofile(arg[3])
 local ready=up(up(update,'tick'),'on_prediction_ready')
-local candidate_factory=up(ready,'candidate_factory');local make_job=up(ready,'make_search_job')
+local Planet=up(ready,'Planet');local make_job=up(ready,'make_search_job')
 local Search=dofile(root..'/search_session.lua')
 local game=ffi.cast('uint8_t*',tonumber(fixture.game));local definitions=tonumber(fixture.definitions)
 local board=definitions-0x22b1a8
 local bytes=raw(fixture.cases[1].operations);local planet
 for row=0,109 do if bytes:byte(row*92+53)~=0 then planet=bytes:byte(row*92+17)+bytes:byte(row*92+18)*256 end end
-local predict=candidate_factory(read,u,pointer,game,board,definitions,planet)
+local predict=Planet.bind(read,u,pointer,game,board,planet).predictor(definitions)
 local function describe(op)
     local parts={op.row,op.id,op.seed,op.difficulty,op.category,op.faction,op.explicit_hash,tostring(op.valid),
         tostring(op.template_index),table.concat(op.modifiers,'/')}
@@ -68,7 +68,7 @@ print(string.format('Search prediction equals the complete prediction: %d seeds,
 local function run(required,limit,first)
     reads=0
     local job=make_job(read,function()end,function(take)
-        local bound=candidate_factory(take,u,pointer,game,board,definitions,planet)
+        local bound=Planet.bind(take,u,pointer,game,board,planet).predictor(definitions)
         return function(seed)return bound(seed,10)end,function(seed)return bound(seed)end
     end,{seed=first or 0,limit=limit,difficulty=10,required=required,quantum=4096,clock=os.clock,slice=0.016,batch=256,revalidate=1})
     local frames,longest,started=0,0,os.clock()

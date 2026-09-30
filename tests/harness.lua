@@ -26,4 +26,24 @@ function H.natives(update,natives)
     for _,bind in ipairs(H.up(initialize,'binders'))do bind(natives)end
 end
 
+-- The planet model (src/planet_model.lua) built from the modules in src, as
+-- build_identity_probe.source() builds it for the release. Entries of
+-- `replace` override a module; the table of modules is the second value.
+function H.planet_model(src,replace)
+    local function module(name)return dofile(src..'/'..name..'.lua')end
+    local rng=module('generation_rng')
+    local m={rng=rng,identity=module('operation_identity')(rng),special_inputs=module('special_operation_inputs'),
+        levels=module('level_inputs'),level_choice=module('mission_level_choice'),config=module('configuration_lookup'),
+        effects=module('campaign_effects'),eligible=module('mission_eligibility'),category=module('mission_category_choice'),
+        finalizer=module('operation_finalization'),mission_choice=module('mission_weighted_choice'),
+        environments=module('template_environments'),composition_inputs=module('composition_inputs'),
+        composition_prediction=module('composition_prediction'),capture=module('composition_capture'),
+        base_inputs=module('operation_base_inputs'),predictor=module('candidate_predictor'),
+        constellation_inputs=module('constellation_inputs'),catalogue=module('filter_catalogue'),
+        compatibility=module('mission_compatibility'),options=module('search_session').options,
+        labels=module('constellation_prediction').names}
+    for key,value in pairs(replace or {})do m[key]=value end
+    return module('planet_model')(m),m
+end
+
 return H

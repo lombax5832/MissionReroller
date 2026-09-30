@@ -1,6 +1,7 @@
 -- Read-only captures from session 22836-967517250, selected row 29 then
 -- user-confirmed planet overview. Replay the actual UI selection adapter.
 local make=assert(loadfile(arg[1]))()
+local make_map=assert(loadfile((arg[1]:gsub('ui_operation_selection%.lua$','map_screen.lua'))))()
 local function raw(h)return(h:gsub('..',function(x)return string.char(tonumber(x,16))end))end
 local function word(n)return string.char(n%256,math.floor(n/256)%256,math.floor(n/65536)%256,math.floor(n/16777216)%256)end
 local function u(s)local a,b,c,d=s:byte(1,4);return a+b*256+c*65536+d*16777216 end
@@ -15,7 +16,9 @@ for _,capture in ipairs({
     local function read(a,n)local out={};for i=0,n-1 do out[#out+1]=assert(memory[a+i])end;return table.concat(out)end
     put(ui+0x4f98,word(capture[3]))
     local before=read(ui+0x4f00,8)
-    local adapter={root=function()return ui end,signature=function()end,read=read,u32=u,word=word,
+    local map=make_map({read=read,u=function(b,o)return u(b:sub(o+1))end,game=function()return 0 end,
+        pointer=function(a)assert(a==0x3326aa0);return ui end})
+    local adapter={map=map,signature=function()end,read=read,word=word,
         page=function(a,n)assert(a==ui+0x4f00 and n==8)end,
         write=function(a,s)assert(a==ui+0x4f00 and #s==8);writes=writes+1;put(a,s)end}
     local selection=make(adapter)
