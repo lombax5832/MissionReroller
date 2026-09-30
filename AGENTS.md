@@ -92,6 +92,12 @@ No single file in `src/` is the shipped entry. `scripts/build.py` calls
   list in `source()`.
 - The `*_runtime.lua` files and `experiment_adapter.lua` are appended raw and
   share the chunk's locals.
+- Status changes go through `src/reroll_session.lua`, created as the chunk
+  local `reroll_session` right after `experiment_adapter.lua`. Runtimes call
+  `advance` / `finish` / `settle` / `fail`; the dialog calls `start` /
+  `cancel` / `view`. Nothing else writes `M.status`. A new status needs a row
+  in its phase table; an unlisted one raises in tests and logs
+  `SESSION_REJECTED` in game.
 - `source()` rewrites text in them: `read_only=false` must occur exactly once
   in `experiment_adapter.lua`, and version banners such as
   `0.8.0 independent seed prediction` and `Ctrl+Shift+F9` in
