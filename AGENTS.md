@@ -184,7 +184,9 @@ to do, and which log lines prove it worked or failed.
    `docs/HISTORY.md` entries for that version (`scripts/release_notes.py`).
    A tag publishes to players, so only the user decides when to push one.
    The workflow pins the loader, KnowYourConstellation and LuaJIT commits;
-   bump them there when a newer loader should ship.
+   bump them there when a newer loader should ship. If the file uploads but
+   the changelog fails, run `.github/workflows/nexus-changelog.yml` by hand
+   with the tag.
 
 Read `docs/HISTORY.md` before reworking a subsystem; it records why things
 are the way they are.
