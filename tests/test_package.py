@@ -48,7 +48,12 @@ def test_dialog():
     subprocess.run([sys.executable, '-B', str(ROOT / 'tests/test_dialog.py')], check=True)
 
 
+def test_runtime_host():
+    subprocess.run([sys.executable, '-B', str(ROOT / 'tests/test_runtime_host.py')], check=True)
+
+
 if __name__ == '__main__':
     test_package()
+    test_runtime_host()
     test_dialog()
     print('test_package: passed')
