@@ -24,6 +24,7 @@ subprocess.run([lua,str(ROOT/'tests/test_constellation_prediction.lua'),str(ROOT
 with tempfile.TemporaryDirectory() as folder:
     entry=Path(folder)/'dialog.lua';entry.write_bytes(source)
     subprocess.run([lua,str(ROOT/'tests/test_prediction_dialog.lua'),str(entry),str(ROOT/'src')],check=True)
+    subprocess.run([lua,str(ROOT/'tests/test_reroll_handshake.lua'),str(entry),str(ROOT/'src')],check=True)
     subprocess.run([lua,str(ROOT/'tests/test_ffi_conflicts.lua'),str(entry)],check=True)
     subprocess.run([lua,str(ROOT/'tests/test_mod_inventory_entry.lua'),str(entry),build.VERSION],check=True)
     subprocess.run([lua,str(ROOT/'tests/test_constellation_runtime.lua'),str(entry)],check=True)
