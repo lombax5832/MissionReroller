@@ -1,0 +1,3 @@
+# Lua entries are checked byte for byte (the declaration line ends in \n), so
+# keep LF on checkout even where core.autocrlf is on.
+*.lua text eol=lf
