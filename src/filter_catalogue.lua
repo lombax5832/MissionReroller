@@ -10,8 +10,8 @@ local C={names={
     [0x0724ab37]='Civilians & SEAF in Area',
 }}
 -- With a scope only the rows it accepts contribute, so the options are those
--- of one city or megafactory.
-function C.build(inputs,s,difficulty,u,options,compatibility,tags,labels,accepts)
+-- of one city or megafactory. C.constellations adds the tag options.
+function C.build(inputs,s,difficulty,u,options,compatibility,accepts)
     local result={missions={},modifiers={},mission_set={},modifier_set={},slots=0,profiles={},
         constellation_groups={},forced={},effects={}}
     result.compatibility=compatibility
@@ -81,7 +81,6 @@ function C.build(inputs,s,difficulty,u,options,compatibility,tags,labels,accepts
     for id in pairs(result.modifier_set)do result.modifiers[#result.modifiers+1]={id=id,name=C.names[id]}end
     table.sort(result.modifiers,function(a,b)return a.name<b.name end)
     result.native=native
-    if tags then C.constellations(result,tags,labels,s.planet,difficulty,options)end
     return result
 end
 -- Constellations a mission can draw: the weighted base candidates of its own

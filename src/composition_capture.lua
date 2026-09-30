@@ -2,7 +2,9 @@
 -- operation bases come from campaign state and the requested seed. Without it,
 -- retain the earlier base-input checkpoint for isolated tests. The canonical
 -- active operation remains an explicitly preserved input in either mode.
-return function(make_inputs,make_config,make_effects,eligible,make_environments,make_levels,predict,make_bases)
+-- bind is Planet.bind (planet_model.lua): the inputs decode through the
+-- capture's own cached reads.
+return function(bind,make_levels,predict,make_bases)
     local ffi=require('ffi')
     return function(read,u,pointer,game)
         return function(snapshot,definitions)
@@ -17,7 +19,7 @@ return function(make_inputs,make_config,make_effects,eligible,make_environments,
                 end
                 return cache[key]
             end
-            local inputs=make_inputs(take,u,pointer,game,snapshot.board,make_config,make_effects,eligible,make_environments)
+            local inputs=bind(take,u,pointer,game,snapshot.board,snapshot.planet).inputs()
             local level=make_levels(take,u,game)
             local operations={}
             if not make_bases then for _,op in ipairs(snapshot.decoded.operations)do

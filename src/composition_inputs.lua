@@ -1,13 +1,12 @@
 -- Independent mission metadata and enable-rule inputs. All reads are injected
 -- so live and frozen captures use identical bounded decoding.
-return function(read,u,pointer,game,board,make_config,make_effects,eligible,make_environments)
+-- The planet model (planet_model.lua) passes its configuration and effects.
+return function(read,u,pointer,game,board,config,effects,eligible,make_environments)
     local ffi=require('ffi');local scalar=ffi.new('float[1]')
     local function word(a)return u(read(a,4),0)end
     local function count(a,limit)local n=word(a);assert(n<=limit,'Composition input count exceeds bound');return n end
     local function ptr(a)return assert(pointer(read(a,8)),'Missing composition pointer')end
     local function float(a)ffi.copy(scalar,read(a,4),4);return tonumber(scalar[0])end
-    local config=make_config(read,u,pointer,ptr(game+0x347cdf8))
-    local effects=make_effects(read,u,pointer,game,board)
     local campaign=board+0x101438
     local api={}
     function api.enable(metadata,planet,operation,template,class,prefix)

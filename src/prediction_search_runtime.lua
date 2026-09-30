@@ -4,8 +4,7 @@
 -- validate_search_request, which the assembler adds once the dialog exists.
 local M,emit,read,u,snapshot,config=host.M,host.emit,host.read,host.u,host.snapshot,host.config
 local reroll_session=host.reroll_session
-local Search,composition_factory=lib.Search,lib.composition_factory
-local candidate_factory,make_search_job=lib.candidate_factory,lib.make_search_job
+local Search,Planet,make_search_job=lib.Search,lib.Planet,lib.make_search_job
 local bind_constellations,on_existing_match,on_search_match=hooks.bind_constellations,hooks.on_existing_match,hooks.on_search_match
 local api,game,ffi,kernel
 host.when_initialized(function(n)api,game,ffi,kernel=n.api,n.game,n.ffi,n.kernel end)
@@ -68,7 +67,7 @@ on_prediction_ready=function(s,definitions,now)
     if M.dialog_enabled and on_existing_match then
         if constellations then
             local ok,err=pcall(function()
-                local annotate=bind_constellations(read,s.board,s.planet)
+                local annotate=bind_constellations(Planet.bind(read,u,api.pointer,game,s.board,s.planet))
                 for _,op in ipairs(s.decoded.operations)do annotate(op,u(s.operations,op.row*92+28),op.operation_id)end
             end)
             if not ok then reroll_session.finish('search_failed');emit('FILTER_BLOCKED '..tostring(err));return end
@@ -86,7 +85,7 @@ on_prediction_ready=function(s,definitions,now)
     local function baseline(frozen_read)
         local key=frozen_read(s.board+0x101454+s.planet*0x118,4)
         assert(frozen_read(definitions,4)==key,'Planet definitions changed')
-        local result=composition_factory(frozen_read,u,api.pointer,game)(s,definitions)
+        local result=Planet.capture(frozen_read,u,api.pointer,game)(s,definitions)
         assert(result.passed and result.independent_bases,'Frozen baseline prediction mismatch')
     end
     local key=request_key(request.difficulty,required,modifiers,constellations,scope)
@@ -94,9 +93,10 @@ on_prediction_ready=function(s,definitions,now)
     local resumed=resume and resume.key==key and resume.planet==s.planet and resume.baseline==s.seed
     if resumed then first=resume.next end
     current_search=make_search_job(read,baseline,function(frozen_read)
-        local predict=candidate_factory(frozen_read,u,api.pointer,game,s.board,definitions,s.planet)
+        local planet=Planet.bind(frozen_read,u,api.pointer,game,s.board,s.planet)
+        local predict=planet.predictor(definitions)
         -- Tag inputs join the frozen read set and are revalidated with it.
-        local annotate=constellations and bind_constellations(frozen_read,s.board,s.planet)
+        local annotate=constellations and bind_constellations(planet)
         local function accepts(row)return Search.in_scope(row,scope)end
         local function evaluate(seed,difficulty)
             local operations=predict(seed,difficulty,accepts)

@@ -25,12 +25,14 @@ local function module(name)return dofile(root..'/'..name..'.lua')end
 local game,definitions=tonumber(fixture.game),tonumber(fixture.definitions)
 game=ffi.cast('uint8_t*',game)
 local board=definitions-0x22b1a8
-local inputs=module('composition_inputs')(read,u,pointer,game,board,module('configuration_lookup'),module('campaign_effects'),module('mission_eligibility'),module('template_environments'))
+local Planet=dofile((arg[0]:match('^(.*[/\\])') or '')..'harness.lua').planet_model(root)
+local inputs=Planet.bind(read,u,pointer,game,board,fixture.planet).inputs()
 local rng=module('generation_rng')
 local bases=module('operation_base_inputs')(module('operation_identity')(rng),module('special_operation_inputs'),module('template_environments'))
 local predict=module('composition_prediction')(rng,module('mission_category_choice'),module('mission_level_choice'),module('mission_weighted_choice')(rng),module('operation_finalization')(rng))
 local levels=module('level_inputs')(read,u,game)
-local capture=module('composition_capture')(module('composition_inputs'),module('configuration_lookup'),module('campaign_effects'),module('mission_eligibility'),module('template_environments'),module('level_inputs'),predict)(read,u,pointer,game)
+-- Without make_bases: the displayed bases, the earlier checkpoint.
+local capture=module('composition_capture')(Planet.bind,module('level_inputs'),predict)(read,u,pointer,game)
 local search_factory,candidate_factory
 if arg[5] then
     local function up(fn,name)
@@ -40,10 +42,12 @@ if arg[5] then
     CowboyBingusModLoader={api=1,version=18,open_log=function()return nil end}
     update=function()end
     dofile(arg[5])
-    capture=up(up(up(update,'tick'),'prepare'),'composition_factory')(read,u,pointer,game)
+    capture=up(up(up(update,'tick'),'prepare'),'Planet').capture(read,u,pointer,game)
     if arg[6] then
         local ready=up(up(update,'tick'),'on_prediction_ready')
-        search_factory=up(ready,'make_search_job');candidate_factory=up(ready,'candidate_factory')
+        local packaged=up(ready,'Planet')
+        search_factory=up(ready,'make_search_job')
+        candidate_factory=function(take,planet)return packaged.bind(take,u,pointer,game,board,planet).predictor(definitions)end
     end
 end
 local active_bytes=read(board+0x17a2c0,92)
@@ -91,7 +95,7 @@ for case_index,case in ipairs(fixture.cases)do
     end
     output=predict(independent,planet,inputs,function(op)return levels(definitions,op)end,preserved)
     if candidate_factory then
-        cached_predictor=cached_predictor or candidate_factory(read,u,pointer,game,board,definitions,planet)
+        cached_predictor=cached_predictor or candidate_factory(read,planet)
         output=cached_predictor(case.seed)
     end
     local decoded={operations={}}
@@ -176,9 +180,8 @@ print(string.format('Complete composition from base operation inputs: %d boards,
 if arg[6] then
     local s=baseline_snapshot
     local job=search_factory(read,function(take)
-        local baseline=module('composition_capture')(module('composition_inputs'),module('configuration_lookup'),module('campaign_effects'),module('mission_eligibility'),module('template_environments'),module('level_inputs'),predict,bases)(take,u,pointer,game)
-        assert(baseline(s,definitions).passed)
-    end,function(take)return candidate_factory(take,u,pointer,game,board,definitions,s.planet)end,
+        assert(Planet.capture(take,u,pointer,game)(s,definitions).passed)
+    end,function(take)return candidate_factory(take,s.planet)end,
         {seed=0,limit=256,difficulty=10,required={[1]=true,[2]=true,[3]=true},quantum=512})
     local frames,max_seconds=0,0
     while job.status=='running' do
