@@ -18,7 +18,9 @@ env:
   KYC_COMMIT: 46cb418efe913f472509d0382535407242af2e39
   # The commit pinned by BingusSharedLoader/dependencies.json, built nogc64.
   LUAJIT_COMMIT: 24c20c94e7db195b640854619577441f9b4bc6be
-  NEXUS_MOD_ID: '16762'
+  # The v3 API's unique mod ID for helldivers2/mods/16762; the changelog
+  # endpoint rejects the game-scoped 16762.
+  NEXUS_MOD_ID: '26280904900986'
 
 permissions:
   contents: write
