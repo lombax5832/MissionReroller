@@ -142,5 +142,7 @@ jobs:
           category: main
           archive_existing_version: true
           update_mod_version: true
+          # Otherwise mod managers keep the archived version as their download.
+          primary_mod_manager_download: true
           mod_id: ${{ env.NEXUS_MOD_ID }}
           changelog: ${{ steps.notes.outputs.changelog }}
