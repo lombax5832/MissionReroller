@@ -5,12 +5,19 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
-**Next: [v0.21.0 key hint beside BACK](KEYBIND_HINT_TEST.md).**
+**Next in-game test: [v0.21.0 input ownership after a resolution change](INPUT_OWNERSHIP.md).**
+Changing the resolution and then opening the dialog stopped the mod with
+`Modal input ownership lost`: the game had put back a window flag the mouse
+gate had set. The gate now takes its flags back and counts the drift, a lost
+ownership closes the dialog instead of stopping the mod, and the log names
+the flag that moved. Not yet tested after a resolution change.
+
+**Validated in game: [v0.21.0 key hint beside BACK](KEYBIND_HINT_TEST.md).**
 A `CTRL + SHIFT + F8  REROLL OPERATIONS` hint drawn to the right of the war
 table's own BACK hint, anchored to that native widget so it follows the
-game's scale. Implemented and tested offline; inactive until a live survey
-of the map screen object pins the widget's offset. Search, prediction and
-publication are those of v0.20.2.
+game's scale. A live survey through Memory Explorer found the widget at
+offset 1696 of the map screen object; the user confirmed the hint on
+screen. Search, prediction and publication are those of v0.20.2.
 
 **Validated in game: [v0.20.2 hosting a lobby](LOBBY_HOST_TEST.md).**
 Tested in a lobby of two on 2026-09-29: the host rerolled and the other

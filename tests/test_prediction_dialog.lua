@@ -390,6 +390,24 @@ frame();assert(hint_last==nil and #logs==logged+1 and logs[#logs]:find('HINT_BLO
 frame();frame();assert(hint_shown==shown_before and #logs==logged+1,'A blocked hint is never retried')
 assert(not tostring(M.status):find('STOPPED',1,true),'A hint failure does not stop the mod')
 up(dialog,'dialog_release')('hint cleanup')
+-- Input ownership lost while the dialog is open, as after a resolution
+-- change: the dialog closes and restores the window, the mod goes on, and
+-- the shortcut opens it again.
+local gate=up(dialog,'gate');local real_held=gate.held;local lost=false
+gate.held=function()return real_held() and not lost end
+gate.reason='mouse_focus=true show_cursor=true reapplied'
+toggle();assert(held,'Dialog open before the loss')
+local opened_logs,released_before=#logs,released
+lost=true;frame()
+assert(not held and released==released_before+1,'The window was restored')
+assert(logs[opened_logs+1]:find('MODAL_INPUT_LOST',1,true) and logs[opened_logs+1]:find('ownership lost',1,true)
+    and logs[opened_logs+1]:find('reapplied',1,true),'The loss and the flags are logged')
+assert(logs[#logs]:find('MODAL_RELEASE input ownership lost',1,true),logs[#logs])
+assert(not tostring(M.status):find('STOPPED',1,true),'The mod continues')
+lost=false;gate.reason=nil;toggle();assert(held,'The dialog opens again')
+-- With no planet shown that message yields to the planet prompt; it is kept for when one is.
+assert(up(dialog,'report')=='Dialog closed: input ownership lost. Press the shortcut to reopen','The loss is reported')
+up(dialog,'dialog_release')('ownership cleanup');gate.held=real_held
 -- A constellation input failure must leave mission and modifier filters usable.
 local built={faction=2,missions={{id=2,name='Survey'}},constellation_groups={}}
 up(real_catalogue,'api',{pointer=function()end},true)

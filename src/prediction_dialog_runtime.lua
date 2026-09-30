@@ -126,7 +126,8 @@ do
         router=nil
         if panel then panel:clear()end
         if hint then pcall(function()hint:clear()end)end
-        emit('MODAL_RELEASE '..reason)
+        local drifts=gate and gate.drifts or 0
+        emit('MODAL_RELEASE '..reason..(drifts>0 and ' reasserted='..drifts..' last='..tostring(gate.reason) or ''))
     end
     local function init()
         exe=assert(api.module(nil));panel=Panel.new(assert(stingray));hint=Hint.new(stingray)
@@ -344,7 +345,17 @@ do
             summaries={missions=#names>0 and table.concat(names,', ') or 'Any',modifiers=count(modifier_rules),enemies=count(tag_rules)},
             forced=table.concat(forced,', '),
             note=display and section=='enemies' and group==0 and 'Check a mission to set its own enemies' or nil}
-        local action=router:step(x,y,user32.GetAsyncKeyState(1)<0,Panel.layout(width,height,model).targets)
+        -- Losing input ownership closes the dialog and restores the window;
+        -- it does not stop the mod. A running search continues, as on focus loss.
+        local ok,action=pcall(router.step,router,x,y,user32.GetAsyncKeyState(1)<0,Panel.layout(width,height,model).targets)
+        if not ok then
+            emit('MODAL_INPUT_LOST '..tostring(action)..(gate.reason and ' ('..gate.reason..')' or ''))
+            if not pcall(router.abort,router) and gate.forget then gate:forget()end
+            report,report_tone='Dialog closed: input ownership lost. Press the shortcut to reopen','warn'
+            gap.queued=nil
+            dialog_release('input ownership lost')
+            return
+        end
         if action=='close' then close()
         elseif action=='cancel' then
             if gap.queued then gap.queued=nil else M.cancel_requested=true;running=false end

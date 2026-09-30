@@ -2,11 +2,12 @@
 
 ## Status
 
-Ready for its first in-game test. The hint anchors to the war table's own
-BACK hint, a native widget of the map screen object. The survey below ran
-on 2026-09-29 with the galactic map open on a 3440x1440 screen and found it
-at offset 1696; `HINT_WIDGET` is set to that. Everything else in the package
-is v0.20.2. Not yet seen on screen.
+Validated in game on 2026-09-29: the user confirmed the hint on screen
+beside BACK. The hint anchors to the war table's own BACK hint, a native
+widget of the map screen object. The survey below ran the same day with the
+galactic map open on a 3440x1440 screen and found it at offset 1696;
+`HINT_WIDGET` is set to that. Everything else in the package is v0.20.2,
+plus the [input ownership fix](INPUT_OWNERSHIP.md).
 
 ## Survey result, 2026-09-29
 
