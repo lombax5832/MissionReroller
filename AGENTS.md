@@ -59,8 +59,8 @@ The release entry runs in the game's LuaJIT VM with FFI:
 ## Names that must not change
 
 Every release since v0.4.0 ships as module
-`mods/ipodalexei/mission_reroller_experiment` with the `MODULE` and `GUID` in
-`scripts/build_combined.py`, global `MissionRerollerExperiment` and log
+`mods/ipodalexei/mission_reroller_experiment` with the `RELEASE_MODULE` and
+`RELEASE_GUID` in `scripts/build_core.py`, global `MissionRerollerExperiment` and log
 `MissionRerollerExperiment.log`. Mod managers match on the GUID, so a new ZIP
 replaces the old one.
 
@@ -68,9 +68,9 @@ replaces the old one.
 
 ```
 src/                         library modules and runtimes, joined at build time
-src/mods/ipodalexei/         mission_reroller.lua is the inert core; the rest are research entries
-scripts/build.py             release: NAME, VERSION, SUMMARY; MODULE/GUID from build_combined
-scripts/build_*.py           research builds, listed in scripts/README.md
+src/mods/ipodalexei/         mission_reroller.lua, the inert core the entry embeds
+scripts/build.py             release: NAME, VERSION, SUMMARY; MODULE/GUID from build_core
+scripts/build_*.py           other configurations of the release source, listed in scripts/README.md
 scripts/check_live_*.py      live-memory checks through Memory Explorer
 tests/                       Python drivers and LuaJIT tests
 docs/HISTORY.md              development log, newest first
@@ -135,11 +135,10 @@ No single file in `src/` is the shipped entry. `scripts/build.py` calls
   the read-only builds contain no write. Tests replace fields of the shared
   `host.map` table (`up(dialog,'map').on_top=...`) instead of runtime closures.
 
-`build_combined.py`, `build_experiment.py` and `build_seed_test.py` are older
-research builds: they append the adapter inline through
-`build_core.inline_adapter()`, which drops its host return so their runtimes
-share its locals. The research builders reuse these modules, so a change to a
-shared module can break their tests too.
+`build_identity_probe.py` (its own `main`), `build_search_probe.py` and
+`build_live_search.py` are research builds of the same `source()` with fewer
+parts enabled; `test_identity_probe.py`, `test_search_probe.py` and
+`test_live_search.py` check them. The older checkpoint builds were removed.
 
 ## Build and test
 

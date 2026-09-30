@@ -4,13 +4,10 @@ import sys
 
 sys.dont_write_bytecode = True
 import build_core
-import build_combined
 import build_identity_probe as probe
 
-# The module and GUID are those of every published Mission Reroller ZIP since
-# v0.4.0; keep them so mod managers treat a new version as an update.
-MODULE = build_combined.MODULE
-GUID = build_combined.GUID
+MODULE = build_core.RELEASE_MODULE
+GUID = build_core.RELEASE_GUID
 NAME = 'Mission Reroller'
 VERSION = '0.24.0'
 SUMMARY = ('docked dialog; F7 or rebindable on the MODS tab; loaded mods listed in the log; key hint beside BACK; alone or hosting a lobby; all mission types; '

@@ -2,7 +2,6 @@
 from pathlib import Path
 import sys
 import build_core as build
-import build_combined
 
 VERSION = '0.8.0'
 
@@ -54,7 +53,7 @@ def source(search=False,publish=False,dialog=False,version=None):
     assert bool(version)==bool(dialog),'the dialog build names its release version'
     root = build.ROOT/'src'
     core = build.entry_path().read_text().replace('MissionReroller', 'MissionRerollerExperimentCore')
-    parts = ['-- HD2-Addon: '+build_combined.MODULE,
+    parts = ['-- HD2-Addon: '+build.RELEASE_MODULE,
              "if rawget(_G,'MissionRerollerExperiment') then return end",
              'local core=(function()\n'+core+'\nend)()']
     libraries = []
@@ -152,7 +151,7 @@ def source(search=False,publish=False,dialog=False,version=None):
 
 def main(output=None):
     output = Path(output) if output else build.ROOT/'releases'/f'Mission-Reroller-Lua-Probe-v{VERSION}.zip'
-    build.build_addon(build_combined.MODULE, source(), build_combined.GUID, output,
+    build.build_addon(build.RELEASE_MODULE, source(), build.RELEASE_GUID, output,
                       f'Mission Reroller v{VERSION} (read-only Lua composition validation)')
     print(output)
     return output
