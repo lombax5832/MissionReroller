@@ -26,11 +26,6 @@ side, the panel counts down to when it will be ready instead of searching.
   (`DAYNIGHT_VERIFIED`).
 - **Checks.** Four sky functions join the first-frame signature check; the
   startup line reads `signatures=37`.
-- **Found on the way.** Memory Explorer could not read while Mod Bindings
-  Menu was installed: that mod declares `VirtualQuery` with a typed region
-  first. The research used a patched copy (v0.2.1) that casts its buffers
-  to `void *`, as this mod does; the fix still has to go into Memory
-  Explorer's repository.
 
 The release gate and every capture replay pass. The in-game plan is
 [DAY_NIGHT_TEST.md](DAY_NIGHT_TEST.md).
@@ -49,9 +44,8 @@ run yet.
 Two panel fixes followed that run, before publication. The CHOSEN word
 showed only beside Night, most likely because a text the game creates
 empty stays blank after it is given a value; the words beside Day and Any
-time started empty. Every time of day
-row now holds CHOSEN, clear unless chosen, and the panel draws any empty
-text as a clear placeholder. The enemy section also kept room for two note
+time started empty. Every time of day row now holds CHOSEN, clear unless
+chosen, and the panel draws any empty text as a clear placeholder. The enemy section also kept room for two note
 lines under its rows even with none to show, which left a gap above TIME
 OF DAY; it now keeps room only for the lines it shows.
 
