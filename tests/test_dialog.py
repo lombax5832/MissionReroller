@@ -17,6 +17,7 @@ subprocess.run([lua,str(ROOT/'tests/test_reroll_session.lua'),str(ROOT/'src/rero
 subprocess.run([lua,str(ROOT/'tests/test_search_session.lua'),str(ROOT/'src/search_session.lua')],check=True)
 subprocess.run([lua,str(ROOT/'tests/test_filter_catalogue.lua'),str(ROOT/'src')],check=True)
 subprocess.run([lua,str(ROOT/'tests/test_filter_request.lua'),str(ROOT/'src')],check=True)
+subprocess.run([lua,str(ROOT/'tests/test_day_night.lua'),str(ROOT/'src')],check=True)
 subprocess.run([lua,str(ROOT/'tests/test_mission_compatibility.lua'),str(ROOT/'src')],check=True)
 subprocess.run([lua,str(ROOT/'tests/test_template_environments.lua'),str(ROOT/'src')],check=True)
 subprocess.run([lua,str(ROOT/'tests/test_constellation_inputs.lua'),str(ROOT/'src')],check=True)

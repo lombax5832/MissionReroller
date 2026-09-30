@@ -7,7 +7,7 @@ local map,write,O,verify_code=host.map,host.write,host.O,host.verify_code
 local Panel,Hint,Binding,FilterCatalogue,EscapeGate=lib.Panel,lib.Hint,lib.Binding,lib.FilterCatalogue,lib.EscapeGate
 local FilterRequest=lib.FilterRequest
 local make_gate,make_router,make_cursor=lib.make_gate,lib.make_router,lib.make_cursor
-local Search,Constellations,Planet=lib.Search,lib.Constellations,lib.Planet
+local Search,Constellations,Planet,DayNight=lib.Search,lib.Constellations,lib.Planet,lib.DayNight
 local default_limit=hooks.default_limit
 local api,game,ffi,user32
 host.when_initialized(function(n)api,game,ffi,user32=n.api,n.game,n.ffi,n.user32 end)
@@ -139,15 +139,67 @@ do
         end
         return s,d,view
     end
-    local function catalogue_for(s,d,within)
+    local function catalogue_for(s,d,within,only)
         -- Mission and modifier filters survive a constellation input failure.
         local result,err=Planet.bind(read,u,api.pointer,game,s.board,s.planet).catalogue(s,d,
-            within and function(row)return Search.in_scope(row,within)end)
+            only or within and function(row)return Search.in_scope(row,within)end)
         if err and tostring(err)~=tag_error then tag_error=tostring(err);emit('CONSTELLATION_CATALOGUE_BLOCKED '..tag_error)end
         return result
     end
     validate_search_request=function(s,request)
-        FilterCatalogue.validate(catalogue_for(s,request.difficulty,Search.scope(request.scope)),request.required,request.modifiers,request.constellations)
+        FilterCatalogue.validate(catalogue_for(s,request.difficulty,Search.scope(request.scope)),request.required,request.modifiers,
+            request.constellations,request.time)
+    end
+    -- Day and night on the viewed planet while a time of day is chosen
+    -- (src/day_night.lua), refreshed once a second: the buffer note, or why
+    -- a search cannot start. Cities do not move, so when only a city can
+    -- meet the filters and none stays on the chosen side for the buffer,
+    -- the search waits for one and says how long.
+    local sky_planet,sky_state,sky_key,sky_at,sky_error
+    local open_catalogue,open_key
+    local function outside_cities(s)
+        local key=s.fingerprint..':'..difficulty
+        if key~=open_key then
+            open_key=key
+            local ok,value=pcall(catalogue_for,s,difficulty,nil,function(row)return row<30 end)
+            open_catalogue=ok and value or nil
+        end
+        return open_catalogue
+    end
+    local function sky_view(s,now)
+        local key=s.fingerprint..':'..difficulty..':'..(scope and scope.region or 'planet')..':'..filters.time
+        if sky_state and key==sky_key and now-sky_at<1 then return sky_state end
+        local ok,value=pcall(function()
+            local ref=map.sky()
+            if not sky_planet or sky_planet.planet~=s.planet or sky_planet.sky.seed~=ref.seed then
+                local planet,why=DayNight.load(read,u,s.board,s.planet,ref)
+                if not planet then sky_planet=nil;return {pending=why}end
+                sky_planet=planet
+                emit(string.format('DAYNIGHT_PLANET planet=%d day_s=%.0f buffer_s=%.0f band_min=%d',s.planet,planet.day_length,planet.buffer,DayNight.BAND))
+            end
+            local planet=sky_planet
+            local note=(planet.buffer<DayNight.WANTED and 'SHORT DAYS: ' or '')..'HOLDS '..DayNight.duration(planet.buffer)
+                ..' / DAY '..DayNight.duration(planet.day_length)
+            local open=not scope and outside_cities(s)
+            if open and filters:possible(open)then return {note=note}end
+            local nodes={}
+            for _,op in ipairs(s.decoded.operations)do
+                if op.difficulty==difficulty and op.row>=30 and op.row<110 and (not scope or accepts(op.row))then
+                    for _,mission in ipairs(op.missions or {})do nodes[#nodes+1]=mission.level_index end
+                end
+            end
+            if #nodes==0 then return {note=note}end
+            local wait=DayNight.wait(planet,nodes,filters.time,DayNight.war_time(read,s.board))
+            if wait==0 then return {note=note}end
+            local side=filters.time=='day' and 'Day' or 'Night'
+            if not wait then return {note=note,blocked='No city here stays in '..side:lower()..' for '..DayNight.duration(planet.buffer)}end
+            return {note=note,blocked=side..(scope and ' here' or ' at a city here')..' in '..DayNight.duration(wait)}
+        end)
+        if ok then sky_error=nil
+        elseif tostring(value)~=sky_error then sky_error=tostring(value);emit('DAYNIGHT_BLOCKED '..sky_error)end
+        sky_state=ok and value or {pending='Day and night unavailable here'}
+        sky_key,sky_at=key,now
+        return sky_state
     end
     local function begin(s)
         -- Refresh eligibility immediately before accepting a request.
@@ -274,14 +326,19 @@ do
         if gap.queued then
             if s then
                 gap.queued=nil
-                if compatible and not fixed and filters:rule_count()>0 then begin(s)end
+                local sky=filters.time and sky_view(s,now)
+                if compatible and not fixed and filters:rule_count()>0 and not (sky and (sky.blocked or sky.pending))then begin(s)end
             elseif not retained then gap.queued=nil;report,report_tone='Planet changed; search not started','warn'
             elseif now-gap.queued>=10 then gap.queued=nil;report,report_tone='Planet data did not arrive; try again','warn' end
         end
         run=reroll_session.view()
+        local sky
+        if filters.time then
+            if s then sky=sky_view(s,now)elseif retained then sky=sky_state end
+        end
         local model=filters:model(catalogue,{shown=s or running or retained,fresh=s~=nil,retained=retained,running=running,
             queued=gap.queued~=nil,fixed=fixed,overdue=overdue,run=run,why=why,report=report,tone=report_tone,
-            difficulty=difficulty,scope=scope,limit=default_limit})
+            difficulty=difficulty,scope=scope,limit=default_limit,sky=sky})
         -- Losing input ownership closes the dialog and restores the window;
         -- it does not stop the mod. A running search continues, as on focus loss.
         local ok,action=pcall(router.step,router,x,y,user32.GetAsyncKeyState(1)<0,Panel.layout(width,height,model).targets)

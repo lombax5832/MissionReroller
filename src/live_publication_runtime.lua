@@ -5,7 +5,7 @@ local reroll_session=host.reroll_session
 local map,write=host.map,host.write
 local snapshot,participants,verify_code,O=host.snapshot,host.participants,host.verify_code,host.O
 local Search,make_publication,make_ui_selection=lib.Search,lib.make_publication,lib.make_ui_selection
-local verify_predicted_board=lib.verify_predicted_board
+local verify_predicted_board,DayNight=lib.verify_predicted_board,lib.DayNight
 local api,game,ffi
 host.when_initialized(function(n)api,game,ffi=n.api,n.game,n.ffi end)
 local on_existing_match,on_search_match,advance_live_publication
@@ -98,7 +98,7 @@ on_search_match=function(job,now)
     if publication_used and not M.dialog_enabled then reroll_session.finish('publication_blocked');emit('PUBLICATION_BLOCKED one publication per test session; restart to test again');return end
     local s=job.baseline;local match=job.operation
     candidate={seed=job.seed,planet=s.planet,row=match.row,difficulty=match.difficulty,operation_seed=match.seed,operations=job.operations,required=job.required or {[1]=true,[2]=true,[3]=true},modifiers=job.modifiers,
-        constellations=job.constellations,scope=job.scope}
+        constellations=job.constellations,scope=job.scope,daynight=job.daynight}
     transaction=make_publication({
         preflight=function(before,e)
             local current,reason=snapshot(true)
@@ -114,7 +114,9 @@ on_search_match=function(job,now)
             check_selection('Selection signature changed')
             local ok,err=pcall(verify_code,{'map_click'})
             assert(ok,'Map click signature changed: '..tostring(err))
-            assert(Search.find({operations=e.operations},e.difficulty,e.required,e.modifiers,e.constellations,e.scope),'Predicted filter no longer matches')
+            -- A day/night match must hold for the whole buffer from the write.
+            local daynight=e.daynight and function(op)return e.daynight.confirm(op,DayNight.war_time(read,before.board))end
+            assert(Search.find({operations=e.operations},e.difficulty,e.required,e.modifiers,e.constellations,e.scope,daynight),'Predicted filter no longer matches')
             before.owner_guard=ownership(before.board)
             local final=assert(snapshot(true),'Publication context unavailable')
             assert(final.fingerprint==before.fingerprint,'Context changed before publication')
@@ -163,6 +165,15 @@ advance_live_publication=function(action,now)
             -- The regenerated board is correct. Selection failure must not undo
             -- a verified board; the user can still select its operation manually.
             transaction:commit();transaction=nil
+            if candidate.daynight then
+                -- The written board keeps the predicted level nodes; the side is
+                -- checked again against the war time now.
+                local op
+                for _,value in ipairs(assert(s).decoded.operations)do if value.row==candidate.row then op=value end end
+                local ok,held=pcall(function()return op and candidate.daynight.confirm(op,DayNight.war_time(read,s.board))end)
+                emit('DAYNIGHT_VERIFIED row='..candidate.row..' holds='..tostring(ok and held or false)..(ok and '' or ' error='..tostring(held)))
+                if not (ok and held)then reroll_session.report('The operation may leave the chosen side within '..DayNight.duration(candidate.daynight.planet.buffer))end
+            end
             select_match(assert(s));reroll_session.advance('selection_pending')
         end
     end

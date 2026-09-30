@@ -146,6 +146,43 @@ assert(not last().running and last().status=='Search cancelled' and last().tone=
 assert(M.status=='cancelled' and not session.take_cancel() and not session.view().running)
 for _=1,12 do frame()end;assert(M.status=='cancelled','The cancelled capture never completes')
 
+-- 5. A night-only search. Its window follows war time; a match whose side ends
+-- within the buffer just before the write is passed over and the search
+-- continues after it. The sky itself is tests/test_day_night.lua's.
+local refreshed,confirmed=0,{}
+local function stub_day_night(real)
+    return {BAND=30,MARGIN=5,SLACK=60,WANTED=9000,duration=real.duration,war_time=function()return 84733000+now end,
+        load=function(_,_,_,p)return {planet=p,day_length=56553,buffer=9000}end,
+        checker=function(P,side)
+            assert(side=='night')
+            local c={side=side,planet=P}
+            function c.refresh(T)assert(T>84733000);refreshed=refreshed+1 end
+            -- Every 50th seed puts the operation in the night; 550 not for long.
+            function c.accepts(op)return op.missions[1].seed%50==0 end
+            function c.confirm(op,T)confirmed[#confirmed+1]=op.missions[1].seed;return op.missions[1].seed~=550 end
+            function c.time_of_day()return 1200 end
+            return c
+        end}
+end
+local publication=up(up(tick,'advance_prediction_search'),'on_search_match')
+up(ready,'DayNight',stub_day_night(up(ready,'DayNight')),true)
+up(publication,'DayNight',up(ready,'DayNight'),true)
+up(dialog,'sky_view',function()return {note='HOLDS 2H 30M / DAY 15H 42M'}end,true)
+map.sky=function()return {env=0,seed=1,viewer=0}end
+jit.flush()
+local filters=up(dialog,'filters');filters.selected={};filters.time='night'
+mark=#logs
+action='start';frame()
+result=until_idle(400)
+text=table.concat(logs,'',mark+1)
+assert(text:find('DAYNIGHT_SEARCH side=night day_s=56553 buffer_s=9000 band_min=30 margin_s=5 slack_s=60',1,true),text)
+assert(text:find('DAYNIGHT_MATCH side=night row=3 seed=550',1,true) and text:find('holds=false',1,true),'The first match is checked')
+assert(text:find('DAYNIGHT_WINDOW_CLOSED row=3 seed=550; searching on',1,true),'and passed over')
+assert(text:find('first_seed=551 resumed=true',1,true),'The search continues after it')
+assert(text:find('DAYNIGHT_MATCH side=night row=3 seed=600 war_time=',1,true) and text:find('minutes=level1@1200',1,true),'The next match holds')
+assert(confirmed[1]==550 and confirmed[2]==600 and refreshed>0,'Checked just before the write')
+assert(session.view().request.time=='night' and not tostring(M.status):find('search_',1,true),M.status)
+
 local text=table.concat(logs)
 assert(not text:find('SESSION_',1,true),'Every phase change follows the session rules: '..tostring(text:match('SESSION_[^%c]*')))
-print('Reroll handshake: request, capture, search, exhausted, existing match, composition without independent bases and cancel passed')
+print('Reroll handshake: request, capture, search, exhausted, existing match, composition without independent bases, cancel and a night-only search passed')

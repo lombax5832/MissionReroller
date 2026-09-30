@@ -103,6 +103,32 @@ not linear in time, so the port evaluates the chain at each time and uses
 1017ef0 itself rather than the longitude shortcut. The 6.3 s lag of the
 map's environment is unexplained and small (0.5 degrees).
 
+## Implementation
+
+- `src/planet_sky.lua` ports 1016c20, 101c7c0, 1022270 and 1017ef0. On the
+  captures of 2026-09-30 its sun is within 0.036 degrees of the game's on
+  planet 201 and 0.005 degrees on the moon (with the 6.3 s lag; 0.5
+  without, which the port does not apply). A timeline samples the sun so
+  the time of day moves at most a minute between samples.
+- `src/day_night.lua` reads the viewed planet through `map.sky()` only when
+  the sky's seed equals the planet's campaign definition seed (+0x2c; the
+  definition index is the planet index), finds its level map as the
+  identity probe does and builds the search's check. Constants: BAND 30
+  minutes, WANTED 9000 s, MARGIN 5 s, SLACK 60 s, REFRESH 5 s.
+- The search checks every mission of an operation over [T+MARGIN,
+  T+MARGIN+buffer+SLACK], moved with war time every REFRESH seconds. On a
+  match it checks [T, T+buffer] again (`DAYNIGHT_MATCH`); a failure logs
+  `DAYNIGHT_WINDOW_CLOSED` and the search continues after that seed.
+  Publication's preflight checks it once more, and the verified board is
+  checked and logged (`DAYNIGHT_VERIFIED`).
+- The dialog loads the sky once per planet (`DAYNIGHT_PLANET`) and once a
+  second works out the note and the city block. The search depends on a
+  city when the scope is a city or when the planet's other operations
+  (rows below 30) cannot meet the filters; it then waits until one of the
+  city missions' level nodes starts a whole buffer on the chosen side.
+- Four code entries (`sky_*`) are checked on the first frame, so a game
+  update that changes the math stops the mod instead of mispredicting.
+
 ## Open
 - **In-mission lighting.** Whether the level's lighting equals the time of
   day at the mission's node at deployment. The in-game test plan checks it.

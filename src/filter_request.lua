@@ -11,7 +11,7 @@ function R.new(options,catalogue,labels)
     -- One section is open at a time, or none. The enemy section shows the
     -- rules of one group: a checked mission, or 0 for any mission.
     return setmetatable({options=options,catalogue=catalogue,labels=labels,
-        selected={},modifiers={},constellations={},section='missions',page=1,pages=1,group_choice=0},R)
+        selected={},modifiers={},constellations={},time=nil,section='missions',page=1,pages=1,group_choice=0},R)
 end
 -- Opening the dialog starts on the first page of the missions.
 function R:open()self.section,self.page='missions',1 end
@@ -36,9 +36,9 @@ function R:tag_filter()
     end
     return {groups=groups}
 end
--- Checked missions, modifier rules and constellation groups with rules.
+-- Checked missions, modifier rules, constellation rules and the time of day.
 function R:rule_count()
-    local n=0
+    local n=self.time and 1 or 0
     for _,id in ipairs(self:groups())do if id~=0 then n=n+1 end end
     for _ in pairs(self.modifiers)do n=n+1 end
     for _,tags in pairs(self:tag_filter().groups)do for _ in pairs(tags)do n=n+1 end end
@@ -51,7 +51,7 @@ function R:possible(catalogue)
 end
 -- Raises with the reason the request cannot be searched.
 function R:validate(catalogue)
-    self.catalogue.validate(catalogue,self.selected,self.modifiers,self:tag_filter())
+    self.catalogue.validate(catalogue,self.selected,self.modifiers,self:tag_filter(),self.time)
 end
 -- The request reroll_session.start takes, as a copy.
 function R:to_request(scope,difficulty)
@@ -59,7 +59,7 @@ function R:to_request(scope,difficulty)
     for id,v in pairs(self.selected)do required[id]=v end
     for id,v in pairs(self.modifiers)do rules[id]=v end
     return {difficulty=difficulty,required=required,modifiers=rules,constellations=self:tag_filter(),
-        scope=scope and {region=scope.region} or nil}
+        scope=scope and {region=scope.region} or nil,time=self.time}
 end
 -- Drops the rules a fresh catalogue no longer offers. A catalogue of another
 -- planet or difficulty (new_view) turns back to the first mission page.
@@ -88,11 +88,14 @@ function R:navigate(action)
     else return false end
     return true
 end
--- Edits the request: clear, a mission id, 'modifier:<id>' or
--- 'constellation:<group>:<id>'. A mission the catalogue cannot combine with
--- the request stays unchecked. Returns whether the action was an edit.
+-- Edits the request: clear, a mission id, 'modifier:<id>',
+-- 'constellation:<group>:<id>' or 'time:any|day|night'. A mission the
+-- catalogue cannot combine with the request stays unchecked. Returns whether
+-- the action was an edit.
 function R:toggle(action,catalogue)
-    if action=='clear' then self.selected={};self.modifiers={};self.constellations={}
+    if action=='clear' then self.selected={};self.modifiers={};self.constellations={};self.time=nil
+    elseif action=='time:any' then self.time=nil
+    elseif action=='time:day' or action=='time:night' then self.time=action:sub(6)
     elseif type(action)=='number' then
         local selected=self.selected
         if selected[action]then selected[action]=nil
@@ -126,7 +129,9 @@ local function count(n)return n==0 and 'Any' or n..(n==1 and ' rule' or ' rules'
 -- gap), running, queued (a start waits for fresh data), fixed (an operation
 -- in progress blocks the city), overdue (the gap is shown), run (the
 -- session's view), why (why there is no fresh data), report and tone (the
--- last outcome), difficulty, scope and limit (seeds per search).
+-- last outcome), difficulty, scope, limit (seeds per search) and sky: the
+-- viewed planet's day and night with a time of day chosen, {note} or
+-- {pending=reason} or {blocked=reason} (src/day_night.lua).
 function R:model(catalogue,v)
     local options,selected,modifiers,section=self.options,self.selected,self.modifiers,self.section
     local display=v.shown and catalogue
@@ -139,7 +144,7 @@ function R:model(catalogue,v)
     for _,id in ipairs(groups)do if id~=0 then names[#names+1]=options[id].name end end
     for _ in pairs(modifiers)do modifier_rules=modifier_rules+1 end
     for _,tags in pairs(filter.groups)do for _ in pairs(tags)do tag_rules=tag_rules+1 end end
-    local rules=#names+modifier_rules+tag_rules
+    local rules=#names+modifier_rules+tag_rules+(self.time and 1 or 0)
     local compatible,compatibility_reason=self:possible(catalogue)
     local running,fresh,retained,fixed=v.running,v.fresh,v.retained,v.fixed
     local busy=running or v.queued
@@ -175,9 +180,16 @@ function R:model(catalogue,v)
         end
         -- The names table also holds the game's tag, which the log keeps.
         for i,tag in ipairs(catalogue.forced or {})do forced[i]=((self.labels[tag] or 'tag '..tag):gsub(' %b()$',''))end
+    elseif display and section=='time' then
+        for _,side in ipairs({{'any','Any time'},{'day','Day'},{'night','Night'}})do
+            items[#items+1]={id='time:'..side[1],name=side[2],mode=(self.time or 'any')==side[1] and 'chosen' or nil}
+        end
     end
+    -- The sky decides only when a side is chosen.
+    local sky=self.time and (v.sky or {pending='Waiting for the sky of the viewed planet'}) or {}
+    local dark=sky.blocked or sky.pending
     self.pages=pages
-    local ready=not busy and (fresh or retained) and compatible and not fixed
+    local ready=not busy and (fresh or retained) and compatible and not fixed and not dark
     -- The same precedence as before the panel was docked.
     local status,tone
     local run,why,report=v.run,v.why,v.report
@@ -186,6 +198,8 @@ function R:model(catalogue,v)
     elseif fixed then status,tone='Operation in progress. Finish or abandon it to reroll','warn'
     elseif v.overdue then status,tone='Updating planet data. Your choices are kept','warn'
     elseif not compatible then status,tone=compatibility_reason,'bad'
+    elseif sky.blocked and (fresh or retained) then status,tone=sky.blocked,'bad'
+    elseif sky.pending and (fresh or retained) then status,tone=sky.pending,'warn'
     elseif not fresh and not retained then
         status,tone=why=='Choose a planet and map difficulty' and 'Open a planet on the war table first' or why or report or 'Waiting for planet data','warn'
     elseif report then status,tone=report,v.tone
@@ -199,7 +213,9 @@ function R:model(catalogue,v)
         faction=display and catalogue.faction or nil,scope=v.scope and 'city' or 'planet',
         section=section,items=items,page=self.page,pages=pages,groups=tabs,group=group,
         slots=display and catalogue.slots or nil,checked=#names,rules=rules,
-        summaries={missions=#names>0 and table.concat(names,', ') or 'Any',modifiers=count(modifier_rules),enemies=count(tag_rules)},
+        summaries={missions=#names>0 and table.concat(names,', ') or 'Any',modifiers=count(modifier_rules),enemies=count(tag_rules),
+            time=self.time=='day' and 'Day' or self.time=='night' and 'Night' or 'Any'},
+        time_note=v.sky and v.sky.note or nil,
         forced=table.concat(forced,', '),
         note=display and section=='enemies' and group==0 and 'Check a mission to set its own enemies' or nil}
 end

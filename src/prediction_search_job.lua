@@ -58,7 +58,7 @@ return function(make_reads,make_search,catalogue)
                     local operations=complete(search.seed);local valid={}
                     for _,op in ipairs(operations)do if op.valid then valid[#valid+1]=op end end
                     local match=catalogue.find({operations=valid},options.difficulty,options.required,
-                        options.modifiers,options.constellations,options.scope)
+                        options.modifiers,options.constellations,options.scope,options.daynight)
                     assert(match and match.row==search.operation.row,'Search and complete predictions differ')
                     search.operation=match;search.operations=operations
                 end
