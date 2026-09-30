@@ -2,9 +2,24 @@
 
 ## Status
 
-**Not yet validated in game.** The build, `tests/test_package.py`, the new
-`tests/test_escape_gate.lua` and the Escape cases in
-`tests/test_prediction_dialog.lua` pass. Not yet released.
+**Validated in game on 2026-09-30** with a test build still labelled
+0.24.0; not yet released. The user reported that Escape closed the panel
+and the war table did not go back. The logs show:
+
+- `BingusSharedLoader.log`: `mods/ipodalexei/mission_reroller_experiment: loaded`.
+- `MissionRerollerExperiment.log`: the `...; Escape closes; ...` startup
+  line and `build=25480438 hashes=verified helper_signature=verified`.
+- Six opens, each logging `ESCAPE_HELD mappings=2 actions=0:9,0:73`
+  before `MODAL_OPEN scope=planet key=f7 screens=15`. Five were closed
+  with `MODAL_RELEASE closed` followed by `ESCAPE_RESTORED buckets=2`.
+- The sixth ran a search that matched and published a seed
+  (`PUBLICATION_STATE_VERIFIED ... map_ui_row_confirmed=true`). The panel
+  then closed itself with `ESCAPE_RESTORED buckets=2` and
+  `MODAL_RELEASE closed`.
+- No `ESCAPE_BLOCKED`, `ESCAPE_RESTORE_FAILED` or `STOPPED:` line.
+
+So Escape is bound through the binding map for two native actions,
+`0:9` and `0:73`, and BACK is one of them.
 
 ## What changed
 
