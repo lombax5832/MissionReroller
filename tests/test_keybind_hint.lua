@@ -6,7 +6,7 @@ for _,case in ipairs({{1920,1080,{x=48,y=32,w=118,h=40,scale=1}},{1280,720,{x=32
     local b=H.layout(a,width,height)
     local name=width..'x'..height
     assert(b.fits,name)
-    assert(math.abs(b.x-(a.x+a.w+40*a.scale))<1e-6 and b.y==a.y and b.h==a.h,name..': beside the anchor')
+    assert(math.abs(b.x-(a.x+a.w+32*a.scale))<1e-6 and b.y==a.y and b.h==a.h,name..': beside the anchor')
     assert(b.cap.x==b.x and b.cap.y==a.y and b.cap.h==a.h and b.cap.w>0,name..': cap')
     assert(b.keys.x>b.cap.x and b.keys.x<b.cap.x+b.cap.w and b.keys.cy==a.y+a.h/2,name..': keys inside the cap')
     assert(b.label.x>b.cap.x+b.cap.w and b.label.cy==b.keys.cy,name..': label after the cap')
@@ -19,7 +19,8 @@ do
     local narrow=H.layout(a,1920,1080,function(text,size)return #text*size*0.4 end)
     local wide=H.layout(a,1920,1080,function(text,size)return #text*size*0.8 end)
     assert(wide.cap.w>narrow.cap.w and wide.w>narrow.w,'metrics decide the widths')
-    assert(math.abs(narrow.keys.x-narrow.cap.x-24)<1e-6,'padding scales')
+    assert(math.abs(narrow.keys.x-narrow.cap.x-16)<1e-6,'padding scales')
+    assert(math.abs(narrow.label.x-(narrow.cap.x+narrow.cap.w)-30)<1e-6,'label space scales')
 end
 assert(not H.layout({x=1800,y=32,w=118,h=40,scale=1},1920,1080).fits,'no room to the right')
 assert(not H.layout({x=48,y=-5,w=118,h=40,scale=1},1920,1080).fits,'below the screen')

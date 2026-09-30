@@ -2,12 +2,36 @@
 
 ## Status
 
-Implemented and tested offline; not yet active. The hint anchors to the war
-table's own BACK hint, a native widget of the map screen object, and the
-offset of that widget in the object is not known yet. `HINT_WIDGET` in
-`src/prediction_dialog_runtime.lua` is nil, so the v0.21.0 package draws no
-hint and logs `key hint beside BACK disabled` at start. Everything else in
-the package is v0.20.2.
+Ready for its first in-game test. The hint anchors to the war table's own
+BACK hint, a native widget of the map screen object. The survey below ran
+on 2026-09-29 with the galactic map open on a 3440x1440 screen and found it
+at offset 1696; `HINT_WIDGET` is set to that. Everything else in the package
+is v0.20.2. Not yet seen on screen.
+
+## Survey result, 2026-09-29
+
+The map screen lays its UI out in a 1920x1080 design space. On 3440x1440
+the root widget (offset 56) is 1920x1080 at scale 1.333, placed at x=440,
+so the canvas is centred with 440 px bars either side. Every widget carries
+the same scale.
+
+The screen has exactly two key hints, one block each: BACK at the bottom
+left and one at the bottom right (offset 9248, local x -56 from the right).
+The BACK block, in design units:
+
+| Offset | Record | Local position | Size | Notes |
+| --- | --- | --- | --- | --- |
+| 1696 | hint container | 56, 16 | 135.97 x 32 | `HINT_WIDGET`. Screen 514.7, 21.3; 181.3 x 42.7 px |
+| 1968 | inner container | 0, 0 | 135.97 x 32 | same rectangle |
+| 2240, 2856 | key cap | 0, 0 | 57.9 x 32 | colour fields 1.0: a light cap |
+| 3248 | cap text | 8, -6.4 | 41.9 x 15.75 | colour fields 0.2: dark text on the cap |
+| 4400 | label text | 72.9, 16 | 59.07 x 15.75 | BACK, colour 1.0: white |
+| 6136 to 6752 | gamepad glyph | 0, 0 | 40 x 40 | opacity 0 with a keyboard |
+
+`src/keybind_hint.lua` copies those proportions: 8 units of padding in the
+cap, 15 units between cap and label, text 15.75/32 of the container height,
+a light cap with dark text and a white label. It leaves 32 units after the
+game's hint.
 
 ## What it draws
 

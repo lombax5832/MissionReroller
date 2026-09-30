@@ -80,7 +80,7 @@ def main(bottom='0.25', left='0.5'):
         w, h = struct.unpack_from('<ff', record, 36)
         local_opacity, opacity = struct.unpack_from('<f', record, 68)[0], struct.unpack_from('<f', record, 84)[0]
         sx, sy = struct.unpack_from('<f', record, 100)[0], struct.unpack_from('<f', record, 140)[0]
-        x, y = struct.unpack_from('<ff', record, 148)
+        x, y = struct.unpack_from('<f', record, 148)[0], struct.unpack_from('<f', record, 156)[0]
         values = (w, h, local_opacity, opacity, sx, sy, x, y)
         if any(v != v for v in values):
             return None

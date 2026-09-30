@@ -4,9 +4,10 @@ do
     local panel,hint,gate,router,exe
     local selected,difficulty,key_down={},10,true
     -- The key hint sits beside the war table's own BACK hint, a widget of
-    -- the map screen object. Its offset in that object is pinned from a
-    -- scripts/survey_map_widgets.py run; nil draws no hint.
-    local HINT_WIDGET=nil
+    -- the map screen object: the 136x32 design-unit container at local
+    -- (56,16) that holds the key cap and the BACK label, found by
+    -- scripts/survey_map_widgets.py on 2026-09-29. nil draws no hint.
+    local HINT_WIDGET=1696
     local hint_blocked=false
     -- One section is open at a time, or none. The enemy section shows the
     -- rules of one group: a checked mission, or 0 for any mission.

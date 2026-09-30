@@ -5,9 +5,11 @@
 -- from the anchor, so the hint follows the game's own UI scale.
 local H={}
 H.KEYS,H.LABEL='CTRL + SHIFT + F8','REROLL OPERATIONS'
--- In the anchor's scale: the gap after the game's hint, the cap's padding
--- around its text, the space before the label, and the cap's border.
-local GAP,PAD,SPACE,BORDER,TEXT=40,12,12,2,0.55
+-- In the anchor's scale, from the game's own BACK hint as surveyed: its cap
+-- is 57.9 units wide around 41.9 units of text (8 of padding a side), the
+-- label starts 15 units after the cap, and both texts are 15.75 units tall
+-- in a 32-unit container. GAP is the space we leave after the game's hint.
+local GAP,PAD,SPACE,BORDER,TEXT=32,8,15,2,0.5
 function H.layout(anchor,width,height,measure)
     local s,h=anchor.scale,anchor.h
     local size=h*TEXT
@@ -66,12 +68,14 @@ function H.new(e)
             value=(tostring(value):upper():gsub('[^\32-\126]','?'))
             assert(e.Gui.text(gui,value,font,size,mat,e.Vector3(x,cy-size*0.35,996),c))
         end
-        local cap,px,ink,edge=b.cap,b.border,color(235,238,240),color(200,205,210)
-        rect(cap.x,cap.y,cap.w,cap.h,990,color(8,10,13,200))
+        -- As the game draws its key caps: a light cap with dark text, then a
+        -- white label.
+        local cap,px,edge=b.cap,b.border,color(196,200,204)
+        rect(cap.x,cap.y,cap.w,cap.h,990,color(236,238,240))
         rect(cap.x,cap.y,cap.w,px,991,edge);rect(cap.x,cap.y+cap.h-px,cap.w,px,991,edge)
         rect(cap.x,cap.y,px,cap.h,991,edge);rect(cap.x+cap.w-px,cap.y,px,cap.h,991,edge)
-        text(H.KEYS,b.keys.x,b.keys.cy,b.size,ink)
-        text(H.LABEL,b.label.x,b.label.cy,b.size,ink)
+        text(H.KEYS,b.keys.x,b.keys.cy,b.size,color(51,51,51))
+        text(H.LABEL,b.label.x,b.label.cy,b.size,color(255,255,255))
         return true
     end
     return self
