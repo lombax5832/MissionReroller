@@ -1,7 +1,7 @@
 -- Modal UI for the in-process predictor. Losing focus releases input ownership
 -- but never cancels the search. Only an explicit cancel/close cancels work.
 do
-    local panel,hint,binding,gate,router,exe
+    local panel,hint,binding,gate,router,exe,cursor
     local selected,difficulty,key_down={},10,true
     -- The key hint sits beside the war table's own BACK hint, a widget of
     -- the map screen object: the 136x32 design-unit container at local
@@ -136,10 +136,7 @@ do
         exe=assert(api.module(nil));panel=Panel.new(assert(stingray));hint=Hint.new(stingray)
         binding=Binding.new({read=read,pointer=pointer,u=u,game=game,emit=emit,keyboard=stingray.Keyboard,
             menu=function()return rawget(_G,'ModBindingsMenu')end})
-        ffi.cdef[[typedef struct { int32_t x,y; } MRD_POINT;
-            typedef struct { int32_t left,top,right,bottom; } MRD_RECT;
-            int GetCursorPos(MRD_POINT *); int ScreenToClient(void *,MRD_POINT *);
-            int GetClientRect(void *,MRD_RECT *);]]
+        cursor=make_cursor(ffi)
         gate=make_gate(stingray.Window,check_window)
     end
     local function context()
@@ -219,14 +216,9 @@ do
         end
         key_down=down
         if not router then return end
-        local hwnd=user32.GetForegroundWindow()
-        local p=ffi.new('MRD_POINT[1]');local r=ffi.new('MRD_RECT[1]')
-        -- Void pointers, in case another addon declared these with its own structs.
-        local vp,vr=ffi.cast('void *',p),ffi.cast('void *',r)
-        assert(user32.GetCursorPos(vp)~=0 and user32.ScreenToClient(hwnd,vp)~=0 and user32.GetClientRect(hwnd,vr)~=0,'Mouse position unavailable')
-        assert(r[0].right>0 and r[0].bottom>0,'Invalid client dimensions')
+        local cx,cy,cw,ch=cursor.client(user32.GetForegroundWindow())
         local width,height=stingray.Gui.resolution()
-        local x=tonumber(p[0].x)*width/r[0].right;local y=height-tonumber(p[0].y)*height/r[0].bottom
+        local x=cx*width/cw;local y=height-cy*height/ch
         local s,why,view
         if not running then s,why,view=context();if s then difficulty=why;view=s.planet..':'..difficulty end end
         if s and scope then

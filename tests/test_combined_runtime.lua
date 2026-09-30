@@ -81,12 +81,7 @@ up(tick,'panel',{clear=function()end,show=function()return true end},true)
 stingray={Script={temp_byte_count=function()return 0 end,set_temp_byte_count=function()end}}
 
 stingray.Gui={resolution=function()return 1920,1080 end}
-ffi.cdef[[typedef struct {int32_t x,y;} MRC_POINT;
-typedef struct {int32_t left,top,right,bottom;} MRC_RECT;]]
-local user=up(initialize,'user32')
-user.GetCursorPos=function(p)p[0].x=0;p[0].y=0;return 1 end
-user.ScreenToClient=function()return 1 end
-user.GetClientRect=function(_,r)r[0].right=1920;r[0].bottom=1080;return 1 end
+up(tick,'cursor',{client=function()return 0,0,1920,1080 end},true)
 local calls,selections=0,0
 put(board+0x78e88,string.rep('\0',92))
 up(tick,'invoke',function()calls=calls+1 end,true)

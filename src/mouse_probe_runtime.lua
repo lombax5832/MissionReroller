@@ -1,5 +1,5 @@
 local previous_update,previous_shutdown=rawget(_G,'update'),rawget(_G,'shutdown')
-local panel,gate,router,user,exe
+local panel,gate,router,user,exe,cursor
 local done=false;local old_key=nil;local started,base_selection,board
 local checks={}
 local note='Ctrl+Shift+F8 opens mouse test; no rerolls'
@@ -29,17 +29,12 @@ local function tick()
     if not initialized then
         initialize();exe=assert(api.module(nil));panel=Panel.new(stingray)
         ffi.cdef[[
-            typedef struct { int32_t x; int32_t y; } MR_MOUSE_POINT;
-            typedef struct { int32_t left; int32_t top; int32_t right; int32_t bottom; } MR_MOUSE_RECT;
             int16_t GetAsyncKeyState(int);
             void *GetForegroundWindow(void);
             uint32_t GetWindowThreadProcessId(void *,uint32_t *);
             uint32_t GetCurrentProcessId(void);
-            int GetCursorPos(MR_MOUSE_POINT *);
-            int ScreenToClient(void *,MR_MOUSE_POINT *);
-            int GetClientRect(void *,MR_MOUSE_RECT *);
         ]]
-        user=ffi.load('user32')
+        user=ffi.load('user32');cursor=make_cursor(ffi)
         gate=make_gate(stingray.Window,check_window)
     end
     local hwnd=user.GetForegroundWindow();local pid=ffi.new('uint32_t[1]')
@@ -70,10 +65,8 @@ local function tick()
     end
     local width,height=stingray.Gui.resolution()
     local targets=Panel.layout(width,height).targets
-    local pos=ffi.new('MR_MOUSE_POINT[1]');local rect=ffi.new('MR_MOUSE_RECT[1]')
-    assert(user.GetCursorPos(pos)~=0 and user.ScreenToClient(hwnd,pos)~=0 and user.GetClientRect(hwnd,rect)~=0,'Mouse position unavailable')
-    local cw,ch=rect[0].right,rect[0].bottom;assert(cw>0 and ch>0,'Invalid window dimensions')
-    local x=tonumber(pos[0].x)*width/cw;local y=height-tonumber(pos[0].y)*height/ch
+    local cx,cy,cw,ch=cursor.client(hwnd)
+    local x=cx*width/cw;local y=height-cy*height/ch
     local action=router:step(x,y,user.GetAsyncKeyState(1)<0,targets)
     if action=='close' then router:close()
     elseif action=='clear' then checks={};emit('CLICK clear selection')

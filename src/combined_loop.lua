@@ -25,10 +25,7 @@ local function select_operation(s,op)
 end
 local function init_ui()
     exe=assert(api.module(nil));panel=Panel.new(assert(stingray))
-    ffi.cdef[[typedef struct { int32_t x,y; } MRC_POINT;
-        typedef struct { int32_t left,top,right,bottom; } MRC_RECT;
-        int GetCursorPos(MRC_POINT *); int ScreenToClient(void *,MRC_POINT *);
-        int GetClientRect(void *,MRC_RECT *);]]
+    cursor=make_cursor(ffi)
     gate=make_gate(stingray.Window,check_window)
 end
 local function tick()
@@ -72,12 +69,9 @@ local function tick()
         end
     end
     if not router then return end
-    local hwnd=user32.GetForegroundWindow()
-    local p=ffi.new('MRC_POINT[1]');local r=ffi.new('MRC_RECT[1]')
-    assert(user32.GetCursorPos(p)~=0 and user32.ScreenToClient(hwnd,p)~=0 and user32.GetClientRect(hwnd,r)~=0,'Mouse position unavailable')
-    assert(r[0].right>0 and r[0].bottom>0,'Invalid client dimensions')
+    local cx,cy,cw,ch=cursor.client(user32.GetForegroundWindow())
     local width,height=stingray.Gui.resolution()
-    local x=tonumber(p[0].x)*width/r[0].right;local y=height-tonumber(p[0].y)*height/r[0].bottom
+    local x=cx*width/cw;local y=height-cy*height/ch
     local busy=search.running or (selector and selector.state=='pending')
     local model={running=not not busy,ready=latest~=nil and stable>=40 and not busy,
         difficulty=difficulty,calls=search.calls,status=search.status=='idle' and report or search.status}

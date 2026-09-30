@@ -107,8 +107,8 @@ so the hint reads both from the game itself:
 - Addons share one LuaJIT VM, so C function declarations are global and
   the first one wins. Mod Bindings Menu declares `VirtualQuery` with its
   own struct pointer, which stopped the first test build with `bad
-  argument #2 to 'VirtualQuery'`. Calls that take our own structs now pass
-  `void *`; `tests/test_ffi_conflicts.lua` declares the menu's version
+  argument #2 to 'VirtualQuery'`. The page check now passes `void *`,
+  and the cursor calls go through `src/window_cursor.lua`; `tests/test_ffi_conflicts.lua` declares the menu's version
   first and runs the entry's real page check.
 - The map is read only after `is_down` has returned a value, because the
   menu removes the actions' developer default mappings on its first

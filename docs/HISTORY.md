@@ -19,8 +19,9 @@ opens and closes the panel beside Ctrl+Shift+F8, and the hint beside BACK
 names it, read from the game's live binding map. The first in-game try
 stopped the mod with `bad argument #2 to 'VirtualQuery'`: addons share one
 LuaJIT VM, the first C declaration of a function wins, and Mod Bindings
-Menu declares VirtualQuery with its own struct. The mod now passes void
-pointers to VirtualQuery and the cursor calls, and
+Menu declares VirtualQuery with its own struct. The mod now passes a void
+pointer to VirtualQuery (the cursor calls go through `src/window_cursor.lua`,
+below), and
 `tests/test_ffi_conflicts.lua` reproduces the conflict. Not yet retested.
 
 **Validated in game: [v0.21.0 key hint beside BACK](KEYBIND_HINT_TEST.md).**
@@ -29,6 +30,19 @@ table's own BACK hint, anchored to that native widget so it follows the
 game's scale. A live survey through Memory Explorer found the widget at
 offset 1696 of the map screen object; the user confirmed the hint on
 screen. Search, prediction and publication are those of v0.20.2.
+
+**Not yet validated in game: v0.20.3 cursor reads shared with other addons.**
+A user's log ended with `STOPPED: ... bad argument #1 to 'GetCursorPos'
+(cannot convert 'struct 2306 [1]' to 'struct 1129 *')` the moment the dialog
+opened. LuaJIT keeps the first `ffi.cdef` of a function name for the whole
+VM and ignores later ones, and every addon shares that VM. Another addon had
+declared `GetCursorPos` with its own POINT struct first, so the dialog's own
+struct was rejected. `src/window_cursor.lua` now resolves `GetCursorPos`,
+`ScreenToClient` and `GetClientRect` by address and calls them through
+unnamed function pointers with untyped parameters, which no other
+declaration can change. The dialog, the combined test build and the mouse
+test build use it. `tests/test_window_cursor.lua` reproduces the clash
+against the real user32 and passes. Nothing else changed.
 
 **Validated in game: [v0.20.2 hosting a lobby](LOBBY_HOST_TEST.md).**
 Tested in a lobby of two on 2026-09-29: the host rerolled and the other

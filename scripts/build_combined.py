@@ -12,7 +12,7 @@ def source():
            'local core=(function()\n'+core+'\nend)()']
     for name,file in [('Search','search_session.lua'),('Panel','mouse_panel.lua'),
                       ('make_gate','window_mouse_gate.lua'),('make_router','modal_pointer.lua'),
-                      ('window_signatures','window_signatures.lua'),
+                      ('window_signatures','window_signatures.lua'),('make_cursor','window_cursor.lua'),
                       ('selection_signatures','selection_signatures.lua'),('make_selection','match_selection.lua')]:
         parts.append('local '+name+'=(function()\n'+(root/file).read_text()+'\nend)()')
     parts.extend((root/file).read_text() for file in ['experiment_adapter.lua','combined_runtime.lua','combined_loop.lua'])

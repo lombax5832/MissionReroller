@@ -3,21 +3,17 @@ local function up(fn,name,value,set)
     error('Missing upvalue '..name)
 end
 local ffi=require('ffi')
-ffi.cdef[[typedef struct {int32_t x,y;} MRD_POINT;typedef struct {int32_t left,top,right,bottom;} MRD_RECT;]]
 local logs={}
 CowboyBingusModLoader={api=1,version=18,open_log=function()return {write=function(_,s)logs[#logs+1]=s end,flush=function()end,close=function()end}end}
 update=function()return 1,nil,3 end;shutdown=function()return 4,nil,6 end
 dofile(arg[1])
 local tick=up(update,'tick');local dialog=up(tick,'dialog_tick');local M=MissionRerollerExperiment
 local real_context=up(dialog,'context');local real_catalogue=up(dialog,'catalogue_for')
-up(dialog,'ffi',ffi,true)
 local key,mouse=false,false;local x,y=0,0
 local user={GetForegroundWindow=function()return nil end,
-    GetAsyncKeyState=function(k)return ((k==1 and mouse)or(k~=1 and key))and -1 or 0 end,
-    GetCursorPos=function(p)p=ffi.cast('MRD_POINT *',p);p[0].x=x;p[0].y=820-y;return 1 end,
-    ScreenToClient=function()return 1 end,
-    GetClientRect=function(_,r)r=ffi.cast('MRD_RECT *',r);r[0].right=1200;r[0].bottom=820;return 1 end}
+    GetAsyncKeyState=function(k)return ((k==1 and mouse)or(k~=1 and key))and -1 or 0 end}
 up(dialog,'user32',user,true)
+up(dialog,'cursor',{client=function()return x,820-y,1200,820 end},true)
 local acquired,released=0,0;local held=false;local last_model,last_selected
 up(dialog,'gate',{acquire=function()assert(not held);held=true;acquired=acquired+1;return true end,
     held=function()return held end,release=function()if held then released=released+1 end;held=false;return true end},true)
