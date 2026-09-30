@@ -129,8 +129,10 @@ function C.constellations(catalogue,tags,labels,planet,difficulty,options)
     for _,group in pairs(groups)do table.sort(group.list,function(a,b)return a.id<b.id end)end
     catalogue.constellation_groups,catalogue.forced=groups,forced
 end
-function C.validate(catalogue,required,modifiers,constellations)
+-- time, when given, is the Day / Night filter's side and counts as a rule.
+function C.validate(catalogue,required,modifiers,constellations,time)
     local n,required_modifiers,total=0,0,0
+    if time~=nil then assert(time=='day' or time=='night','Invalid time of day');total=1 end
     for id,value in pairs(required)do
         assert(value==true and catalogue.mission_set[id],'Mission is unavailable on this planet/difficulty')
         n=n+1;total=total+1
@@ -152,7 +154,7 @@ function C.validate(catalogue,required,modifiers,constellations)
         end
         if next(tags)then total=total+1 end
     end
-    assert(total>0,'Choose at least one mission, modifier rule or constellation')
+    assert(total>0,'Choose at least one mission, modifier rule, constellation or time of day')
     local possible,reason=C.possible(catalogue,required,modifiers,constellations);assert(possible,reason)
 end
 function C.possible(catalogue,required,modifiers,constellations)

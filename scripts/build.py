@@ -17,10 +17,10 @@ import build_identity_probe as probe
 MODULE = build_core.RELEASE_MODULE
 GUID = build_core.RELEASE_GUID
 NAME = 'Mission Reroller'
-DEFAULT_VERSION = '0.25.0'
+DEFAULT_VERSION = '0.27.0'
 # What mod managers show for the mod and its one option.
-DESCRIPTION = ('Rerolls the operations on a planet\'s war table until one has the missions, modifiers '
-               'and enemy forces you choose. Press F7 on the galactic map to open the panel '
+DESCRIPTION = ('Rerolls the operations on a planet\'s war table until one has the missions, modifiers, '
+               'enemy forces and time of day you choose. Press F7 on the galactic map to open the panel '
                '(rebindable on the MODS tab with Mod Bindings Menu).')
 REQUIREMENT = ('Requires Bingus Shared Loader v16 or newer: enable both, keep the loader last in the '
                'load order, then deploy.')

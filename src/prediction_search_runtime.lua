@@ -3,8 +3,8 @@
 -- hooks: bind_constellations, on_existing_match, on_search_match, and
 -- validate_search_request, which the assembler adds once the dialog exists.
 local M,emit,read,u,snapshot,config=host.M,host.emit,host.read,host.u,host.snapshot,host.config
-local reroll_session,O=host.reroll_session,host.O
-local Search,Planet,make_search_job=lib.Search,lib.Planet,lib.make_search_job
+local reroll_session,O,map=host.reroll_session,host.O,host.map
+local Search,Planet,make_search_job,DayNight=lib.Search,lib.Planet,lib.make_search_job,lib.DayNight
 local bind_constellations,on_existing_match,on_search_match=hooks.bind_constellations,hooks.on_existing_match,hooks.on_search_match
 local api,game,ffi,kernel
 host.when_initialized(function(n)api,game,ffi,kernel=n.api,n.game,n.ffi,n.kernel end)
@@ -33,8 +33,8 @@ local function search_clock()
     end
     return precise and precise() or api.time()
 end
-local function request_key(difficulty,required,modifiers,constellations,scope)
-    local parts={'d'..difficulty,'r'..(scope and scope.region or 'all')}
+local function request_key(difficulty,required,modifiers,constellations,scope,time)
+    local parts={'d'..difficulty,'r'..(scope and scope.region or 'all'),'t'..(time or 'any')}
     for id in pairs(required)do parts[#parts+1]='m'..id end
     for id,mode in pairs(modifiers)do parts[#parts+1]=string.format('o%u:%s',id,mode)end
     for group,tags in pairs(constellations and constellations.groups or {})do
@@ -59,6 +59,21 @@ on_prediction_ready=function(s,definitions,now)
             constellations.groups[group]=copy
         end
     end
+    -- The Day / Night filter checks the viewed planet's sky (src/day_night.lua).
+    local daynight
+    if request.time then
+        local ok,planet,why=pcall(DayNight.load,read,u,s.board,s.planet,map.sky())
+        if not ok or not planet then
+            local reason=ok and why or tostring(planet)
+            reroll_session.finish('search_failed');reroll_session.report(reason)
+            emit('FILTER_BLOCKED day/night '..reason);return
+        end
+        daynight=DayNight.checker(planet,request.time)
+        daynight.planet=planet
+        daynight.refresh(DayNight.war_time(read,s.board))
+        emit(string.format('DAYNIGHT_SEARCH side=%s day_s=%.0f buffer_s=%.0f band_min=%d margin_s=%d slack_s=%d',
+            request.time,planet.day_length,planet.buffer,DayNight.BAND,DayNight.MARGIN,DayNight.SLACK))
+    end
     local validate_search_request=hooks.validate_search_request
     if validate_search_request then
         local ok,err=pcall(validate_search_request,s,request)
@@ -72,7 +87,7 @@ on_prediction_ready=function(s,definitions,now)
             end)
             if not ok then reroll_session.finish('search_failed');emit('FILTER_BLOCKED '..tostring(err));return end
         end
-        local existing=Search.find(s.decoded,request.difficulty,required,modifiers,constellations,scope)
+        local existing=Search.find(s.decoded,request.difficulty,required,modifiers,constellations,scope,daynight and daynight.accepts)
         if existing then reroll_session.progress(0);on_existing_match(s,existing,now);return end
     end
     -- A city has one operation per difficulty. While it is in progress no
@@ -88,7 +103,7 @@ on_prediction_ready=function(s,definitions,now)
         local result=Planet.capture(frozen_read,u,api.pointer,game)(s,definitions)
         assert(result.passed and result.independent_bases,'Frozen baseline prediction mismatch')
     end
-    local key=request_key(request.difficulty,required,modifiers,constellations,scope)
+    local key=request_key(request.difficulty,required,modifiers,constellations,scope,request.time)
     local first=(s.seed+1)%4294967296
     local resumed=resume and resume.key==key and resume.planet==s.planet and resume.baseline==s.seed
     if resumed then first=resume.next end
@@ -106,12 +121,15 @@ on_prediction_ready=function(s,definitions,now)
         -- Search the requested difficulty; confirm a match on the whole board.
         return function(seed)return evaluate(seed,request.difficulty)end,function(seed)return evaluate(seed)end
     end,{seed=first,limit=limit,difficulty=request.difficulty,required=required,modifiers=modifiers,
-        constellations=constellations,scope=scope,quantum=4096,clock=search_clock,slice=0.016,batch=256,revalidate=1})
+        constellations=constellations,scope=scope,daynight=daynight and daynight.accepts,
+        quantum=4096,clock=search_clock,slice=0.016,batch=256,revalidate=1})
     current_search.baseline=s
     current_search.required=required
     current_search.modifiers=modifiers
     current_search.constellations=constellations
     current_search.scope=scope
+    current_search.daynight=daynight
+    current_search.definitions=definitions
     current_search.key=key
     reroll_session.progress(0)
     local backend_waited,quiet_since=false,nil
@@ -172,6 +190,11 @@ advance_prediction_search=function(action,now)
     else
         if wait_started and now-last_wait_poll<0.25 then return true end
         last_wait_poll=now
+        -- The day/night window follows war time; the war time is read live.
+        if job.daynight then
+            local ok,err=pcall(function()job.daynight.refresh(DayNight.war_time(read,job.baseline.board))end)
+            if not ok then job:cancel('Day/night window unavailable: '..tostring(err))end
+        end
         local started=search_clock();job:step(job.context_check)
         local spent=search_clock()-started
         slices=slices+1;step_time=step_time+spent;max_slice=math.max(max_slice,spent*1000)
@@ -197,6 +220,25 @@ advance_prediction_search=function(action,now)
             emit(string.format('LUA_SEARCH_PROGRESS attempts=%d seeds_per_second=%.0f phase=%s max_slice_ms=%.3f %s',job.attempts,job.attempts/elapsed,job.phase,max_slice,timing))
         end
     else
+        -- Just before the write the match must hold for the whole buffer from
+        -- now; when the side ends sooner the search continues after it.
+        if job.status=='matched' and job.daynight then
+            local T=DayNight.war_time(read,job.baseline.board)
+            local times={}
+            for _,mission in ipairs(job.operation.missions)do
+                times[#times+1]=string.format('level%d@%.0f',mission.level_index,job.daynight.time_of_day(mission.level_index,T))
+            end
+            local held=job.daynight.confirm(job.operation,T)
+            emit(string.format('DAYNIGHT_MATCH side=%s row=%d seed=%u war_time=%.1f buffer_s=%.0f holds=%s minutes=%s',
+                job.daynight.side,job.operation.row,job.seed,T,job.daynight.planet.buffer,tostring(held),table.concat(times,',')))
+            if not held then
+                resume={key=job.key,planet=job.baseline.planet,baseline=job.baseline.seed,next=(job.seed+1)%4294967296}
+                current_search=nil
+                emit('DAYNIGHT_WINDOW_CLOSED row='..job.operation.row..' seed='..job.seed..'; searching on')
+                on_prediction_ready(job.baseline,job.definitions,now)
+                return true
+            end
+        end
         reroll_session.result(job);if job.status=='matched' then reroll_session.advance('search_matched')else reroll_session.finish('search_'..job.status)end
         if job.status=='matched' then
             resume=nil

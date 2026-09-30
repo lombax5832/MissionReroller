@@ -138,7 +138,8 @@ function S.scope(value)
     assert(type(region)=='number' and region>=0 and region<8 and region==math.floor(region),'Invalid city scope')
     return {region=region}
 end
-function S.find(snapshot,difficulty,required,modifiers,constellations,scope)
+-- daynight, when given, must also accept the operation (src/day_night.lua).
+function S.find(snapshot,difficulty,required,modifiers,constellations,scope,daynight)
     local groups=constellations and constellations.groups or {}
     for _,op in ipairs(snapshot.operations) do
         if op.difficulty==difficulty and S.in_scope(op.row,scope) then
@@ -158,6 +159,7 @@ function S.find(snapshot,difficulty,required,modifiers,constellations,scope)
                     end
                 end
             end
+            if yes and daynight and not daynight(op)then yes=false end
             if yes then return op end
         end
     end

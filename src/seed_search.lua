@@ -26,7 +26,9 @@ return function(evaluate,catalogue,options)
         end
         if next(copy)then constellations.groups[group]=copy;c=c+1 end
     end
-    assert(n<=3 and n+m+c>0,'Select missions, modifier rules or constellations')
+    local daynight=options.daynight
+    assert(daynight==nil or type(daynight)=='function','Invalid day/night check')
+    assert(n<=3 and (n+m+c>0 or daynight),'Select missions, modifier rules or constellations')
     local scope=catalogue.scope and catalogue.scope(options.scope)
     assert(scope or options.scope==nil,'City scope unavailable')
     local difficulty,limit=options.difficulty,options.limit
@@ -42,7 +44,7 @@ return function(evaluate,catalogue,options)
         if not ok then self.status='failed';self.error=tostring(operations);return self.status end
         local valid={}
         for _,op in ipairs(operations)do if op.valid then valid[#valid+1]=op end end
-        local match=catalogue.find({operations=valid},difficulty,required,modifiers,constellations,scope)
+        local match=catalogue.find({operations=valid},difficulty,required,modifiers,constellations,scope,daynight)
         if match then self.status='matched';self.seed=seed;self.operation=match;self.operations=operations
         elseif self.attempts>=limit then self.status='exhausted' end
         return self.status

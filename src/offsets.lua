@@ -63,6 +63,12 @@ code={
     composition_174ab50={module='game',rva=0x174ab50,size=335,sha256='0bd16770e68656de8fb7e84f9d62a64cda0e8ffa0d81c25c539ef4e79d743ab9',from='174ab50, checked by the identity probe since v0.8; role not recorded'},
     composition_174b110={module='game',rva=0x174b110,size=464,sha256='4b395978f97967bfc97024b41ab6b63246c120019aa369f91d358321b543a7a4',from='174b110, checked by the identity probe since v0.8; role not recorded'},
     difficulty_cap={module='game',rva=0x11ebb40,size=152,sha256='5feaccab97b046561f786f2e60533112168f152ebcd19f38ad1e190c9a08e6a9',from='11ebb40, the difficulty cap from configuration'},
+    -- The viewed planet's sky, which src/planet_sky.lua reproduces
+    -- (docs/DAY_NIGHT_RESEARCH.md).
+    sky_time_of_day={module='game',rva=0x1017ef0,size=1725,sha256='4e367c1e600c50d47ee4fb1df5aa4ffb5cc0811b89037c455570d9666eaac286',from='1017ef0, the time of day at a point, src/planet_sky.lua'},
+    sky_spin={module='game',rva=0x1016c20,size=865,sha256='7aca46a4a2a862a5b29185365e37d8eca96655ae918040607f22963e329a74b5',from='1016c20, a rotation about Z from war time'},
+    sky_orbit={module='game',rva=0x101c7c0,size=5546,sha256='0b2d16d6d90b8aa88fbf5120e61269aa96b0fa7e06eb40746420840b203a4a8e',from='101c7c0, a sky body world transform and its parents'},
+    sky_sun={module='game',rva=0x1022270,size=4868,sha256='b8f0bd5e982e6362f4ce46f3669adbe83a874ba59b7dff364634555638b58125',from='1022270, the viewer spin and the direction to the star'},
     rng_scale={module='game',rva=0x23c6780,from='the double 2^-32 the generator RNG scales by, src/generation_rng.lua',
         bytes='000000000000f03d'},
     -- The native window and cursor (docs/MOUSE_INPUT.md, src/window_cursor.lua).
@@ -132,6 +138,8 @@ structs={
         world_markers={0x17a09c,unverified=true},
         world_marker_count={0x17a14c,unverified=true},
         selection={0x17a298,anchor='campaign_helpers'},
+        -- Galactic war time in seconds, a double; copies at 0x46028 and 0x147460.
+        war_time={0x1f8058,unverified=true},
         selection_row={0x17a2a0,unverified=true},
         published_seed={0x17a2bc,unverified=true},
         active_snapshot={0x17a2c0,unverified=true},
@@ -291,9 +299,27 @@ structs={
     },
     map_ui={
         planet={0x4ef8,unverified=true},
+        -- The viewed planet's sky (725160 runs 1023d70 on it): its seed, the
+        -- settings (quaternion +0xc, viewer body +0x2c) and the environment.
+        sky_seed={0x23b0,anchor='sky_orbit'},
+        sky_settings={0x24d0,unverified=true},
+        sky={0x2530,unverified=true},
         rows={0x4f00,unverified=true},
         difficulty={0x4f14,unverified=true},
         processed_row={0x4f98,unverified=true},
+    },
+    -- A body of a sky, size bytes apart from the environment's start
+    -- (quaternions +0x94 and +0xa4); periods, phase and blends in 101c7c0
+    -- and 1022270.
+    sky_body={
+        size={0x1c0,anchor='sky_orbit'},
+        parent={0x171,anchor='sky_orbit'},
+        distance={0x174,anchor='sky_orbit'},
+        orbit_period={0x188,anchor='sky_orbit'},
+        spin_period={0x190,anchor='sky_sun'},
+        phase={0x1b4,anchor='sky_orbit'},
+        orbit_blend={0x1c0,anchor='sky_orbit'},
+        spin_blend={0x1c4,anchor='sky_sun'},
     },
     screen_owner={
         stack={0x429c,unverified=true},

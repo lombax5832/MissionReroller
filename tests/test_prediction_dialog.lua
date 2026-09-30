@@ -482,6 +482,43 @@ local blocked=0;for i=logged+1,#logs do if logs[i]:find('ESCAPE_BLOCKED',1,true)
 assert(blocked==1,'A blocked map is not retried')
 assert(not tostring(M.status):find('STOPPED',1,true),'A blocked map does not stop the mod')
 up(up(dialog,'restore_escape'),'escape',nil,true);up(up(dialog,'hold_escape'),'escape_blocked',false,true)
+-- The time of day: the viewed planet's sky decides the start, and a city
+-- waits for its side. The sky and its arithmetic are src/day_night.lua's
+-- (tests/test_day_night.lua); here they are stubbed.
+local sky_view=up(dialog,'sky_view')
+local real_day_night=up(sky_view,'DayNight')
+local wait,loads=0,0
+up(sky_view,'DayNight',{BAND=30,WANTED=9000,duration=real_day_night.duration,war_time=function()return 1000 end,
+    load=function(_,_,_,p,ref)loads=loads+1;return {planet=p,sky={seed=ref.seed},day_length=56553,buffer=9000}end,
+    wait=function(_,nodes,side)assert(side=='night' and #nodes==2,'the city missions');return wait end},true)
+map.sky=function()return {env=0,seed=77,viewer=0}end
+up(dialog,'context',function()
+    local decoded={operations={{row=29,difficulty=10,missions={{level_index=1}}},
+        {row=49,difficulty=10,missions={{level_index=5},{level_index=6}}}}}
+    return {planet=planet,context='stable',fingerprint='time',decoded=decoded},10
+end,true)
+-- Compiled traces keep the replaced functions as constants.
+jit.flush()
+pointed=nil;toggle();assert(held)
+click('clear');click('section:time');frame()
+assert(ids()=='time:any time:day time:night' and last_model.items[1].mode=='chosen')
+click('time:night');frame();frame()
+assert(last_model.summaries.time=='Night' and last_model.rules==1 and last_model.items[3].mode=='chosen')
+assert(last_model.can_start and last_model.status=='Ready to search' and shown('HOLDS 2H 30M / DAY 15H 42M'),last_model.status)
+local sky_logged=false
+for _,line in ipairs(logs)do if line:find('DAYNIGHT_PLANET planet='..planet..' day_s=56553 buffer_s=9000',1,true)then sky_logged=true end end
+assert(loads==1 and sky_logged,'The sky is loaded once and logged')
+toggle();pointed=1;toggle()
+wait=6000;now=now+2;frame()
+assert(last_model.scope=='city' and not last_model.can_start and last_model.status=='Night here in 1h 40m' and last_model.tone=='bad',last_model.status)
+click('start');assert(not requested(),'A city without night must not start')
+wait=nil;now=now+2;frame();assert(last_model.status=='No city here stays in night for 2h 30m',last_model.status)
+wait=0;now=now+2;frame();assert(last_model.can_start,last_model.status)
+click('start');assert(requested() and options().time=='night' and options().scope.region==1)
+take();session.finish('cancelled');frame();assert(not last_model.running)
+click('clear');assert(up(dialog,'filters').time==nil,'Clear resets the time of day')
+toggle();assert(not held);pointed=nil
+up(sky_view,'DayNight',real_day_night,true)
 -- A constellation input failure must leave mission and modifier filters usable.
 local built={faction=2,missions={{id=2,name='Survey'}},constellation_groups={}}
 -- The planet model returns the catalogue and the tag input failure
@@ -496,4 +533,4 @@ assert(real_catalogue({planet=268,board=0},10)==built and real_catalogue({planet
 assert(#logs==before+1 and logs[#logs]:find('CONSTELLATION_CATALOGUE_BLOCKED',1,true) and logs[#logs]:find('Missing global effects',1,true),
     'Constellation failures are logged once and do not block the catalogue')
 assert(not table.concat(logs):find('SESSION_',1,true),'Every phase change followed the session rules')
-print('Dialog: sections, groups, paging, locked states, city scope, constellation acceptance and exclusion per mission, real mouse router, filters, empty request, map difficulty, alt-tab, cancel, close, Escape, reopen, repeat and key hint passed')
+print('Dialog: sections, groups, paging, locked states, city scope, constellation acceptance and exclusion per mission, real mouse router, filters, empty request, map difficulty, alt-tab, cancel, close, Escape, reopen, repeat, key hint and time of day passed')

@@ -5,6 +5,47 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
+**Validated in game: v0.27.0 day or night.** The panel has a
+fourth section, TIME OF DAY: Any time, Day or Night. With Day or Night the
+matched operation's missions stay on that side for 2.5 hours after the
+reroll, clear of the 30 minutes around dawn and dusk. On planets and moons
+whose days are too short the filter holds for half of a side instead, and
+the panel says how long. When only a city can match and it is on the wrong
+side, the panel counts down to when it will be ready instead of searching.
+- **The sky.** A planet's time of day is the angle about its axis between a
+  mission's position and its sun, which the game works out from galactic
+  war time and a chain of spinning, orbiting bodies (1016c20, 101c7c0,
+  1022270, 1017ef0). `src/planet_sky.lua` ports it and reads the viewed
+  planet's sky from the war table's own copy; on live captures it matches
+  the game within 0.04 degrees, on a planet and on a moon.
+  [DAY_NIGHT_RESEARCH.md](DAY_NIGHT_RESEARCH.md) has the research.
+- **The search.** Each candidate is checked over a window that follows war
+  time, a match again just before the write (a failure logs
+  `DAYNIGHT_WINDOW_CLOSED` and the search continues after that seed), in
+  publication's preflight, and on the verified board
+  (`DAYNIGHT_VERIFIED`).
+- **Checks.** Four sky functions join the first-frame signature check; the
+  startup line reads `signatures=37`.
+- **Found on the way.** Memory Explorer could not read while Mod Bindings
+  Menu was installed: that mod declares `VirtualQuery` with a typed region
+  first. The research used a patched copy (v0.2.1) that casts its buffers
+  to `void *`, as this mod does; the fix still has to go into Memory
+  Explorer's repository.
+
+The release gate and every capture replay pass. The in-game plan is
+[DAY_NIGHT_TEST.md](DAY_NIGHT_TEST.md).
+
+Validated on 2026-09-30: the log shows `Mission Reroller 0.27.0` and
+`build=25480438 hashes=verified signatures=37 anchors=24 verified`. Four
+searches matched, published and verified, each with `holds=true`,
+`DAYNIGHT_VERIFIED holds=true` and `PUBLICATION_STATE_VERIFIED`: night and
+day on planet 201 (`day_s=56598 buffer_s=9000`, missions at 01:01 to 01:31
+and 09:10 to 10:12), and day and night on planet 100, whose short days cap
+the buffer (`day_s=6606 buffer_s=1514`, missions at 09:22 to 10:04 and
+21:03 to 21:31). The player confirmed the missions were on the chosen
+side. The city steps, the countdown and a twilight drop have not been
+run yet.
+
 **Not yet validated in game: v0.25.0 every offset in one file.** Players
 should see no change; the log's startup line becomes
 `build=25480438 hashes=verified signatures=33 anchors=24 verified`.

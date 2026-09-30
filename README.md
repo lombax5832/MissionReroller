@@ -2,8 +2,8 @@
 
 A Helldivers 2 mod that rerolls the operations on a planet's war table until
 one matches what you want to play: the mission types it must contain, the
-operation modifiers it must or must not have, and the enemy forces each
-mission must or must not carry. It runs inside the game's Lua VM as an addon
+operation modifiers it must or must not have, the enemy forces each
+mission must or must not carry, and whether it lands in the day or the night. It runs inside the game's Lua VM as an addon
 for [Bingus Shared Loader](https://github.com/CowboyBingus/BingusSharedLoader).
 
 Current release: **v0.20.3**, `releases/Mission-Reroller-v0.20.3.zip`
@@ -47,7 +47,7 @@ the same GUID, so your manager treats it as the same mod.
    operations** under Mission Reroller on the MODS tab of Options > Mouse &
    Keyboard. Bind a key there and it replaces F7, and the hint shows it.
    While that row has no key, F7 stays the shortcut.
-3. Choose what the operation must contain. The three sections open one at a
+3. Choose what the operation must contain. The four sections open one at a
    time:
    - **Missions.** Check up to the number of slots an operation has. All
      checked missions must fit in one operation, so a mission that cannot be
@@ -56,6 +56,11 @@ the same GUID, so your manager treats it as the same mod.
    - **Enemy forces.** One button per checked mission, or `ANY MISSION` when
      none is checked. Each constellation cycles ANY, ACCEPTED, EXCLUDED. The
      list shows only what that mission can draw at the map difficulty.
+   - **Time of day.** Any time, Day or Night. With Day or Night, every
+     mission of the match stays on that side for 2.5 hours after the reroll,
+     clear of dusk and dawn. The line under the heading shows how long it
+     holds and how long the planet's day is; on planets and moons with short
+     days it holds for less, and says so.
 4. Press **REROLL OPERATIONS**. The mod searches campaign seeds inside the
    game, up to 1,000,000 per request, showing its four steps and the seeds
    searched. On a match it publishes the seed, verifies the regenerated
@@ -96,6 +101,13 @@ OPERATIONS`. Tell your lobby before you reroll. Tested with two players.
   always present.
 - **Illuminate missions and difficulty 1** draw no constellations, so their
   enemy force lists are empty.
+- **Day and night move, cities do not.** Each planet turns under its sun,
+  so a mission's time of day changes as you play. The war table shows the
+  local time when you hover a planet (`SEST`). A reroll moves most missions
+  but not a city's, so when only a city can match and it is on the wrong
+  side, the panel says when it will be ready (`NIGHT HERE IN 3H 10M`) instead
+  of searching. Dusk and dawn, 30 minutes either side of 18:00 and 06:00,
+  count as neither.
 - **The panel takes the mouse and Escape only.** Other keys still reach the
   game. While the panel is open the game's own Escape bindings are set aside
   and come back when it closes and Escape is released.
@@ -111,6 +123,7 @@ The mod's log is `MissionRerollerExperiment.log` in
 | The MODS tab has no Mission Reroller section | The mod's log has a `BINDING_FAILED` line with the reason Mod Bindings Menu gave, such as all 36 bindings in use. F7 still works. |
 | The hint beside BACK shows F7 after binding another key | The hint reads the game's live binding once Mod Bindings Menu reports native input ready. If it never changes, send the `BINDING_REGISTERED` line from the mod's log. |
 | The panel shows `OPEN A PLANET ON THE WAR TABLE FIRST` | View a planet, then reopen the panel. |
+| The panel shows `WAITING FOR THE SKY OF THE VIEWED PLANET` with a time of day chosen | The war table has not drawn the planet yet. Wait a moment with the planet in view. A `DAYNIGHT_BLOCKED` line in the mod's log gives the reason if it stays. |
 | The panel shows `UPDATING PLANET DATA` for long | The game is waiting on the backend. Your choices are kept; the search starts on fresh data. |
 | Escape also takes the war table back | The mod's log has an `ESCAPE_BLOCKED` line with the reason, or `ESCAPE_HELD mappings=0` if the game has no Escape binding to set aside. Send the line. The panel still closes on Escape. |
 | The log has a `STOPPED:` line | The mod found something it did not expect and released the mouse without writing anything further. Send the line with a bug report. |
@@ -118,7 +131,7 @@ The mod's log is `MissionRerollerExperiment.log` in
 | `offset signature <name> mismatch` or `offset anchor <name> mismatch` | The game files are the supported build, but the code the mod relies on differs in memory, usually because another mod changed it. Send the line with a list of your mods. |
 
 When reporting a problem, include both logs. Near the top, the mod's log
-names its version (`Mission Reroller 0.25.0 docked dialog`) and, from the
+names its version (`Mission Reroller 0.27.0 docked dialog`) and, from the
 first frame, every Lua mod the loaders started: a `MODS` count, then one
 `MOD <name> version=<version> status=<status>` line each. A version reads
 `unknown` when that mod does not publish one.

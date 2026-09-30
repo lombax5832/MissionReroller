@@ -38,6 +38,12 @@ return function(memory)
         local planet=u(read(ui+O.map_ui.planet,4),0)
         return planet,u(read(ui+O.map_ui.difficulty,4),0)
     end
+    -- The viewed planet's sky: the environment's address, its seed and viewer
+    -- body (src/planet_sky.lua reads the bodies).
+    function map.sky(ui)
+        ui=ui or map.ui()
+        return {env=ui+O.map_ui.sky,seed=u(read(ui+O.map_ui.sky_seed,4),0),viewer=u(read(ui+O.map_ui.sky_settings+0x2c,4),0)}
+    end
     -- The map UI's two operation-row words: the selected row, then the row
     -- under the cursor (0xffffffff for none).
     function map.rows_address(ui)return (ui or map.ui())+O.map_ui.rows end

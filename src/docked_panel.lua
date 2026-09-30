@@ -4,10 +4,11 @@
 -- above the footer of a running search.
 local P={}
 local W,H,EDGE,LEFT,INNER,FOOT=664,1008,40,25,610,820
-local SECTIONS={{id='missions',title='MISSIONS'},{id='modifiers',title='MODIFIERS'},{id='enemies',title='ENEMY FORCES'}}
+local SECTIONS={{id='missions',title='MISSIONS'},{id='modifiers',title='MODIFIERS'},{id='enemies',title='ENEMY FORCES'},
+    {id='time',title='TIME OF DAY'}}
 local FACTIONS={[2]={'TERMINIDS',255,179,0},[3]={'AUTOMATONS',255,90,79},[4]={'ILLUMINATE',197,139,255}}
 local STEPS={'1 CHECK PLANET','2 SEARCH SEEDS','3 REFRESH BOARD','4 OPEN OPERATION'}
-local WORDS={require='REQUIRED',accept='ACCEPTED',exclude='EXCLUDED'}
+local WORDS={require='REQUIRED',accept='ACCEPTED',exclude='EXCLUDED',chosen='CHOSEN'}
 function P.layout(width,height,model)
     assert(width>=640 and height>=480,'Viewport too small')
     model=model or {}
@@ -101,7 +102,7 @@ function P.new(e)
         for n,t in ipairs(b.rows)do if not t.enabled and inside(t)then hint=items[n].reason end end
         local bits={tostring(hover),tostring(hint),model.status or '',model.tone or '',tostring(model.step),tostring(model.running),
             tostring(model.locked),tostring(model.can_start),tostring(model.can_clear),tostring(model.faction),model.scope or '',
-            tostring(model.difficulty),tostring(model.slots),tostring(model.checked),model.forced or '',model.note or ''}
+            tostring(model.difficulty),tostring(model.slots),tostring(model.checked),model.forced or '',model.note or '',model.time_note or ''}
         for _,section in ipairs(SECTIONS)do bits[#bits+1]=summaries[section.id] or ''end
         for _,group in ipairs(groups)do bits[#bits+1]=tostring(group.selected)end
         for _,item in ipairs(items)do bits[#bits+1]=tostring(item.mode)..tostring(item.enabled)..tostring(selected[item.id]==true)end
@@ -213,7 +214,10 @@ function P.new(e)
             local section=model.section
             local empty=#items==0 and (not faction and 'NO PLANET CHOSEN' or section=='enemies' and 'NO ENEMY FORCES CAN BE CHOSEN HERE'
                 or 'NO ELIGIBLE OPTIONS FOR THIS PLANET AND DIFFICULTY')
-            if section=='missions' or section=='modifiers' then
+            if section=='time' then
+                text('meta_right',model.time_note or '',right-2*s,at(b.meta),15,muted,'right',330*s)
+                text('meta',hint or 'STAYS ON THAT SIDE AFTER THE REROLL',left+2*s,at(b.meta),15,hint and white or muted,nil,270*s)
+            elseif section=='missions' or section=='modifiers' then
                 local limit=b.pager[1] and b.pager[1].x-10*s or right-2*s
                 for n,t in ipairs(b.pager)do
                     rect('pager'..n,t.x,t.y,t.w,t.h,992,glass(hover==t.id and 51 or 18))
@@ -250,14 +254,14 @@ function P.new(e)
                     rect('mark'..n,t.x+13*s,cy-4*s,8*s,8*s,995,picked and yellow or none)
                     text('label'..n,item.name,t.x+34*s,cy,15,picked and yellow or off and dim or white,nil,t.w-43*s)
                 else
-                    local on,out=item.mode=='require' or item.mode=='accept',item.mode=='exclude'
+                    local on,out=item.mode=='require' or item.mode=='accept' or item.mode=='chosen',item.mode=='exclude'
                     local rule=on and yellow or out and red
                     rect('row'..n,t.x,t.y,t.w,t.h,992,off and glass(5) or on and wash(YELLOW,over and 56 or 28)
                         or out and wash(RED,over and 52 or 26) or glass(over and 41 or 13))
                     rect('box'..n,t.x+14*s,cy-10*s,20*s,20*s,993,rule or outline)
                     rect('gap'..n,t.x+16*s,cy-8*s,16*s,16*s,994,on and yellow or dark)
                     rect('mark'..n,t.x+19*s,cy-1.5*s,10*s,3*s,995,out and red or none)
-                    local word=text('word'..n,WORDS[item.mode] or 'ANY',t.x+t.w-14*s,cy,14,rule or muted,'right',120*s)
+                    local word=text('word'..n,WORDS[item.mode] or (section=='time' and '' or 'ANY'),t.x+t.w-14*s,cy,14,rule or muted,'right',120*s)
                     text('label'..n,item.name,t.x+43*s,cy,19,off and dim or rule or white,nil,t.w-73*s-word)
                 end
             end

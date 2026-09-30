@@ -12,6 +12,15 @@ assert(S.find(packet(2,{81,85,65}),10,{[2]=true,[4]=true}))
 assert(S.find(packet(2,{82,85,59}),10,{[2]=true,[4]=true}))
 assert(not S.find(packet(2,{81,59,65}),10,{[2]=true,[4]=true}))
 assert(not S.find(packet(1,{59,65}),10,{[1]=true,[2]=true}))
+-- The day/night check vetoes an otherwise matching operation, and alone
+-- selects among the operations of the difficulty.
+local asked={}
+local function dark(op)asked[#asked+1]=op.row;return op.row==3 end
+local two=packet(2,{81,85,65});two.operations[2]={row=3,difficulty=10,missions={{native_type=85}}}
+assert(not S.find(two,10,{[2]=true,[4]=true},nil,nil,nil,function()return false end),'day/night veto')
+assert(S.find(two,10,{[2]=true,[4]=true},nil,nil,nil,function()return true end).row==2)
+assert(S.find(two,10,{},nil,nil,nil,dark).row==3 and #asked==2,'day/night alone')
+asked={};assert(not S.find(two,10,{[2]=true,[4]=true},nil,nil,nil,dark) and #asked==1,'asked only for a matching operation')
 local split=packet(1,{59});split.operations[2]={row=3,difficulty=10,missions={{native_type=81}}}
 assert(not S.find(split,10,{[1]=true,[2]=true}),'must match one operation')
 local n=0
