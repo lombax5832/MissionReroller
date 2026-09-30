@@ -46,4 +46,22 @@ s:advance(packet(10,{65}),10,call);assert(n==10)
 s:advance(nil,41,call);assert(not s.running and n==10,'unlimited mode still times out stalled refresh')
 s:start(packet(11,{65}),10,{[1]=true},42)
 s:advance(packet(11,{65}),223,call);assert(not s.running and n==10,'search time limit remains')
-print('search: existing match, AND, pacing, timeout, legacy budget, uncapped mode, cancellation, context passed')
+-- The operation in progress: a 92-byte record as hex, whose row (bytes 0-3),
+-- planet (16-17), difficulty (32) and in-progress flag (52) the dialog and
+-- the search read.
+local function active(row,planet,level,flag)
+    local out={};for i=1,92 do out[i]='00' end
+    out[1]=string.format('%02x',row%256);out[2]=string.format('%02x',math.floor(row/256))
+    out[17]=string.format('%02x',planet%256);out[18]=string.format('%02x',math.floor(planet/256))
+    out[33]=string.format('%02x',level);out[53]=flag or '01'
+    return table.concat(out)
+end
+local row,level=S.active_row({planet=269,active=active(49,269,10)})
+assert(row==49 and level==10,'The operation in progress on this planet')
+row,level=S.active_row({planet=300,active=active(300,300,7)})
+assert(row==300 and level==7,'Rows and planets span two bytes')
+assert(S.active_row({planet=268,active=active(49,269,10)})==nil,'Another planet')
+assert(S.active_row({planet=269,active=active(49,269,10,'00')})==nil,'Not in progress')
+assert(S.active_row({planet=269,active=active(49,269,10):sub(3)})==nil,'A truncated record')
+assert(S.active_row({planet=269})==nil and S.active_row(nil)==nil,'No record or no snapshot')
+print('search: existing match, AND, pacing, timeout, legacy budget, uncapped mode, cancellation, context, operation in progress passed')

@@ -115,6 +115,16 @@ local function operation_satisfies(group,op)
     end
     return found or not wanted
 end
+-- The operation in progress keeps its seed and missions whatever the campaign
+-- seed becomes (operation_identity preserves its row). Returns its row and
+-- difficulty when it belongs to the snapshot's planet.
+function S.active_row(s)
+    local record=s and s.active
+    if type(record)~='string' or #record~=184 then return nil end
+    local function byte(at)return tonumber(record:sub(at*2+1,at*2+2),16)end
+    if byte(52)==0 or byte(16)+byte(17)*256~=s.planet then return nil end
+    return byte(0)+byte(1)*256+byte(2)*65536+byte(3)*16777216,byte(32)
+end
 -- A city or megafactory is a planet region. Its operations occupy rows
 -- 30 + region*10 .. 39 + region*10, one per difficulty (11e44d0). Without a
 -- scope every operation of the planet is searched.

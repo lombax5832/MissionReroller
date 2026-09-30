@@ -101,7 +101,7 @@ local function start()
     if not up(dialog,'selected')[2] then action=2;frame()end
     assert(up(dialog,'selected')[2],'Survey checked')
     action='start';frame()
-    assert(M.status=='waiting_for_stable_inputs' and not M.request_search,'The pipeline took the request in the same frame')
+    assert(M.status=='waiting_for_stable_inputs' and not session.take_request(),'The pipeline took the request in the same frame')
     return mark
 end
 
@@ -109,7 +109,7 @@ end
 open();frame();assert(last().status=='Choose what the operation must contain')
 composition={passed=true,operations=1,templates=1,modifiers=1,checked=1,errors={},independent_bases=true,bases=1}
 local mark=start()
-M.search_options.limit=256
+session.view().request.limit=256
 local result=until_idle()
 local ok,missing=saw(mark,{{'Checking planet data',1},{'Searching seeds',2}});assert(ok,missing)
 assert(M.status=='search_exhausted' and result.status=='No match in 256 seeds; search again to continue' and result.tone=='warn',result.status)
@@ -141,7 +141,7 @@ mark=start()
 frame();assert(last().running and last().status=='Checking planet data' and last().step==1)
 action='cancel';frame();frame()
 assert(not last().running and last().status=='Search cancelled' and last().tone=='idle')
-assert(M.status=='cancelled' and not M.cancel_requested and not session.view().running)
+assert(M.status=='cancelled' and not session.take_cancel() and not session.view().running)
 for _=1,12 do frame()end;assert(M.status=='cancelled','The cancelled capture never completes')
 
 local text=table.concat(logs)

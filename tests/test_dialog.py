@@ -14,6 +14,7 @@ for forbidden in (b'VirtualProtect',b'VirtualAlloc',b'OpenProcess',b'CreateRemot
 assert b'Docked briefing panel' in source and b'CLEAR SELECTION' not in source
 lua=os.environ['HD2_LUAJIT']
 subprocess.run([lua,str(ROOT/'tests/test_reroll_session.lua'),str(ROOT/'src/reroll_session.lua')],check=True)
+subprocess.run([lua,str(ROOT/'tests/test_search_session.lua'),str(ROOT/'src/search_session.lua')],check=True)
 subprocess.run([lua,str(ROOT/'tests/test_filter_catalogue.lua'),str(ROOT/'src')],check=True)
 subprocess.run([lua,str(ROOT/'tests/test_mission_compatibility.lua'),str(ROOT/'src')],check=True)
 subprocess.run([lua,str(ROOT/'tests/test_template_environments.lua'),str(ROOT/'src')],check=True)

@@ -84,13 +84,13 @@ local function tick()
     if observe_constellations then observe_constellations(now)end
     local down=focused and user32.GetAsyncKeyState(0x11)<0 and user32.GetAsyncKeyState(0x10)<0 and user32.GetAsyncKeyState(0x78)<0
     if M.dialog_enabled then down=false end
-    if M.cancel_requested then
-        M.cancel_requested=nil;armed=nil
+    if reroll_session.take_cancel() then
+        armed=nil
         if advance_prediction_search then advance_prediction_search('cancel',now)end
         if advance_live_publication then advance_live_publication('cancel',now)end
         reroll_session.finish('cancelled')
     end
-    local requested=M.request_search;M.request_search=nil
+    local requested=reroll_session.take_request()
     if requested or (down and not key_down) then
         if advance_live_publication and advance_live_publication('cancel',now) then key_down=down;return end
         if advance_prediction_search and advance_prediction_search('cancel',now) then key_down=down;return end

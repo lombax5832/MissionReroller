@@ -244,8 +244,8 @@ do
         if not router then restore_escape(not focused)end
         local run=reroll_session.view()
         if running and not run.running then
-            running=false;report=M.search_report or run.caption
-            report_tone=M.search_report and 'warn' or run.tone
+            running=false;report=run.report or run.caption
+            report_tone=run.report and 'warn' or run.tone
             if run.outcome=='publication_test_passed' and router then router:close()end
         end
         local pulse=binding and focused and binding:step() or false
@@ -361,7 +361,7 @@ do
         if s then
             gap.fixed=false
             if scope then
-                local row,level=M.active_row(s)
+                local row,level=Search.active_row(s)
                 gap.fixed=row~=nil and level==difficulty and accepts(row)
             end
         elseif not retained then gap.fixed=false end
