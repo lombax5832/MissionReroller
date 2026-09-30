@@ -18,7 +18,7 @@ PowerShell session; Codex's current shell is not elevated.
 2. Open **PowerShell as Administrator** and run:
 
    ```powershell
-   & 'C:\Users\ipoda\Documents\Projects\HD2\MissionReroller\scripts\capture_network.ps1'
+   & '<repo>\scripts\capture_network.ps1'
    ```
 
 3. Press Enter at the ready prompt and return to the game. Leave it idle for
@@ -54,8 +54,8 @@ Packet Monitor documentation: [capture options](https://learn.microsoft.com/wind
 ## Analyze
 
 ```powershell
-& 'C:\Users\ipoda\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' -B `
-  'C:\Users\ipoda\Documents\Projects\HD2\MissionReroller\scripts\analyze_network.py' `
+python -B `
+  '<repo>\scripts\analyze_network.py' `
   '<capture-directory>'
 ```
 
