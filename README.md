@@ -113,7 +113,7 @@ The mod's log is `MissionRerollerExperiment.log` in
 | `game.dll hash mismatch` or `executable hash mismatch` | The game was updated. Wait for a release for the new build. |
 
 When reporting a problem, include both logs. Near the top, the mod's log
-names its version (`Mission Reroller 0.23.0 docked dialog`) and, from the
+names its version (`Mission Reroller 0.24.0 docked dialog`) and, from the
 first frame, every Lua mod the loaders started: a `MODS` count, then one
 `MOD <name> version=<version> status=<status>` line each. A version reads
 `unknown` when that mod does not publish one.

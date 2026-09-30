@@ -1,9 +1,9 @@
-# Host-injected runtimes and the reroll session
+# Host-injected runtimes and the reroll session — v0.24.0
 
 ## Status
 
 **Not yet validated in game.** The build and all 17 test drivers pass on
-branch `architecture/host-and-session`.
+v0.24.0.
 
 ## What changed
 
@@ -36,7 +36,7 @@ Purge / Deploy and launch.
 1. **Load.** `BingusSharedLoader.log` shows
    `mods/ipodalexei/mission_reroller_experiment: loaded`.
    `MissionRerollerExperiment.log` starts with
-   `Mission Reroller 0.23.0 docked dialog; supervised live publication; F7 on the galactic map; background progress enabled`
+   `Mission Reroller 0.24.0 docked dialog; supervised live publication; F7 on the galactic map; background progress enabled`
    and `build=25480438 hashes=verified helper_signature=verified`.
 2. **A match.** On the galactic map, open a planet, press F7, check one
    common mission type and start the search.

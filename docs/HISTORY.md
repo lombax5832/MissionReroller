@@ -5,6 +5,38 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
+**Not yet validated in game: v0.24.0 runtimes on a host, one reroll session.**
+This release restructures the code; players should see only the fix below.
+- **Runtimes on a host.** The adapter and the five runtimes used to be
+  appended raw into one chunk. They shared about 125 locals through the
+  order they were appended in, and the build patched their source text with
+  a chain of string replaces, some of which could fail silently. Each one now
+  runs as a function of `host`, `lib` and `hooks`. The build's mode is data
+  (`build_identity_probe.config()`) and no runtime text is rewritten. The
+  main chunk went from 127 locals to 57. `tests/test_runtime_host.py` checks
+  that every runtime file is embedded unchanged and creates each one with a
+  fake host.
+- **One reroll session.** `src/reroll_session.lua` is now the only writer of
+  the run's phase, and the dialog reads its `view()` instead of keeping its
+  own lists of final statuses.
+- **Fix: runs that never ended.** A comparison could pass without a search
+  being seeded (`composition_test_passed` without independent operation
+  bases, or a capture missing level or composition data). The dialog then
+  showed "running" until the player cancelled. That path now ends with
+  **Seed prediction unavailable for this planet** and logs
+  `LUA_SEARCH_NOT_STARTED`.
+- **Other fixes.** Cleanup after `STOPPED:` no longer overwrites the status,
+  and a new search clears the previous search's report.
+- **Log.** `LUA_SEARCH_STARTED` and `LUA_SEARCH_MATCH` print the real
+  `read_only=false`.
+- **Tooling.** `.gitattributes` keeps `.lua` files LF on checkout, which
+  fixes `test_core_package`, `test_preflight` and `test_probe` wherever
+  `core.autocrlf` is on. `scripts/emulate_seed.py` now finds
+  `tools/seed-emulator-deps` from a worktree.
+
+All 17 test drivers pass. The in-game plan is
+[RUNTIME_HOST_TEST.md](RUNTIME_HOST_TEST.md).
+
 **Validated in game: v0.23.0 no hitch when a search starts.** Before a
 search the mod checks the board every 0.5 s until four checks agree, each
 check capturing it twice. A capture is about 50 ms of reads offline, and
