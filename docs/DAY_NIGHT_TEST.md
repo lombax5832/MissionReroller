@@ -12,6 +12,21 @@ The war table shows the local time under the cursor as `SEST hh:mm:ss`
 when you hover a planet's surface. Use it to read a mission's time of day:
 hover the mission's marker. 06:00 is dawn, 12:00 noon, 18:00 dusk.
 
+## Result, 2026-09-30
+
+Steps 1 to 3 and 7 passed. Four searches matched with `holds=true`, then
+`DAYNIGHT_VERIFIED holds=true` and `PUBLICATION_STATE_VERIFIED`:
+
+| Planet | Side | Day, buffer | Missions (minutes) |
+| --- | --- | --- | --- |
+| 201 | Night | 56598 s, 9000 s | 61, 87, 73 |
+| 201 | Day | 56598 s, 9000 s | 582, 550, 612 |
+| 100 | Day | 6606 s, 1514 s | 581, 562, 604 |
+| 100 | Night | 6606 s, 1514 s | 1269, 1263, 1291 |
+
+The player confirmed the missions were on the chosen side. Steps 4 to 6
+(a city, the countdown, the twilight band) are still to run.
+
 ## Setup
 
 Import `releases/Mission-Reroller-v0.27.0.zip` and the loader into Arsenal

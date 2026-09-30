@@ -5,7 +5,7 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
-**Not yet validated in game: v0.27.0 day or night.** The panel has a
+**Validated in game: v0.27.0 day or night.** The panel has a
 fourth section, TIME OF DAY: Any time, Day or Night. With Day or Night the
 matched operation's missions stay on that side for 2.5 hours after the
 reroll, clear of the 30 minutes around dawn and dusk. On planets and moons
@@ -34,6 +34,17 @@ side, the panel counts down to when it will be ready instead of searching.
 
 The release gate and every capture replay pass. The in-game plan is
 [DAY_NIGHT_TEST.md](DAY_NIGHT_TEST.md).
+
+Validated on 2026-09-30: the log shows `Mission Reroller 0.27.0` and
+`build=25480438 hashes=verified signatures=37 anchors=24 verified`. Four
+searches matched, published and verified, each with `holds=true`,
+`DAYNIGHT_VERIFIED holds=true` and `PUBLICATION_STATE_VERIFIED`: night and
+day on planet 201 (`day_s=56598 buffer_s=9000`, missions at 01:01 to 01:31
+and 09:10 to 10:12), and day and night on planet 100, whose short days cap
+the buffer (`day_s=6606 buffer_s=1514`, missions at 09:22 to 10:04 and
+21:03 to 21:31). The player confirmed the missions were on the chosen
+side. The city steps, the countdown and a twilight drop have not been
+run yet.
 
 **Not yet validated in game: v0.25.0 every offset in one file.** Players
 should see no change; the log's startup line becomes
