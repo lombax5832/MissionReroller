@@ -480,10 +480,12 @@ assert(not tostring(M.status):find('STOPPED',1,true),'A blocked map does not sto
 up(up(dialog,'restore_escape'),'escape',nil,true);up(up(dialog,'hold_escape'),'escape_blocked',false,true)
 -- A constellation input failure must leave mission and modifier filters usable.
 local built={faction=2,missions={{id=2,name='Survey'}},constellation_groups={}}
-up(real_catalogue,'make_composition_inputs',function()return {effects={},config={}}end,true)
-up(real_catalogue,'make_constellation_inputs',function()error('Missing global effects')end,true)
-up(real_catalogue,'FilterCatalogue',{build=function(_,_,_,_,_,_,tags)assert(tags==nil);return built end,
-    constellations=function()error('Inputs failed before this call')end},true)
+-- The planet model returns the catalogue and the tag input failure
+-- (tests/test_planet_model.lua); the dialog logs the failure once.
+up(real_catalogue,'Planet',{bind=function(_,_,_,_,board,planet)
+    assert(board==0 and planet==268)
+    return {catalogue=function(s,d)assert(s.planet==268 and d==10);return built,'Missing global effects' end}
+end},true)
 jit.flush()
 local before=#logs
 assert(real_catalogue({planet=268,board=0},10)==built and real_catalogue({planet=268,board=0},10)==built)

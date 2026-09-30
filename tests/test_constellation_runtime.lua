@@ -49,7 +49,8 @@ poke(board+0x4168d0,descriptor(72))
 poke(board+0xffc08,word(1))
 poke(board+0xf9a10+40,word(3));poke(board+0xf9a10+48,word(72));poke(board+0xf9a10+52,word(seed))
 -- Predicted operations receive base tags from the mission seed alone.
-local annotate=bind(read,board,268)
+local Planet=up(ready,'Planet')
+local annotate=bind(Planet.bind(read,up(ready,'u'),decode,game,board,268))
 local op={difficulty=10,effect_id=4294967295,missions={{native_type=72,seed=seed},{native_type=72,seed=99}}}
 annotate(op);assert(op.missions[1].tags[4] and op.missions[2].tags[4] and not op.missions[1].tags[2])
 poke(game+0x3773420+73*0x380+8,word(0))
@@ -129,15 +130,20 @@ local s={board=board,planet=268,seed=500,fingerprint='stable',operations=string.
 local matched,existing,evaluated
 up(ready,'snapshot',function()return s end,true)
 up(ready,'hooks').validate_search_request=nil
-up(ready,'composition_factory',function()return function()return {passed=true,independent_bases=true}end end,true)
-up(ready,'candidate_factory',function(take)return function(candidate,difficulty)
-    take(board+0x12444c,4);evaluated=candidate
-    return {{valid=true,row=7,id=1,category=0,faction=2,difficulty=10,effect_id=4294967295,modifiers={},
-        missions={{native_type=72,seed=candidate,level_index=1},{native_type=72,seed=candidate+1,level_index=2}}},
-        -- The complete board also holds another difficulty.
-        not difficulty and {valid=true,row=1,id=2,category=0,faction=2,difficulty=4,effect_id=4294967295,modifiers={},
-            missions={{native_type=72,seed=candidate+2,level_index=1}}} or nil}
-end end,true)
+-- The planet's tag inputs are real; its predictor is scripted.
+up(ready,'Planet',{capture=function()return function()return {passed=true,independent_bases=true}end end,
+    bind=function(take,...)
+        local planet=Planet.bind(take,...)
+        planet.predictor=function()return function(candidate,difficulty)
+            take(board+0x12444c,4);evaluated=candidate
+            return {{valid=true,row=7,id=1,category=0,faction=2,difficulty=10,effect_id=4294967295,modifiers={},
+                missions={{native_type=72,seed=candidate,level_index=1},{native_type=72,seed=candidate+1,level_index=2}}},
+                -- The complete board also holds another difficulty.
+                not difficulty and {valid=true,row=1,id=2,category=0,faction=2,difficulty=4,effect_id=4294967295,modifiers={},
+                    missions={{native_type=72,seed=candidate+2,level_index=1}}} or nil}
+        end end
+        return planet
+    end},true)
 up(ready,'on_existing_match',function(_,op)existing=op;session.finish('publication_test_passed')end,true)
 up(advance,'on_search_match',function(job)matched=job end,true)
 jit.flush()

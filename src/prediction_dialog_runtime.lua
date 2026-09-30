@@ -3,11 +3,9 @@
 -- A runtime factory: the assembler runs this file as function(host,lib,hooks).
 local M,emit,read,pointer,page,u,hex,snapshot=host.M,host.emit,host.read,host.pointer,host.page,host.u,host.hex,host.snapshot
 local reroll_session=host.reroll_session
-local Panel,Hint,Binding,Compatibility,FilterCatalogue,EscapeGate=lib.Panel,lib.Hint,lib.Binding,lib.Compatibility,lib.FilterCatalogue,lib.EscapeGate
+local Panel,Hint,Binding,FilterCatalogue,EscapeGate=lib.Panel,lib.Hint,lib.Binding,lib.FilterCatalogue,lib.EscapeGate
 local make_gate,make_router,window_signatures,make_cursor=lib.make_gate,lib.make_router,lib.window_signatures,lib.make_cursor
-local Search,Constellations,make_constellation_inputs=lib.Search,lib.Constellations,lib.make_constellation_inputs
-local make_composition_inputs,make_config,make_effects=lib.make_composition_inputs,lib.make_config,lib.make_effects
-local mission_eligible,make_environments=lib.mission_eligible,lib.make_environments
+local Search,Constellations,Planet=lib.Search,lib.Constellations,lib.Planet
 local default_limit=hooks.default_limit
 local api,game,ffi,kernel,user32
 host.when_initialized(function(n)api,game,ffi,kernel,user32=n.api,n.game,n.ffi,n.kernel,n.user32 end)
@@ -211,15 +209,10 @@ do
         return s,d,view
     end
     local function catalogue_for(s,d,within)
-        local inputs=make_composition_inputs(read,u,api.pointer,game,s.board,make_config,make_effects,mission_eligible,make_environments)
-        local result=FilterCatalogue.build(inputs,s,d,u,Search.options,Compatibility,nil,nil,
+        -- Mission and modifier filters survive a constellation input failure.
+        local result,err=Planet.bind(read,u,api.pointer,game,s.board,s.planet).catalogue(s,d,
             within and function(row)return Search.in_scope(row,within)end)
-        -- Mission and modifier filters must survive a constellation input failure.
-        local ok,err=pcall(function()
-            local tags=make_constellation_inputs(read,u,api.pointer,game,s.board,inputs.effects,inputs.config)
-            FilterCatalogue.constellations(result,tags,Constellations.names,s.planet,d,Search.options)
-        end)
-        if not ok and tostring(err)~=tag_error then tag_error=tostring(err);emit('CONSTELLATION_CATALOGUE_BLOCKED '..tag_error)end
+        if err and tostring(err)~=tag_error then tag_error=tostring(err);emit('CONSTELLATION_CATALOGUE_BLOCKED '..tag_error)end
         return result
     end
     validate_search_request=function(s,request)

@@ -40,11 +40,11 @@ up(tick,'snapshot',fake_snapshot,true);up(ready,'snapshot',fake_snapshot,true);u
 up(tick,'observe_constellations',nil,true)
 -- The search predicts boards through frozen reads; nothing here matches.
 up(ready,'read',function(_,n)return string.rep('\0',n)end,true)
-up(ready,'composition_factory',function(take)return function()take(65536,1);return {passed=true,independent_bases=true}end end,true)
-up(ready,'candidate_factory',function(take)return function(seed)
-    take(65536,1)
-    return {{valid=true,row=3,difficulty=10,missions={{native_type=0,seed=seed,level_index=1}}}}
-end end,true)
+up(ready,'Planet',{capture=function(take)return function()take(65536,1);return {passed=true,independent_bases=true}end end,
+    bind=function(take)return {predictor=function()return function(seed)
+        take(65536,1)
+        return {{valid=true,row=3,difficulty=10,missions={{native_type=0,seed=seed,level_index=1}}}}
+    end end}end},true)
 -- Selecting the matching operation writes the map UI; the fake confirms it.
 up(existing,'select_match',function(snap)
     up(advance,'selector',{started=now,context=snap.context,planets=snap.selection:sub(1,8)},true)

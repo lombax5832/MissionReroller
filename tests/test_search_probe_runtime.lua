@@ -17,15 +17,15 @@ H.natives(update,{api={pointer=function()return nil end,time=function()return no
 local function snapshot()return live,unavailable end
 up(tick,'snapshot',snapshot,true);up(ready,'snapshot',snapshot,true)
 up(ready,'read',function(_,n)return string.rep('\0',n)end,true)
-up(ready,'composition_factory',function(take)return function()take(65536,1);return {passed=good,independent_bases=true}end end,true)
 local accepted
-up(ready,'candidate_factory',function(take)return function(seed,difficulty,accepts)
+up(ready,'Planet',{capture=function(take)return function()take(65536,1);return {passed=good,independent_bases=true}end end,
+    bind=function(take)return {predictor=function()return function(seed,difficulty,accepts)
     evaluations=evaluations+1;first=first or seed;accepted=accepts
     if difficulty then assert(difficulty==10);narrowed=narrowed+1 else complete=complete+1 end
     for _=1,1200 do take(65536,1)end
     return {{valid=true,row=29,difficulty=10,missions={{native_type=0,seed=seed,level_index=1},
         {native_type=22,seed=seed,level_index=2},{native_type=match and 7 or 28,seed=seed,level_index=3}}}}
-end end,true)
+end end}end},true)
 -- The capture hands each run to the search. Open it in the session first, as
 -- identity_probe_runtime does, once the idle pipeline has settled the last.
 local session=up(tick,'reroll_session');local on_ready=ready

@@ -10,6 +10,14 @@ The words this project uses for its own concepts. Game facts are in
 - **Prediction**: the board that the Lua port of the game's operation
   generator computes for a candidate seed. It is compared with the live board
   before any search.
+- **Planet model** (`src/planet_model.lua`, `lib.Planet`): the one way to
+  build a planet's prediction. `Planet.bind(read, u, pointer, game, board,
+  planet)` decodes that planet through one read function (live, cached or
+  frozen) and offers its `inputs()`, `constellation_inputs()`,
+  `predictor(definitions)` and `catalogue(snapshot, difficulty, accepts)`;
+  the mission and tag inputs share one configuration and effects decoder.
+  `Planet.capture(read, u, pointer, game)` compares a snapshot's board with
+  its prediction.
 - **Filters**: the player's request in the dialog: the missions that are
   required, the world modifiers, and the enemy forces (constellations) to
   accept or exclude.

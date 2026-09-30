@@ -49,7 +49,9 @@ local function sample(with_tags)
     local inputs={effect_id=function()return 4294967295 end,difficulty=function()return 1,3 end,
         templates=function()return {{index=5,modifiers={}}}end,
         candidates=function()return {{id=79},{id=66},{id=12},{id=150}}end,extra_mission=function()return nil end}
-    return C.build(inputs,s,10,function(_,offset)return offset==36 and 2 or 0 end,S.options,nil,with_tags and tags,labels)
+    local c=C.build(inputs,s,10,function(_,offset)return offset==36 and 2 or 0 end,S.options)
+    if with_tags then C.constellations(c,tags,labels,s.planet,10,S.options)end
+    return c
 end
 local function ids(group)local out={};for i,option in ipairs(group.list)do out[i]=option.id end;return table.concat(out,',')end
 local c=sample(true);local groups=c.constellation_groups
@@ -100,7 +102,10 @@ do
     local asked
     local stub={settings=function()return {draws=1,candidates={{id=14,weight=1}}}end,disabled=function()return false end,
         mission=function()return {faction=3,exclusions={}}end,campaign=function(_,effect)asked=effect;return {}end}
-    local function build(accepts)return C.build(inputs,s,10,u,S.options,nil,stub,labels,accepts)end
+    local function build(accepts)
+        local c=C.build(inputs,s,10,u,S.options,nil,accepts)
+        C.constellations(c,stub,labels,s.planet,10,S.options);return c
+    end
     local whole=build(nil)
     assert(#whole.missions==2 and #whole.modifiers==2 and asked==4294967295,'The whole planet mixes city and planet options')
     local city=build(function(row)return S.in_scope(row,{region=1})end)

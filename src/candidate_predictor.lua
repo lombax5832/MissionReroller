@@ -1,7 +1,7 @@
 -- Bind the campaign context once; candidate seeds never read displayed rows.
-return function(make_inputs,make_config,make_effects,eligible,make_environments,make_levels,make_bases,predict)
-    return function(read,u,pointer,game,board,definitions,planet)
-        local inputs=make_inputs(read,u,pointer,game,board,make_config,make_effects,eligible,make_environments)
+-- The planet model (planet_model.lua) passes its decoded inputs.
+return function(make_levels,make_bases,predict)
+    return function(read,u,pointer,game,board,definitions,planet,inputs)
         -- Decoded rule values are immutable within this frozen context. Cache
         -- seed-independent queries; their original byte dependencies remain in
         -- the read set and are revalidated before any candidate is accepted.
