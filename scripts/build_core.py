@@ -19,6 +19,16 @@ def entry_path():
     return ROOT / 'src' / (MODULE + '.lua')
 
 
+def inline_adapter():
+    """experiment_adapter.lua for the older research builds, which append it
+    inline so their runtimes share its locals: the default mode, and without
+    the host table that build_identity_probe.source() returns from it."""
+    text = (ROOT / 'src' / 'experiment_adapter.lua').read_text()
+    body, marker, host = text.rpartition('\n-- Runtime host:')
+    assert marker and text.count(marker) == 1 and host.count('\nreturn {') == 1, 'adapter host return moved'
+    return 'local config={}\n' + body + '\n'
+
+
 def release_path():
     return ROOT / 'releases' / f'{NAME.replace(" ", "-")}-v{VERSION}.zip'
 

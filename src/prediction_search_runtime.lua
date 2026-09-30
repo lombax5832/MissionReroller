@@ -1,4 +1,15 @@
 -- Controlled read-only search checkpoint: fixed filter, no UI or publication.
+-- A runtime factory: the assembler runs this file as function(host,lib,hooks).
+-- hooks: bind_constellations, on_existing_match, on_search_match, and
+-- validate_search_request, which the assembler adds once the dialog exists.
+local M,emit,read,u,snapshot,config=host.M,host.emit,host.read,host.u,host.snapshot,host.config
+local reroll_session=host.reroll_session
+local Search,composition_factory=lib.Search,lib.composition_factory
+local candidate_factory,make_search_job=lib.candidate_factory,lib.make_search_job
+local bind_constellations,on_existing_match,on_search_match=hooks.bind_constellations,hooks.on_existing_match,hooks.on_search_match
+local api,game,ffi,kernel
+host.when_initialized(function(n)api,game,ffi,kernel=n.api,n.game,n.ffi,n.kernel end)
+local on_prediction_ready,advance_prediction_search
 local current_search,search_started,last_progress,max_slice
 local slices,step_time,context_time
 local wait_started,wait_total,last_wait_poll
@@ -52,16 +63,17 @@ on_prediction_ready=function(s,definitions,now)
     M.search_report=nil
     local constellations
     if request.constellations and next(request.constellations.groups)then
-        if not bind_constellations then M.status='search_failed';emit('FILTER_BLOCKED Constellation filters unavailable');return end
+        if not bind_constellations then reroll_session.finish('search_failed');emit('FILTER_BLOCKED Constellation filters unavailable');return end
         constellations={groups={}}
         for group,tags in pairs(request.constellations.groups)do
             local copy={};for tag,value in pairs(tags)do copy[tag]=value end
             constellations.groups[group]=copy
         end
     end
+    local validate_search_request=hooks.validate_search_request
     if validate_search_request then
         local ok,err=pcall(validate_search_request,s,request)
-        if not ok then M.status='search_failed';emit('FILTER_BLOCKED '..tostring(err));return end
+        if not ok then reroll_session.finish('search_failed');emit('FILTER_BLOCKED '..tostring(err));return end
     end
     if M.dialog_enabled and on_existing_match then
         if constellations then
@@ -69,7 +81,7 @@ on_prediction_ready=function(s,definitions,now)
                 local annotate=bind_constellations(read,s.board,s.planet)
                 for _,op in ipairs(s.decoded.operations)do annotate(op,u(s.operations,op.row*92+28),op.operation_id)end
             end)
-            if not ok then M.status='search_failed';emit('FILTER_BLOCKED '..tostring(err));return end
+            if not ok then reroll_session.finish('search_failed');emit('FILTER_BLOCKED '..tostring(err));return end
         end
         local existing=Search.find(s.decoded,request.difficulty,required,modifiers,constellations,scope)
         if existing then M.search_attempts=0;on_existing_match(s,existing,now);return end
@@ -78,7 +90,7 @@ on_prediction_ready=function(s,definitions,now)
     -- seed can change it, so searching would only exhaust the budget.
     local fixed_row,fixed_difficulty=M.active_row(s)
     if scope and fixed_row and fixed_difficulty==request.difficulty and Search.in_scope(fixed_row,scope)then
-        M.status='search_failed';M.search_report='This operation is in progress; its missions are fixed'
+        reroll_session.finish('search_failed');M.search_report='This operation is in progress; its missions are fixed'
         emit('FILTER_BLOCKED operation in progress row='..fixed_row..'; its missions cannot be rerolled');return
     end
     local function baseline(frozen_read)
@@ -137,7 +149,7 @@ on_prediction_ready=function(s,definitions,now)
         return ready,reason
     end
     slices,step_time,context_time=0,0,0
-    search_started=now;last_progress=now;max_slice=0;M.search_result=nil;M.status='search_running'
+    search_started=now;last_progress=now;max_slice=0;M.search_result=nil;reroll_session.advance('search_running')
     wait_started=nil;wait_total=0;last_wait_poll=-math.huge
     local names={};for id,opt in ipairs(Search.options)do if required[id]then names[#names+1]=opt.name end end
     local modifier_rules={};for id,mode in pairs(modifiers)do modifier_rules[#modifier_rules+1]=string.format('%u:%s',id,mode)end
@@ -156,7 +168,7 @@ on_prediction_ready=function(s,definitions,now)
         end
         table.sort(tag_rules);emit('LUA_SEARCH_CONSTELLATIONS '..table.concat(tag_rules,', '))
     end
-    emit(string.format('LUA_SEARCH_STARTED planet=%d region=%s baseline_seed=%u first_seed=%u resumed=%s difficulty=%d required=%s limit=%d read_only=true',
+    emit(string.format('LUA_SEARCH_STARTED planet=%d region=%s baseline_seed=%u first_seed=%u resumed=%s difficulty=%d required=%s limit=%d read_only='..tostring(M.read_only),
         s.planet,scope and scope.region or 'all',s.seed,first,tostring(resumed==true),request.difficulty,table.concat(names,' + '),limit))
 end
 advance_prediction_search=function(action,now)
@@ -181,10 +193,10 @@ advance_prediction_search=function(action,now)
         (step_time-context_time)*1000,context_time*1000,tostring(compiled))
     if job.status=='running' then
         if job.waiting then
-            M.status='search_waiting_backend'
+            reroll_session.advance('search_waiting_backend')
             if not wait_started then wait_started=now;emit('LUA_SEARCH_WAIT '..tostring(job.wait_reason))end
         else
-            M.status='search_running'
+            reroll_session.advance('search_running')
             if wait_started then
                 wait_total=wait_total+now-wait_started;wait_started=nil
                 emit(string.format('LUA_SEARCH_RESUMED wait_seconds=%.3f; revalidating captured inputs',wait_total))
@@ -195,7 +207,7 @@ advance_prediction_search=function(action,now)
             emit(string.format('LUA_SEARCH_PROGRESS attempts=%d seeds_per_second=%.0f phase=%s max_slice_ms=%.3f %s',job.attempts,job.attempts/elapsed,job.phase,max_slice,timing))
         end
     else
-        M.search_result=job;M.status='search_'..job.status
+        M.search_result=job;if job.status=='matched' then reroll_session.advance('search_matched')else reroll_session.finish('search_'..job.status)end
         if job.status=='matched' then
             resume=nil
             local missions={};for _,mission in ipairs(job.operation.missions)do missions[#missions+1]=string.format('%d/%u/level%d',mission.native_type,mission.seed,mission.level_index)end
@@ -208,7 +220,7 @@ advance_prediction_search=function(action,now)
                 for i,mission in ipairs(job.operation.missions)do tags[i]=mission.native_type..':'..tags[i]end
                 emit('LUA_SEARCH_MATCH_CONSTELLATIONS row='..job.operation.row..' missions='..table.concat(tags,','))
             end
-            emit(string.format('LUA_SEARCH_MATCH seed=%u row=%d attempts=%d seeds_per_second=%.0f ranges=%d bytes=%d max_slice_ms=%.3f %s missions=%s read_only=true published=false selected=false',
+            emit(string.format('LUA_SEARCH_MATCH seed=%u row=%d attempts=%d seeds_per_second=%.0f ranges=%d bytes=%d max_slice_ms=%.3f %s missions=%s read_only='..tostring(M.read_only)..' published=false selected=false',
                 job.seed,job.operation.row,job.attempts,job.attempts/elapsed,job.ranges,job.bytes,max_slice,timing,table.concat(missions,',')))
             if on_search_match then on_search_match(job,now)end
         else
@@ -226,4 +238,6 @@ advance_prediction_search=function(action,now)
     end
     return true
 end
-emit('Lua search checkpoint: ICBM + Geological Survey + Eradicate, difficulty 10; same shortcut cancels; alt-tab supported; no refresh or selection')
+emit('Lua search checkpoint: ICBM + Geological Survey + Eradicate, difficulty 10; same shortcut cancels; alt-tab supported; '..config.search_outcome)
+return {on_prediction_ready=on_prediction_ready,advance_prediction_search=advance_prediction_search,
+    search_clock=search_clock,default_limit=default_limit}

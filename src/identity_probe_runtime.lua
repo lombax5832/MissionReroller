@@ -1,4 +1,18 @@
 -- Diagnostic only: nothing here publishes, calls the game generator or selects.
+-- A runtime factory: the assembler runs this file as function(host,lib,hooks).
+-- Each hook is nil when its runtime is not in the build; without the
+-- search's clock the capture slices on the adapter's timer.
+local M,emit,read,u,hex,snapshot=host.M,host.emit,host.read,host.u,host.hex,host.snapshot
+local reroll_session=host.reroll_session
+local initialize,config=host.initialize,host.config
+local make_rng,sha256,make_probe,predict_identity=lib.make_rng,lib.sha256,lib.make_probe,lib.predict_identity
+local make_special_inputs,make_level_inputs,make_level_verification=lib.make_special_inputs,lib.make_level_inputs,lib.make_level_verification
+local choose_level,composition_factory,ModInventory=lib.choose_level,lib.composition_factory,lib.ModInventory
+local dialog_tick,dialog_release,observe_constellations=hooks.dialog_tick,hooks.dialog_release,hooks.observe_constellations
+local on_prediction_ready,advance_prediction_search=hooks.on_prediction_ready,hooks.advance_prediction_search
+local advance_live_publication,search_clock=hooks.advance_live_publication,hooks.search_clock
+local api,game,ffi,kernel,user32
+host.when_initialized(function(n)api,game,ffi,kernel,user32=n.api,n.game,n.ffi,n.kernel,n.user32 end)
 local original_update,original_shutdown=rawget(_G,'update'),rawget(_G,'shutdown')
 local stopped,key_down,armed=false,true,nil
 local mods_logged=false
@@ -43,8 +57,8 @@ local function prepare()
     probe=make_probe(sliced_read,u,predict_identity,make_special_inputs(sliced_read,u,api.pointer),
         function(cached_read)return make_level_inputs(cached_read,u,game)end,
         make_level_verification(make_rng,choose_level),composition_factory(sliced_read,u,api.pointer,game))
-    M.status='ready_read_only'
-    emit('LUA_IDENTITY_READY signatures=verified read_only=true')
+    reroll_session.advance('ready_read_only')
+    emit('LUA_IDENTITY_READY signatures=verified read_only='..tostring(M.read_only))
 end
 local function capture(s)
     local ok,result=xpcall(function()return probe:capture(s)end,function(err)
@@ -56,7 +70,7 @@ local function capture(s)
     -- weaken graph bounds or carry a prior partially stable sample forward.
     previous=nil;stable=0;capture_failures=capture_failures+1
     last_capture_error=string.format('planet=%d seed=%u %s',s.planet,s.seed,tostring(result))
-    M.status='capture_retry'
+    reroll_session.advance('capture_retry')
     if capture_failures==1 then emit('LUA_CAPTURE_RETRY '..last_capture_error)end
     return nil
 end
@@ -74,22 +88,23 @@ local function tick()
         M.cancel_requested=nil;armed=nil
         if advance_prediction_search then advance_prediction_search('cancel',now)end
         if advance_live_publication then advance_live_publication('cancel',now)end
-        M.status='cancelled'
+        reroll_session.finish('cancelled')
     end
     local requested=M.request_search;M.request_search=nil
     if requested or (down and not key_down) then
         if advance_live_publication and advance_live_publication('cancel',now) then key_down=down;return end
         if advance_prediction_search and advance_prediction_search('cancel',now) then key_down=down;return end
-        armed=now;poll=nil;previous=nil;stable=0;M.status='waiting_for_stable_inputs'
+        armed=now;poll=nil;previous=nil;stable=0;reroll_session.advance('waiting_for_stable_inputs')
         capture_failures=0;last_capture_error=nil;M.last_result=nil;M.level_result=nil;M.composition_result=nil
-        emit('LUA_IDENTITY_ARMED; no refresh or selection will occur')
+        emit('LUA_IDENTITY_ARMED; '..config.armed)
     end
     key_down=down
-    if advance_prediction_search then advance_prediction_search('tick',now)end
-    if advance_live_publication then advance_live_publication('tick',now)end
-    if not armed then poll=nil;return end
+    local searching=advance_prediction_search and advance_prediction_search('tick',now)
+    local publishing=advance_live_publication and advance_live_publication('tick',now)
+    -- With no stage left to run, the run ends where it stands.
+    if not armed then poll=nil;if not searching and not publishing then reroll_session.settle()end;return end
     if now-armed>30 then
-        armed=nil;poll=nil;M.status='capture_timeout';emit('LUA_IDENTITY_BLOCKED stable map inputs unavailable; press shortcut to retry')
+        armed=nil;poll=nil;reroll_session.finish('capture_timeout');emit('LUA_IDENTITY_BLOCKED stable map inputs unavailable; press shortcut to retry')
         if last_capture_error then emit('LUA_CAPTURE_DETAIL failures='..capture_failures..' last='..last_capture_error)end
         return
     end
@@ -98,7 +113,7 @@ local function tick()
         last_poll=now
         poll=coroutine.create(function()
             local s,why=snapshot(true)
-            if not s then previous=nil;stable=0;M.status=why or 'waiting';return end
+            if not s then previous=nil;stable=0;reroll_session.advance('waiting_for_stable_inputs',why or 'waiting');return end
             local captured=capture(s)
             if not captured then return end
             local again=snapshot(true)
@@ -123,27 +138,27 @@ local function tick()
     if capture_failures>0 then emit('LUA_CAPTURE_RECOVERED rejected_captures='..capture_failures)end
     local start=api.time()
     local result=probe:compare(captured)
-    M.status=result.passed and 'identity_test_passed' or 'identity_test_mismatch'
+    if result.passed then reroll_session.advance('identity_test_passed')else reroll_session.finish('identity_test_mismatch')end
     M.last_result=result
-    emit(string.format('LUA_IDENTITY_%s planet=%d seed=%u pool=%d special_events=%d matched=%d live=%d predicted=%d elapsed_ms=%.3f read_only=true scope=IDs/seeds/difficulty',
+    emit(string.format('LUA_IDENTITY_%s planet=%d seed=%u pool=%d special_events=%d matched=%d live=%d predicted=%d elapsed_ms=%.3f read_only='..tostring(M.read_only)..' scope=IDs/seeds/difficulty',
         result.passed and 'PASS' or 'MISMATCH',s.planet,s.seed,captured.input.pool_count,#(captured.input.specials or {}),result.matched,result.observed,result.predicted,(api.time()-start)*1000))
     for i=1,math.min(#result.errors,8)do emit('LUA_IDENTITY_DETAIL '..result.errors[i])end
     if result.passed and captured.level_graphs then
         local levels=probe:compare_levels(captured);M.level_result=levels
-        M.status=levels.passed and 'identity_and_level_tests_passed' or 'level_test_mismatch'
+        if levels.passed then reroll_session.advance('identity_and_level_tests_passed')else reroll_session.finish('level_test_mismatch')end
         emit(string.format('LUA_LEVEL_%s checked=%d category_draws=%d observed_seed_assisted=true scope=level-selection',
             levels.passed and 'PASS' or 'MISMATCH',levels.checked,levels.category_draws))
         for i=1,math.min(#levels.errors,8)do emit('LUA_LEVEL_DETAIL '..levels.errors[i])end
     end
     if result.passed and captured.composition then
         local composition=captured.composition;M.composition_result=composition
-        if not composition.passed then M.status='composition_test_mismatch'
-        elseif not M.level_result or M.level_result.passed then M.status='composition_test_passed' end
+        if not composition.passed then reroll_session.finish('composition_test_mismatch')
+        elseif not M.level_result or M.level_result.passed then reroll_session.advance('composition_test_passed') end
         emit(string.format('LUA_COMPOSITION_%s planet=%d operations=%d templates=%d modifiers=%d missions=%d observed_mission_seeds=false scope=operation-base-inputs',
             composition.passed and 'PASS' or 'MISMATCH',s.planet,composition.operations,composition.templates,composition.modifiers,composition.checked))
         for i=1,math.min(#composition.errors,8)do emit('LUA_COMPOSITION_DETAIL '..composition.errors[i])end
         if composition.independent_bases then
-            emit(string.format('LUA_SEED_PREDICTION_%s planet=%d seed=%u bases=%d operations=%d missions=%d observed_operation_bases=false preserved_active=true read_only=true',
+            emit(string.format('LUA_SEED_PREDICTION_%s planet=%d seed=%u bases=%d operations=%d missions=%d observed_operation_bases=false preserved_active=true read_only='..tostring(M.read_only),
                 composition.passed and 'PASS' or 'MISMATCH',s.planet,s.seed,composition.bases,composition.operations,composition.checked))
         end
     end
@@ -151,7 +166,9 @@ local function tick()
         and M.composition_result and M.composition_result.passed and M.composition_result.independent_bases then
         on_prediction_ready(s,captured.definitions,now)
     else
+        if on_prediction_ready and result.passed then emit('LUA_SEARCH_NOT_STARTED level='..tostring(M.level_result and M.level_result.passed)..' composition='..tostring(M.composition_result and M.composition_result.passed)..' independent_bases='..tostring(M.composition_result and M.composition_result.independent_bases))end
         emit('Read-only comparison; no publication. Constellations and unsupported campaign branches remain unverified. Press shortcut to test another planet.')
+        reroll_session.settle()
     end
 end
 local function pack(...)return {n=select('#',...),...}end
@@ -165,7 +182,7 @@ _G.update=function(...)
     if not stopped then
         local ok,err=pcall(tick)
         if not ok then
-            stopped=true;M.status='STOPPED: '..tostring(err);emit(M.status)
+            stopped=true;reroll_session.fail(err);emit(M.status)
             if advance_live_publication then pcall(advance_live_publication,'cancel',0)end
             if dialog_release then pcall(dialog_release,'error')end
         end
@@ -177,7 +194,8 @@ _G.shutdown=function(...)
     if advance_prediction_search then pcall(advance_prediction_search,'cancel',0)end
     if advance_live_publication then pcall(advance_live_publication,'cancel',0)end
     if dialog_release then pcall(dialog_release,'shutdown')end
-    if log then pcall(function()log:close()end);log=nil end
+    host.close_log()
     if original_shutdown then return original_shutdown(...)end
 end
-emit('Mission Reroller 0.8.0 independent seed prediction; read-only; Ctrl+Shift+F9; background progress enabled')
+emit(config.banner..'; '..config.mode..'; '..config.shortcut..'; background progress enabled')
+return {tick=tick}

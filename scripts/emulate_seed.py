@@ -11,7 +11,9 @@ import struct
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT.parent/'tools/seed-emulator-deps'))
+# The workspace's tools/ is next to the main checkout, a few levels above a worktree.
+DEPS = next((p/'tools/seed-emulator-deps' for p in ROOT.parents if (p/'tools/seed-emulator-deps').is_dir()), ROOT.parent/'tools/seed-emulator-deps')
+sys.path.insert(0, str(DEPS))
 from unicorn import Uc, UcError, UC_ARCH_X86, UC_MODE_64, UC_HOOK_MEM_UNMAPPED, UC_HOOK_MEM_WRITE, UC_HOOK_MEM_FETCH_PROT, UC_HOOK_INSN, UC_HOOK_INTR
 from unicorn.x86_const import *
 

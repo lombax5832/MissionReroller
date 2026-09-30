@@ -89,17 +89,45 @@ No single file in `src/` is the shipped entry. `scripts/build.py` calls
   `MissionReroller` renamed to `MissionRerollerExperimentCore`.
 - Each library module is wrapped as `local name=(function() <file> end)()`,
   so a module file ends in `return <value>`. A new module needs a line in the
-  list in `source()`.
-- The `*_runtime.lua` files and `experiment_adapter.lua` are appended raw and
-  share the chunk's locals.
-- `source()` rewrites text in them: `read_only=false` must occur exactly once
-  in `experiment_adapter.lua`, and version banners such as
-  `0.8.0 independent seed prediction` and `Ctrl+Shift+F9` in
-  `identity_probe_runtime.lua` are replaced in a chain. Editing one of those
-  strings silently breaks the later replacements; check the built entry.
+  list in `source()`; `source()` also collects them into a `lib` table.
+- The build's mode is data: `config()` in `build_identity_probe.py` gives
+  `read_only`, `preview_prediction`, `version`, the startup `banner`, the
+  `shortcut` name and a few log phrases. The chunk declares it as
+  `local config={...}`. No source text is rewritten.
+- `experiment_adapter.lua` runs as `local host=(function(core,config) <file>
+  end)(core,config)` and ends in `return {M=M,config=config,emit=...}`: the
+  runtimes' host. It returns nothing when another copy runs or the loader is
+  too old, and the chunk then stops (`if not host then return end`).
+- Each `*_runtime.lua` runs as `(function(host,lib,hooks) <file>
+  end)(host,lib,{...})`. A runtime file starts by copying what it uses out of
+  `host`, `lib` and `hooks` into locals of the same names, and ends in
+  `return {<its entry points>}`. `source()` passes those tables on as the
+  next runtime's `hooks`; a runtime left out of a build leaves its hooks nil.
+  The one back edge, `validate_search_request` from the dialog to the search,
+  is added to `search_hooks` after the dialog is created.
+- The native handles (`api`, `game`, `ffi`, `kernel`, `user32`) exist only
+  after `initialize()` on the first frame. A runtime registers
+  `host.when_initialized(function(n) ... end)` to receive them.
+- The runtimes are created in the order of their startup log lines:
+  publication, constellations, search, dialog, identity probe (which wraps
+  `update` / `shutdown`).
+- `tests/test_runtime_host.py` (run by `test_package.py`) checks every build
+  carries these files unchanged, and `tests/test_runtime_factories.lua`
+  creates each one with a fake host that allows no other globals. Lua tests
+  reach into an assembled entry with `tests/harness.lua`: `H.up` for a
+  closure variable, `H.natives(update,{...})` to hand every runtime fake
+  native handles as `initialize()` would.
+- Status changes go through `src/reroll_session.lua`, created on the host as
+  `host.reroll_session` right after the adapter. Runtimes call `advance` /
+  `finish` / `settle` / `fail`; the dialog calls `start` / `cancel` / `view`.
+  Nothing else writes `M.status`. A new status needs a row in its phase
+  table; an unlisted one raises in tests and logs `SESSION_REJECTED` in game.
 
-The research builders assemble the same modules, so a change to a shared
-module can break their tests too.
+`build_combined.py`, `build_experiment.py` and `build_seed_test.py` are older
+research builds: they append the adapter inline through
+`build_core.inline_adapter()`, which drops its host return so their runtimes
+share its locals. The research builders reuse these modules, so a change to a
+shared module can break their tests too.
 
 ## Build and test
 

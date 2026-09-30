@@ -1,5 +1,9 @@
 if rawget(_G, 'MissionRerollerExperiment') then return end
 local M={status='initializing',read_only=false,native_calls=0}
+-- The build's mode: read_only for the diagnostic builds, preview_prediction
+-- where prediction may inspect the viewed planet (publication still checks
+-- the ship/view/canonical/UI planet agree in its own preflight).
+M.read_only=config.read_only==true;M.preview_prediction=config.preview_prediction;M.version=config.version
 _G.MissionRerollerExperiment=M
 local create_api = (function()
 -- Read-only subset of the sibling SentryAimRetention Windows adapter.
@@ -136,6 +140,7 @@ local function participants(session)
     return bytes,list,known
 end
 local initialized=false
+local binders={}
 local function initialize()
     ffi=require('ffi'); api=create_api(); kernel=ffi.load('kernel32')
     ffi.cdef[[
@@ -157,10 +162,11 @@ local function initialize()
     assert(hex(read(game+0x12d5670,#expected_code/2))==expected_code,'helper signature mismatch')
     user32=ffi.load('user32')
     initialized=true
+    for _,bind in ipairs(binders)do bind({api=api,game=game,ffi=ffi,kernel=kernel,user32=user32})end
     emit('build=25480438 hashes=verified helper_signature=verified')
 end
 local function snapshot(viewed_planet)
-    if viewed_planet then assert(M.read_only,'Preview snapshots are read-only')end
+    if viewed_planet then assert(M.read_only or M.preview_prediction,'Preview snapshots are read-only')end
     local b=pointer(game+0x347cee8)
     local session=pointer(game+0x347cef0)
     local backend=pointer(game+0x347cee0)
@@ -220,3 +226,12 @@ local function snapshot(viewed_planet)
     return {context=tostring(b)..'|'..planet..'|'..hex(canonical:sub(5))..'|'..hex(source),decoded=decoded, fingerprint=tostring(b)..tostring(session)..selection..cache..canonical..source..dest..ops..missions,
         board=b,selection=selection,operations=ops,missions=missions,planet=planet,seed=u(canonical,0),active=hex(canonical:sub(5)),sc=sc,dc=dc,union=union}
 end
+-- Runtime host: what the runtimes may use of the adapter. build_identity_probe
+-- wraps this file as function(core,config) and passes the table to each
+-- runtime. The older research builds append the file inline without it.
+return {M=M,config=config,emit=emit,hex=hex,u=u,read=read,pointer=pointer,page=page,participants=participants,
+    snapshot=snapshot,initialize=initialize,expected_code=expected_code,
+    -- The native handles exist once initialize() has run on the first frame;
+    -- it passes them to every function registered here.
+    when_initialized=function(bind)binders[#binders+1]=bind end,
+    close_log=function()if log then pcall(function()log:close()end);log=nil end end}

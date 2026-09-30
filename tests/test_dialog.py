@@ -13,6 +13,7 @@ for forbidden in (b'VirtualProtect',b'VirtualAlloc',b'OpenProcess',b'CreateRemot
 # The dialog build draws the docked panel; older builds keep the centred one.
 assert b'Docked briefing panel' in source and b'CLEAR SELECTION' not in source
 lua=os.environ['HD2_LUAJIT']
+subprocess.run([lua,str(ROOT/'tests/test_reroll_session.lua'),str(ROOT/'src/reroll_session.lua')],check=True)
 subprocess.run([lua,str(ROOT/'tests/test_filter_catalogue.lua'),str(ROOT/'src')],check=True)
 subprocess.run([lua,str(ROOT/'tests/test_mission_compatibility.lua'),str(ROOT/'src')],check=True)
 subprocess.run([lua,str(ROOT/'tests/test_template_environments.lua'),str(ROOT/'src')],check=True)
@@ -23,6 +24,7 @@ subprocess.run([lua,str(ROOT/'tests/test_constellation_prediction.lua'),str(ROOT
 with tempfile.TemporaryDirectory() as folder:
     entry=Path(folder)/'dialog.lua';entry.write_bytes(source)
     subprocess.run([lua,str(ROOT/'tests/test_prediction_dialog.lua'),str(entry),str(ROOT/'src')],check=True)
+    subprocess.run([lua,str(ROOT/'tests/test_reroll_handshake.lua'),str(entry),str(ROOT/'src')],check=True)
     subprocess.run([lua,str(ROOT/'tests/test_ffi_conflicts.lua'),str(entry)],check=True)
     subprocess.run([lua,str(ROOT/'tests/test_mod_inventory_entry.lua'),str(entry),build.VERSION],check=True)
     subprocess.run([lua,str(ROOT/'tests/test_constellation_runtime.lua'),str(entry)],check=True)

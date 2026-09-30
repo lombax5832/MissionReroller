@@ -1,5 +1,13 @@
 -- Constellation tags for predicted or displayed operations, and a read-only
 -- observer that compares a prediction with the loaded mission preview.
+-- A runtime factory: the assembler runs this file as function(host,lib,hooks).
+local M,emit,read,pointer,u=host.M,host.emit,host.read,host.pointer,host.u
+local reroll_session=host.reroll_session
+local Constellations,make_constellation_inputs=lib.Constellations,lib.make_constellation_inputs
+local make_effects,make_config=lib.make_effects,lib.make_config
+local api,game
+host.when_initialized(function(n)api,game=n.api,n.game end)
+local bind_constellations,observe_constellations
 do
     local function bind(take,board,planet)
         local manager=assert(api.pointer(take(game+0x347cdf8,8)),'Missing configuration manager')
@@ -21,8 +29,6 @@ do
     end
     bind_constellations=bind
 
-    local busy={waiting_for_stable_inputs=true,capture_retry=true,search_running=true,
-        search_waiting_backend=true,publication_pending=true,selection_pending=true}
     local last,seen,attempts,logged,surveyed,reported=-math.huge,{},{},0,false,false
     local function join(list)
         local parts={};for _,value in ipairs(list)do parts[#parts+1]=tostring(value)end
@@ -177,10 +183,11 @@ do
     end
     -- Diagnostics must never stop the mod or interrupt a search.
     observe_constellations=function(now)
-        if now-last<0.5 or logged>=64 or busy[M.status]then return end
+        if now-last<0.5 or logged>=64 or reroll_session.view().running then return end
         last=now
         local ok,err=pcall(observe)
         if not ok and not reported then reported=true;emit('CONSTELLATION_CHECK_BLOCKED '..tostring(err))end
     end
 end
 emit('Constellations: accept or exclude per checked mission, else for the operation; hover a mission to log CONSTELLATION_CHECK')
+return {bind_constellations=bind_constellations,observe_constellations=observe_constellations}

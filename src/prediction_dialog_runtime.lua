@@ -1,5 +1,17 @@
 -- Modal UI for the in-process predictor. Losing focus releases input ownership
 -- but never cancels the search. Only an explicit cancel/close cancels work.
+-- A runtime factory: the assembler runs this file as function(host,lib,hooks).
+local M,emit,read,pointer,page,u,hex,snapshot=host.M,host.emit,host.read,host.pointer,host.page,host.u,host.hex,host.snapshot
+local reroll_session=host.reroll_session
+local Panel,Hint,Binding,Compatibility,FilterCatalogue=lib.Panel,lib.Hint,lib.Binding,lib.Compatibility,lib.FilterCatalogue
+local make_gate,make_router,window_signatures,make_cursor=lib.make_gate,lib.make_router,lib.window_signatures,lib.make_cursor
+local Search,Constellations,make_constellation_inputs=lib.Search,lib.Constellations,lib.make_constellation_inputs
+local make_composition_inputs,make_config,make_effects=lib.make_composition_inputs,lib.make_config,lib.make_effects
+local mission_eligible,make_environments=lib.mission_eligible,lib.make_environments
+local default_limit=hooks.default_limit
+local api,game,ffi,user32
+host.when_initialized(function(n)api,game,ffi,user32=n.api,n.game,n.ffi,n.user32 end)
+local dialog_tick,dialog_release,validate_search_request
 do
     local panel,hint,binding,gate,router,exe,cursor
     local selected,difficulty,key_down={},10,true
@@ -58,20 +70,8 @@ do
     local gap={}
     -- The outcome of the last search, or an error. Editing the request
     -- discards it.
+    -- Phases, captions and steps belong to reroll_session.
     local report,report_tone
-    local terminal={publication_test_passed=true,publication_blocked=true,publication_failed=true,
-        publication_restored=true,publication_cancelled=true,search_exhausted=true,
-        search_failed=true,search_cancelled=true,capture_timeout=true,cancelled=true,
-        identity_test_mismatch=true,level_test_mismatch=true,composition_test_mismatch=true}
-    local captions={waiting_for_stable_inputs='Checking planet data',capture_retry='Retrying changed planet data',
-        search_running='Searching seeds',search_waiting_backend='Waiting for game requests',
-        publication_pending='Refreshing operations',selection_pending='Opening matching operation',
-        publication_test_passed='Matching operation selected',search_exhausted='No match; search again to continue',
-        search_cancelled='Search cancelled',cancelled='Search cancelled',publication_blocked='Map changed; reopen the planet and retry'}
-    local tones={publication_test_passed='good',search_exhausted='warn',publication_blocked='warn',
-        search_cancelled='idle',cancelled='idle',publication_cancelled='idle'}
-    local steps={waiting_for_stable_inputs=1,capture_retry=1,search_running=2,search_waiting_backend=2,
-        publication_pending=3,selection_pending=4}
     local function grouped(n)
         local digits,found=tostring(math.floor(n))
         repeat digits,found=digits:gsub('^(%d+)(%d%d%d)','%1,%2')until found==0
@@ -83,7 +83,7 @@ do
     -- Closing the dialog cancels a running search.
     local function close()
         if running or gap.queued then report,report_tone='Search cancelled','idle' end
-        M.cancel_requested=running;running=false;gap.queued=nil;router:close()
+        if running then reroll_session.cancel()end;running=false;gap.queued=nil;router:close()
     end
     local function face()
         local function hash(a)local b=read(a,8);return string.format('%08x%08x',u(b,4),u(b,0))end
@@ -189,19 +189,20 @@ do
             local required,rules={},{}
             for id,v in pairs(selected)do required[id]=v end
             for id,v in pairs(modifiers)do rules[id]=v end
-            M.search_options={difficulty=difficulty,required=required,modifiers=rules,constellations=tag_filter(),
-                scope=scope and {region=scope.region} or nil}
-            M.request_search=true;M.search_attempts=0;running=true;report,report_tone='Checking planet data','idle'
+            running=reroll_session.start({difficulty=difficulty,required=required,modifiers=rules,constellations=tag_filter(),
+                scope=scope and {region=scope.region} or nil})
+            if running then report,report_tone='Checking planet data','idle' else report,report_tone=reroll_session.view().caption,'bad' end
             emit('DIALOG_SEARCH planet='..s.planet..' region='..(scope and scope.region or 'all')..' difficulty='..difficulty
                 ..' players='..tostring(s.sc))
         else report,report_tone=tostring(err),'bad' end
     end
     dialog_tick=function(focused,now)
         if not panel then init()end
-        if running and (terminal[M.status] or tostring(M.status):find('STOPPED',1,true))then
-            running=false;report=M.search_report or captions[M.status] or M.status
-            report_tone=M.search_report and 'warn' or tones[M.status] or 'bad'
-            if M.status=='publication_test_passed' and router then router:close()end
+        local run=reroll_session.view()
+        if running and not run.running then
+            running=false;report=M.search_report or run.caption
+            report_tone=M.search_report and 'warn' or run.tone
+            if run.outcome=='publication_test_passed' and router then router:close()end
         end
         local pulse=binding and focused and binding:step() or false
         local keys,bind_state=nil,'unknown'
@@ -363,7 +364,8 @@ do
         local ready=not busy and (s~=nil or retained) and compatible and not fixed
         -- The same precedence as before the panel was docked.
         local status,tone
-        if running then status,tone=captions[M.status] or 'Checking planet data','busy'
+        run=reroll_session.view()
+        if running then status,tone=run.caption,'busy'
         elseif gap.queued then status,tone='Checking planet data','busy'
         elseif fixed then status,tone='Operation in progress. Finish or abandon it to reroll','warn'
         elseif overdue then status,tone='Updating planet data. Your choices are kept','warn'
@@ -375,8 +377,8 @@ do
         -- An empty request is refused by validation; the panel disables Start instead.
         local model={running=busy,locked=locked,ready=ready,can_start=ready and rules>0,can_clear=not locked and rules>0,
             difficulty=difficulty,status=tostring(status),tone=tone,
-            step=busy and (running and steps[M.status] or 1) or nil,
-            detail=busy and grouped(running and M.search_attempts or 0)..' of '..grouped(default_limit)..' seeds searched'
+            step=busy and (running and run.step or 1) or nil,
+            detail=busy and grouped(running and run.progress or 0)..' of '..grouped(default_limit)..' seeds searched'
                 or ready and rules>0 and tone=='idle' and 'Rerolls every unstarted operation of the campaign' or '',
             faction=display and catalogue.faction or nil,scope=scope and 'city' or 'planet',
             section=section,items=items,page=mission_page,pages=pages,groups=tabs,group=group,
@@ -397,7 +399,7 @@ do
         end
         if action=='close' then close()
         elseif action=='cancel' then
-            if gap.queued then gap.queued=nil else M.cancel_requested=true;running=false end
+            if gap.queued then gap.queued=nil else reroll_session.cancel();running=false end
             report,report_tone='Search cancelled','idle'
         elseif action=='previous_page' then mission_page=math.max(1,mission_page-1)
         elseif action=='next_page' then mission_page=math.min(pages,mission_page+1)
@@ -437,3 +439,4 @@ do
     M.dialog_enabled=true
     emit('Mission filters: F7 or the Reroll operations binding on the MODS tab, on the galactic map only; native cursor; docked panel; key hint beside BACK '..(HINT_WIDGET and 'at widget '..HINT_WIDGET or 'disabled')..'; alone or hosting a lobby; all checked families in one operation; map difficulty; constellations per mission; repeat searches allowed')
 end
+return {dialog_tick=dialog_tick,dialog_release=dialog_release,validate_search_request=validate_search_request}
