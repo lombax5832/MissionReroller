@@ -81,7 +81,7 @@ def source(search=False,publish=False,dialog=False,version=None):
     derived('predict_composition','make_composition_prediction(make_rng,choose_category,choose_level,make_mission_choice(make_rng),make_finalizer(make_rng))')
     derived('composition_factory','make_composition_capture(make_composition_inputs,make_config,make_effects,mission_eligible,make_environments,make_level_inputs,predict_composition,make_base_inputs(predict_identity,make_special_inputs,make_environments))')
     if dialog:
-        for name,file in [('Panel','docked_panel.lua'),('Hint','keybind_hint.lua'),('Binding','mod_binding.lua'),('EscapeGate','escape_gate.lua'),('Compatibility','mission_compatibility.lua'),('FilterCatalogue','filter_catalogue.lua'),('make_gate','window_mouse_gate.lua'),('make_router','modal_pointer.lua'),('window_signatures','window_signatures.lua'),('make_cursor','window_cursor.lua'),
+        for name,file in [('Panel','docked_panel.lua'),('Hint','keybind_hint.lua'),('Binding','mod_binding.lua'),('EscapeGate','escape_gate.lua'),('Compatibility','mission_compatibility.lua'),('FilterCatalogue','filter_catalogue.lua'),('FilterRequest','filter_request.lua'),('make_gate','window_mouse_gate.lua'),('make_router','modal_pointer.lua'),('window_signatures','window_signatures.lua'),('make_cursor','window_cursor.lua'),
                           ('Constellations','constellation_prediction.lua'),('make_constellation_inputs','constellation_inputs.lua')]:
             library(name,file)
     if publish:

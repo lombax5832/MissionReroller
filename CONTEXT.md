@@ -13,6 +13,12 @@ The words this project uses for its own concepts. Game facts are in
 - **Filters**: the player's request in the dialog: the missions that are
   required, the world modifiers, and the enemy forces (constellations) to
   accept or exclude.
+- **Filter request** (`src/filter_request.lua`): the Filters as the dialog
+  holds them, with the open section, mission page and enemy group. It turns
+  panel actions into edits, prunes what a new catalogue no longer offers,
+  makes the request for the reroll session and builds the panel's model,
+  status included. Pure: the dialog runtime reads the game and hands it
+  plain tables.
 - **Reroll session** (`src/reroll_session.lua`): one run from the player's
   request to its outcome. It is the only writer of the run's **phase**.
   - **Phase**: where the run stands (`waiting_for_stable_inputs`,
