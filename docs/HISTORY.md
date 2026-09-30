@@ -18,7 +18,7 @@ tags of each active modifier join the environment, as in 177e4e0.
 `tests/test_template_environments.lua` covers each rule on synthetic
 memory, and `scripts/check_live_planet.py` replays the viewed planet from
 live memory: the board prediction and the options at every difficulty.
-Not yet seen on Brilliance or Fronteria in game.
+Tested in game on 2026-09-30: both planets list their options.
 
 **Next in-game test: v0.22.0 mod list in the log.** On the first frame the
 log lists the loaders (`LOADER`) and every Lua mod they started or failed to
