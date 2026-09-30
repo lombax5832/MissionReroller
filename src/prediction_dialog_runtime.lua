@@ -1,7 +1,7 @@
 -- Modal UI for the in-process predictor. Losing focus releases input ownership
 -- but never cancels the search. Only an explicit cancel/close cancels work.
 do
-    local panel,hint,gate,router,exe
+    local panel,hint,binding,gate,router,exe
     local selected,difficulty,key_down={},10,true
     -- The key hint sits beside the war table's own BACK hint, a widget of
     -- the map screen object: the 136x32 design-unit container at local
@@ -9,6 +9,9 @@ do
     -- scripts/survey_map_widgets.py on 2026-09-29. nil draws no hint.
     local HINT_WIDGET=1696
     local hint_blocked=false
+    -- The dialog opens on Ctrl+Shift+F8, and on the Reroll operations binding
+    -- of Mod Bindings Menu's MODS tab when that mod is installed. The hint
+    -- names the bound key, or the chord while nothing is bound.
     -- One section is open at a time, or none. The enemy section shows the
     -- rules of one group: a checked mission, or 0 for any mission.
     local modifiers,section,mission_page,group_choice={},'missions',1,0
@@ -131,6 +134,8 @@ do
     end
     local function init()
         exe=assert(api.module(nil));panel=Panel.new(assert(stingray));hint=Hint.new(stingray)
+        binding=Binding.new({read=read,pointer=pointer,u=u,game=game,emit=emit,keyboard=stingray.Keyboard,
+            menu=function()return rawget(_G,'ModBindingsMenu')end})
         ffi.cdef[[typedef struct { int32_t x,y; } MRD_POINT;
             typedef struct { int32_t left,top,right,bottom; } MRD_RECT;
             int GetCursorPos(MRD_POINT *); int ScreenToClient(void *,MRD_POINT *);
@@ -188,10 +193,11 @@ do
         end
         -- The hint is cosmetic: a failure disables it for the session and is
         -- logged once, without stopping the mod.
+        local bound=binding and focused and binding:step() or false
         if hint and not hint_blocked then
             local ok,err=pcall(function()
                 local anchor=focused and back_hint()
-                if anchor then hint:show(anchor,face())else hint:clear()end
+                if anchor then hint:show(anchor,face(),binding and binding:keys() or nil)else hint:clear()end
             end)
             if not ok then hint_blocked=true;pcall(function()hint:clear()end);emit('HINT_BLOCKED '..tostring(err))end
         end
@@ -200,7 +206,7 @@ do
             if gap.queued then gap.queued=nil;report,report_tone='Search cancelled','idle' end
             key_down=true;return
         end
-        local down=user32.GetAsyncKeyState(0x11)<0 and user32.GetAsyncKeyState(0x10)<0 and user32.GetAsyncKeyState(0x77)<0
+        local down=bound or user32.GetAsyncKeyState(0x11)<0 and user32.GetAsyncKeyState(0x10)<0 and user32.GetAsyncKeyState(0x77)<0
         if down and not key_down then
             if router then close()
             else
@@ -215,7 +221,9 @@ do
         if not router then return end
         local hwnd=user32.GetForegroundWindow()
         local p=ffi.new('MRD_POINT[1]');local r=ffi.new('MRD_RECT[1]')
-        assert(user32.GetCursorPos(p)~=0 and user32.ScreenToClient(hwnd,p)~=0 and user32.GetClientRect(hwnd,r)~=0,'Mouse position unavailable')
+        -- Void pointers, in case another addon declared these with its own structs.
+        local vp,vr=ffi.cast('void *',p),ffi.cast('void *',r)
+        assert(user32.GetCursorPos(vp)~=0 and user32.ScreenToClient(hwnd,vp)~=0 and user32.GetClientRect(hwnd,vr)~=0,'Mouse position unavailable')
         assert(r[0].right>0 and r[0].bottom>0,'Invalid client dimensions')
         local width,height=stingray.Gui.resolution()
         local x=tonumber(p[0].x)*width/r[0].right;local y=height-tonumber(p[0].y)*height/r[0].bottom
@@ -396,5 +404,5 @@ do
         stingray.Script.set_temp_byte_count(temp);assert(ok,err)
     end
     M.dialog_enabled=true
-    emit('Mission filters: Ctrl+Shift+F8; native cursor; docked panel; key hint beside BACK '..(HINT_WIDGET and 'at widget '..HINT_WIDGET or 'disabled')..'; alone or hosting a lobby; all checked families in one operation; map difficulty; constellations per mission; repeat searches allowed')
+    emit('Mission filters: Ctrl+Shift+F8 or the Reroll operations binding on the MODS tab; native cursor; docked panel; key hint beside BACK '..(HINT_WIDGET and 'at widget '..HINT_WIDGET or 'disabled')..'; alone or hosting a lobby; all checked families in one operation; map difficulty; constellations per mission; repeat searches allowed')
 end

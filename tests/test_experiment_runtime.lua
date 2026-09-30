@@ -52,6 +52,7 @@ ffi.cdef[[typedef struct {void *BaseAddress;void *AllocationBase;uint32_t Alloca
 uint16_t PartitionId;uint16_t padding;size_t RegionSize;uint32_t State;uint32_t Protect;
 uint32_t Type;uint32_t padding2;} MRE_MEMORY_BASIC_INFORMATION;]]
 local kernel={GetCurrentThreadId=function()return 42 end,VirtualQuery=function(a,m)
+    m=ffi.cast('MRE_MEMORY_BASIC_INFORMATION *',m) -- The adapter passes a void pointer.
     m[0].BaseAddress=a;m[0].RegionSize=4096;m[0].State=0x1000;m[0].Protect=4
     m[0].Type=(tonumber(ffi.cast('uintptr_t',a))==0x13483c38) and 0x1000000 or 0x20000
     return ffi.sizeof(m[0])

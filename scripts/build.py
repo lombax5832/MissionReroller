@@ -13,7 +13,7 @@ MODULE = build_combined.MODULE
 GUID = build_combined.GUID
 NAME = 'Mission Reroller'
 VERSION = '0.21.0'
-SUMMARY = ('docked dialog; key hint beside BACK; alone or hosting a lobby; all mission types; '
+SUMMARY = ('docked dialog; rebindable on the MODS tab; key hint beside BACK; alone or hosting a lobby; all mission types; '
            'city scope; fast seed search; mission, modifier and constellation filters')
 ROOT = build_core.ROOT
 

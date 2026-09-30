@@ -14,9 +14,9 @@ up(dialog,'ffi',ffi,true)
 local key,mouse=false,false;local x,y=0,0
 local user={GetForegroundWindow=function()return nil end,
     GetAsyncKeyState=function(k)return ((k==1 and mouse)or(k~=1 and key))and -1 or 0 end,
-    GetCursorPos=function(p)p[0].x=x;p[0].y=820-y;return 1 end,
+    GetCursorPos=function(p)p=ffi.cast('MRD_POINT *',p);p[0].x=x;p[0].y=820-y;return 1 end,
     ScreenToClient=function()return 1 end,
-    GetClientRect=function(_,r)r[0].right=1200;r[0].bottom=820;return 1 end}
+    GetClientRect=function(_,r)r=ffi.cast('MRD_RECT *',r);r[0].right=1200;r[0].bottom=820;return 1 end}
 up(dialog,'user32',user,true)
 local acquired,released=0,0;local held=false;local last_model,last_selected
 up(dialog,'gate',{acquire=function()assert(not held);held=true;acquired=acquired+1;return true end,
@@ -372,12 +372,25 @@ up(dialog,'dialog_release')('test cleanup')
 -- The key hint follows the BACK hint every focused frame, whether or not the
 -- dialog is open, disappears with the map or the focus, and a failure
 -- disables it for the session without stopping the mod.
-local hint_anchor,hint_last,hint_shown,hint_cleared={x=48,y=32,w=118,h=40,scale=1},nil,0,0
-up(dialog,'hint',{show=function(_,anchor,f)assert(f.font=='a');hint_last=anchor;hint_shown=hint_shown+1 end,
+local hint_anchor,hint_last,hint_shown,hint_cleared,hint_keys={x=48,y=32,w=118,h=40,scale=1},nil,0,0,nil
+up(dialog,'hint',{show=function(_,anchor,f,keys)assert(f.font=='a');hint_last=anchor;hint_shown=hint_shown+1;hint_keys=keys end,
     clear=function()hint_last=nil;hint_cleared=hint_cleared+1 end},true)
 up(dialog,'back_hint',function()return hint_anchor end,true)
-frame();assert(hint_last==hint_anchor and hint_shown==1,'Hint shown on the map with the dialog closed')
+frame();assert(hint_last==hint_anchor and hint_shown==1 and hint_keys==nil,'Hint shown on the map with the dialog closed, with the chord')
 toggle();assert(hint_last==hint_anchor and hint_shown>1,'Hint stays while the dialog is open')
+-- The MODS tab binding opens and closes the dialog like the chord, only while
+-- focused, and its key reaches the hint.
+local pulse,bound_keys,stepped=false,nil,0
+up(dialog,'binding',{step=function()stepped=stepped+1;return pulse end,keys=function()return bound_keys end},true)
+frame();assert(hint_keys==nil and held,'Unbound: the hint keeps the chord')
+bound_keys='f8';frame();assert(hint_keys=='f8','The bound key reaches the hint')
+pulse=true;frame();pulse=false;frame();assert(not held,'The binding closes the dialog')
+pulse=true;frame();pulse=false;frame();assert(held,'The binding opens the dialog')
+pulse=true;frame();frame();frame();assert(not held,'A held binding toggles once');pulse=false;frame()
+toggle();assert(held,'The chord still opens it')
+local before=stepped;frame(false);assert(stepped==before and not held,'The binding is not read without focus')
+frame();assert(stepped==before+1)
+up(dialog,'binding',nil,true);frame();assert(hint_keys==nil)
 hint_anchor=nil;frame();assert(hint_last==nil and hint_cleared>=1,'Hint cleared when the BACK hint is gone')
 hint_anchor={x=48,y=32,w=118,h=40,scale=1};frame();assert(hint_last==hint_anchor)
 -- Losing focus clears the hint in the frame and again when the dialog is released.

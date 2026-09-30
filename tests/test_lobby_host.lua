@@ -37,6 +37,7 @@ end,pointer=function(bytes,offset)
     return ffi.cast('uint8_t *',value[0])
 end}
 local kernel={VirtualQuery=function(a,m)
+    m=ffi.cast('MRE_MEMORY_BASIC_INFORMATION *',m) -- The adapter passes a void pointer.
     m[0].BaseAddress=a;m[0].RegionSize=4096;m[0].State=0x1000;m[0].Protect=4
     m[0].Type=address(a)==base+0x3483c38 and 0x1000000 or 0x20000
     return ffi.sizeof(m[0])

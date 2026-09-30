@@ -113,7 +113,10 @@ local function pointer(a)
 end
 local function page(a,n,kind)
     local m=ffi.new('MRE_MEMORY_BASIC_INFORMATION[1]')
-    assert(kernel.VirtualQuery(a,m,ffi.sizeof(m[0]))==ffi.sizeof(m[0]),'VirtualQuery failed')
+    -- C declarations are shared by every addon in the VM and the first one
+    -- wins: Mod Bindings Menu declares VirtualQuery with its own struct
+    -- pointer. A void pointer converts to whichever declaration won.
+    assert(kernel.VirtualQuery(a,ffi.cast('void *',m),ffi.sizeof(m[0]))==ffi.sizeof(m[0]),'VirtualQuery failed')
     local begin=tonumber(ffi.cast('uintptr_t',a))
     local limit=tonumber(ffi.cast('uintptr_t',m[0].BaseAddress))+tonumber(m[0].RegionSize)
     assert(begin+n<=limit and m[0].State==0x1000 and m[0].Protect==4 and m[0].Type==kind,

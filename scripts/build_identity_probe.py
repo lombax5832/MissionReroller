@@ -34,7 +34,7 @@ def source(search=False,publish=False,dialog=False,version=None):
     parts.append('local on_prediction_ready,advance_prediction_search,on_search_match,on_existing_match,advance_live_publication,dialog_tick,dialog_release,validate_search_request')
     parts.append('local bind_constellations,observe_constellations')
     if dialog:
-        for name,file in [('Panel','docked_panel.lua'),('Hint','keybind_hint.lua'),('Compatibility','mission_compatibility.lua'),('FilterCatalogue','filter_catalogue.lua'),('make_gate','window_mouse_gate.lua'),('make_router','modal_pointer.lua'),('window_signatures','window_signatures.lua'),
+        for name,file in [('Panel','docked_panel.lua'),('Hint','keybind_hint.lua'),('Binding','mod_binding.lua'),('Compatibility','mission_compatibility.lua'),('FilterCatalogue','filter_catalogue.lua'),('make_gate','window_mouse_gate.lua'),('make_router','modal_pointer.lua'),('window_signatures','window_signatures.lua'),
                           ('Constellations','constellation_prediction.lua'),('make_constellation_inputs','constellation_inputs.lua')]:
             parts.append('local '+name+'=(function()\n'+(root/file).read_text()+'\nend)()')
     if publish:

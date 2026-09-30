@@ -12,6 +12,17 @@ gate had set. The gate now takes its flags back and counts the drift, a lost
 ownership closes the dialog instead of stopping the mod, and the log names
 the flag that moved. Not yet tested after a resolution change.
 
+**Next in-game test: [v0.21.0 rebinding on the MODS tab](KEYBIND_HINT_TEST.md#rebinding).**
+With Mod Bindings Menu installed the mod registers Reroll operations under
+a Mission Reroller header on the game's MODS binding tab; the bound key
+opens and closes the panel beside Ctrl+Shift+F8, and the hint beside BACK
+names it, read from the game's live binding map. The first in-game try
+stopped the mod with `bad argument #2 to 'VirtualQuery'`: addons share one
+LuaJIT VM, the first C declaration of a function wins, and Mod Bindings
+Menu declares VirtualQuery with its own struct. The mod now passes void
+pointers to VirtualQuery and the cursor calls, and
+`tests/test_ffi_conflicts.lua` reproduces the conflict. Not yet retested.
+
 **Validated in game: [v0.21.0 key hint beside BACK](KEYBIND_HINT_TEST.md).**
 A `CTRL + SHIFT + F8  REROLL OPERATIONS` hint drawn to the right of the war
 table's own BACK hint, anchored to that native widget so it follows the
