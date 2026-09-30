@@ -37,7 +37,7 @@ game's hint.
 ## What it draws
 
 To the immediate right of BACK, on the same baseline and at the same
-height: a key cap reading `F8`, then `REROLL OPERATIONS`, in
+height: a key cap reading `F7`, then `REROLL OPERATIONS`, in
 the game's font. With Mod Bindings Menu installed and a key bound to
 Reroll operations on its MODS tab, the cap reads that key instead (see
 [Rebinding](#rebinding) below). The sizes come from the BACK widget, so the hint follows
@@ -84,7 +84,7 @@ assigns one of its 36 native actions and keeps it for that id across
 sessions. Each focused frame the runtime reads the binding with
 `is_down`. Mod Bindings Menu has no default keys for automatic bindings, so
 they start unbound; while this one has no key, while its keys cannot be
-read, and without the menu, F8 is the shortcut. Once a key is bound, F8 is
+read, and without the menu, F7 is the shortcut. Once a key is bound, F7 is
 ignored and only the binding acts. The MODS tab row itself shows no key
 until one is bound.
 
@@ -104,7 +104,7 @@ so the hint reads both from the game itself:
 - The native action comes from the menu's registration record, which v2.0
   keeps in the `state` upvalue of `register_binding` (its own tests read it
   the same way). When that lookup fails the log says `action unknown`, the
-  hint shows F8, and both F8 and the binding work.
+  hint shows F7, and both F7 and the binding work.
 - The key comes from the game's live binding map, the same structure Mod
   Bindings Menu reads and writes: the input owner at `game+0x347cf18`, its
   256-bucket map at `+686800`, 328-byte buckets of `{u32 code, u32 count,
@@ -131,19 +131,19 @@ so the hint reads both from the game itself:
 1. Open the galactic map. The hint appears right of BACK, aligned with it,
    without covering it. Take a screenshot.
 2. Hover planets, open one, and go back to the galaxy. The hint stays put.
-3. Press F8. The hint stays while the panel is open and after it closes.
+3. Press F7. The hint stays while the panel is open and after it closes.
 4. Leave the map for the ship. The hint is gone. Return: it is back.
 5. Alt-tab away and back. The hint disappears and returns.
 6. Change the resolution or UI scale if the game allows it; the hint should
    follow BACK.
-7. On the map, press Escape to open the ESC menu, then F8. Nothing opens,
+7. On the map, press Escape to open the ESC menu, then F7. Nothing opens,
    and the log gains one `SHORTCUT_IGNORED screens=…` line. Send that line:
-   it records the ESC menu's screen type. Close the menu; F8 works again.
+   it records the ESC menu's screen type. Close the menu; F7 works again.
 8. With Mod Bindings Menu installed: Options > Mouse & Keyboard > MODS shows
-   a MISSION REROLLER header with an unbound REROLL OPERATIONS row. F8 on
+   a MISSION REROLLER header with an unbound REROLL OPERATIONS row. F7 on
    the map still opens the panel. Bind G to the row. Back on the map, the
-   cap beside BACK reads `G`, G opens and closes the panel, and F8 does
-   nothing. Unbind it: the cap returns to `F8` and F8 works again. Restart
+   cap beside BACK reads `G`, G opens and closes the panel, and F7 does
+   nothing. Unbind it: the cap returns to `F7` and F7 works again. Restart
    the game with G bound: the binding and the hint are kept.
 
 ## What the log should show
@@ -155,7 +155,7 @@ Bindings Menu installed, the first frame on the map adds
 matching the `Registered ipodalexei.mission_reroller.reroll on native action
 <group>:<action>` line in `ModBindingsMenu.log`; `action unknown` there means
 the hint cannot follow the binding. A `BINDING_FAILED` line carries the
-menu's reason, and F8 still works. If `HINT_BLOCKED` appears,
+menu's reason, and F7 still works. If `HINT_BLOCKED` appears,
 send it: the text after it names the read or draw call that failed, and the
 hint is off until the next launch.
 
@@ -165,7 +165,7 @@ hint is off until the next launch.
   covers the layout at four scales, metric-driven widths, refusal without
   room, that the drawing is created once per distinct anchor, face,
   resolution and key and destroyed on clear, and that a bound key replaces
-  F8 on the cap.
+  F7 on the cap.
 - `src/mod_binding.lua`: the MODS tab binding. `tests/test_mod_binding.lua`
   registers against a stubbed Mod Bindings Menu and names keys from a
   simulated binding map: keyboard, mouse, controller-only, unbound, a moved
@@ -177,7 +177,7 @@ hint is off until the next launch.
   the dialog's own work. `tests/test_prediction_dialog.lua` covers the hint
   with the dialog closed and open, without a map, without focus, the
   one-time `HINT_BLOCKED`, the binding opening and closing the dialog, a
-  held binding toggling once, F8 while unbound or unreadable and not once
+  held binding toggling once, F7 while unbound or unreadable and not once
   bound, the bound key reaching the hint, and no reaction off the map,
   without the BACK hint, or to a key held while returning to the map.
 - `scripts/survey_map_widgets.py`: the live survey, reads only.

@@ -39,14 +39,14 @@ the same GUID, so your manager treats it as the same mod.
    in orbit: rerolling works for the planet you are viewing. To reroll only
    a city's operations, point at the city's operation marker or select it
    first; the panel header then reads `THIS CITY ONLY`.
-2. Press **F8** on the galactic map. A panel docks to the right edge of the
+2. Press **F7** on the galactic map. A panel docks to the right edge of the
    screen. The map does not react while it is open. The shortcut does
    nothing anywhere else, including with the options or ESC menu open over
    the map. A key hint beside the war table's BACK hint shows the shortcut.
    With Mod Bindings Menu installed, the mod also registers **Reroll
    operations** under Mission Reroller on the MODS tab of Options > Mouse &
-   Keyboard. Bind a key there and it replaces F8, and the hint shows it.
-   While that row has no key, F8 stays the shortcut.
+   Keyboard. Bind a key there and it replaces F7, and the hint shows it.
+   While that row has no key, F7 stays the shortcut.
 3. Choose what the operation must contain. The three sections open one at a
    time:
    - **Missions.** Check up to the number of slots an operation has. All
@@ -104,16 +104,19 @@ The mod's log is `MissionRerollerExperiment.log` in
 
 | Symptom | Where to look |
 | --- | --- |
-| Nothing happens on F8 | `BingusSharedLoader.log` must show the `loaded` line above. If it does not, the loader is not the winning startup override. The shortcut only works with the galactic map on screen; a `SHORTCUT_IGNORED` line in the mod's log lists the screens that were open. If you bound a key on the MODS tab, F8 no longer opens the panel. |
-| The MODS tab has no Mission Reroller section | The mod's log has a `BINDING_FAILED` line with the reason Mod Bindings Menu gave, such as all 36 bindings in use. F8 still works. |
-| The hint beside BACK shows F8 after binding another key | The hint reads the game's live binding once Mod Bindings Menu reports native input ready. If it never changes, send the `BINDING_REGISTERED` line from the mod's log. |
+| Nothing happens on F7 | `BingusSharedLoader.log` must show the `loaded` line above. If it does not, the loader is not the winning startup override. The shortcut only works with the galactic map on screen; a `SHORTCUT_IGNORED` line in the mod's log lists the screens that were open. If you bound a key on the MODS tab, F7 no longer opens the panel. |
+| The MODS tab has no Mission Reroller section | The mod's log has a `BINDING_FAILED` line with the reason Mod Bindings Menu gave, such as all 36 bindings in use. F7 still works. |
+| The hint beside BACK shows F7 after binding another key | The hint reads the game's live binding once Mod Bindings Menu reports native input ready. If it never changes, send the `BINDING_REGISTERED` line from the mod's log. |
 | The panel shows `OPEN A PLANET ON THE WAR TABLE FIRST` | View a planet, then reopen the panel. |
 | The panel shows `UPDATING PLANET DATA` for long | The game is waiting on the backend. Your choices are kept; the search starts on fresh data. |
 | The log has a `STOPPED:` line | The mod found something it did not expect and released the mouse without writing anything further. Send the line with a bug report. |
 | `game.dll hash mismatch` or `executable hash mismatch` | The game was updated. Wait for a release for the new build. |
 
-When reporting a problem, include both logs and the `Mission Reroller 0.20.3`
-line near the top of the mod's log.
+When reporting a problem, include both logs. Near the top, the mod's log
+names its version (`Mission Reroller 0.22.0 docked dialog`) and, from the
+first frame, every Lua mod the loaders started: a `MODS` count, then one
+`MOD <name> version=<version> status=<status>` line each. A version reads
+`unknown` when that mod does not publish one.
 
 ## Building from source
 

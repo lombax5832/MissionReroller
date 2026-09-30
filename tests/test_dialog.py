@@ -23,12 +23,13 @@ with tempfile.TemporaryDirectory() as folder:
     entry=Path(folder)/'dialog.lua';entry.write_bytes(source)
     subprocess.run([lua,str(ROOT/'tests/test_prediction_dialog.lua'),str(entry),str(ROOT/'src')],check=True)
     subprocess.run([lua,str(ROOT/'tests/test_ffi_conflicts.lua'),str(entry)],check=True)
+    subprocess.run([lua,str(ROOT/'tests/test_mod_inventory_entry.lua'),str(entry),build.VERSION],check=True)
     subprocess.run([lua,str(ROOT/'tests/test_constellation_runtime.lua'),str(entry)],check=True)
     subprocess.run([lua,str(ROOT/'tests/test_lobby_host.lua'),str(entry),'lobby'],check=True)
     archive=build.main(Path(folder)/'dialog.zip')
     with zipfile.ZipFile(archive) as z:
         assert len(z.namelist())==4
         assert source in z.read(next(n for n in z.namelist() if n.endswith('.patch_0')))
-for test,module in [('test_docked_panel.lua','docked_panel.lua'),('test_keybind_hint.lua','keybind_hint.lua'),('test_mod_binding.lua','mod_binding.lua'),('test_mouse_panel.lua','mouse_panel.lua'),('test_modal_pointer.lua','modal_pointer.lua'),('test_window_mouse_gate.lua','window_mouse_gate.lua'),('test_window_cursor.lua','window_cursor.lua')]:
+for test,module in [('test_docked_panel.lua','docked_panel.lua'),('test_keybind_hint.lua','keybind_hint.lua'),('test_mod_inventory.lua','mod_inventory.lua'),('test_mod_binding.lua','mod_binding.lua'),('test_mouse_panel.lua','mouse_panel.lua'),('test_modal_pointer.lua','modal_pointer.lua'),('test_window_mouse_gate.lua','window_mouse_gate.lua'),('test_window_cursor.lua','window_cursor.lua')]:
     subprocess.run([lua,str(ROOT/'tests'/test),str(ROOT/'src'/module)],check=True)
 print('Dialog package, docked panel, native cursor gate and click routing passed')

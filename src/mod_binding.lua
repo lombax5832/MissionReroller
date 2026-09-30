@@ -2,7 +2,7 @@
 -- rebind it in the game's own options. The binding is registered lazily,
 -- read every frame like a key, and its bound key is named for the hint
 -- beside BACK. The menu has no default keys for automatic bindings, so the
--- runtime uses F8 while this binding has none, and without the menu.
+-- runtime uses F7 while this binding has none, and without the menu.
 local B={}
 B.ID,B.LABEL,B.CATEGORY='ipodalexei.mission_reroller.reroll','Reroll operations','Mission Reroller'
 -- Steam build 25480438, as Mod Bindings Menu v2.0 reads them: the game's

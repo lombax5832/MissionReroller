@@ -42,7 +42,7 @@ resize path is not identified.
 
 1. Open the galactic map, open the dialog, close it. Change the resolution
    in the game's settings, return to the map.
-2. Press Ctrl+Shift+F8. The dialog should open and work: the cursor is
+2. Press F7 on the galactic map. The dialog should open and work: the cursor is
    visible, rows react, the map behind does not. Search once.
 3. Close it. Change the resolution back and repeat step 2.
 4. Read `MissionRerollerExperiment.log`. Expected: no `STOPPED`, and either

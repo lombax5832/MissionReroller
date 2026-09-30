@@ -11,7 +11,7 @@ local tick=up(update,'tick');local dialog=up(tick,'dialog_tick');local M=Mission
 local real_context=up(dialog,'context');local real_catalogue=up(dialog,'catalogue_for')
 local key,mouse=false,false;local x,y=0,0
 local user={GetForegroundWindow=function()return nil end,
-    GetAsyncKeyState=function(k)return ((k==1 and mouse)or(k~=1 and key))and -1 or 0 end}
+    GetAsyncKeyState=function(k)return ((k==1 and mouse)or(k==0x76 and key))and -1 or 0 end}
 up(dialog,'user32',user,true)
 -- The galactic map is the top screen with its BACK hint shown, unless a test says otherwise.
 local map_top,map_anchor,stack=true,{x=48,y=32,w=118,h=40,scale=1},'15'
@@ -247,7 +247,7 @@ local opened=acquired
 click('close');frame();frame();assert(not held)
 pointed=1;toggle();assert(acquired==opened+1)
 assert(catalogue_scope==1 and last_model.scope=='city' and last_model.section=='missions',last_model.scope)
-assert(logs[#logs]=='MODAL_OPEN scope=region 1 key=F8 screens=15\n',logs[#logs])
+assert(logs[#logs]=='MODAL_OPEN scope=region 1 key=F7 screens=15\n',logs[#logs])
 click('start');assert(M.request_search and M.search_options.scope.region==1 and M.search_options.required[4])
 M.request_search=nil;M.status='cancelled';frame()
 pointed=nil;frame();assert(catalogue_scope==1,'The city is fixed while the dialog stays open')
@@ -267,7 +267,7 @@ in_progress=record(29,10,planet);frame();assert(last_model.ready,'An operation o
 in_progress=record(49,10,planet+1);frame();assert(last_model.ready,'An operation on another planet does not block it')
 in_progress=nil;frame()
 click('close');frame();frame();toggle()
-assert(catalogue_scope==nil and logs[#logs]=='MODAL_OPEN scope=planet key=F8 screens=15\n','Reopening without a city returns to the planet')
+assert(catalogue_scope==nil and logs[#logs]=='MODAL_OPEN scope=planet key=F7 screens=15\n','Reopening without a city returns to the planet')
 click('close');frame();frame();pointed=3;toggle()
 assert(catalogue_scope==nil and last_model.scope=='planet','A city of another planet is ignored')
 click('start');assert(M.request_search and M.search_options.scope==nil);M.request_search=nil;M.status='cancelled';frame()
@@ -380,28 +380,28 @@ up(dialog,'back_hint',function()return hint_anchor end,true)
 frame();assert(hint_last==hint_anchor and hint_shown==1 and hint_keys==nil,'Hint shown on the map with the dialog closed, with the chord')
 toggle();assert(hint_last==hint_anchor and hint_shown>1,'Hint stays while the dialog is open')
 -- The MODS tab binding opens and closes the dialog, only while focused. A
--- bound key replaces F8 and reaches the hint; unbound or unreadable, F8 works.
+-- bound key replaces F7 and reaches the hint; unbound or unreadable, F7 works.
 local pulse,bound_keys,bind_state,stepped=false,nil,'unbound',0
 up(dialog,'binding',{step=function()stepped=stepped+1;return pulse end,keys=function()return bound_keys,bind_state end},true)
-frame();assert(hint_keys==nil and held,'Unbound: the hint shows F8')
-toggle();assert(not held,'Unbound: F8 closes the dialog')
+frame();assert(hint_keys==nil and held,'Unbound: the hint shows F7')
+toggle();assert(not held,'Unbound: F7 closes the dialog')
 bound_keys,bind_state='g','bound';frame();assert(hint_keys=='g','The bound key reaches the hint')
-toggle();assert(not held,'Bound: F8 does nothing')
+toggle();assert(not held,'Bound: F7 does nothing')
 pulse=true;frame();pulse=false;frame();assert(held,'The binding opens the dialog')
 pulse=true;frame();pulse=false;frame();assert(not held,'The binding closes the dialog')
 pulse=true;frame();frame();frame();assert(held,'A held binding toggles once');pulse=false;frame()
-bound_keys,bind_state=nil,'unknown';toggle();assert(not held,'An unreadable binding keeps F8')
+bound_keys,bind_state=nil,'unknown';toggle();assert(not held,'An unreadable binding keeps F7')
 local before=stepped;frame(false);assert(stepped==before,'The binding is not read without focus')
 frame();assert(stepped==before+1)
 -- Off the map, as with the options or ESC menu above it, neither key acts,
 -- and the screens are logged once per distinct stack.
 up(dialog,'back_hint',function()return map_top and map_anchor or nil end,true)
 local logged=#logs
-map_top,stack=false,'15,26';toggle();assert(not held,'F8 ignored off the map')
+map_top,stack=false,'15,26';toggle();assert(not held,'F7 ignored off the map')
 assert(#logs==logged+1 and logs[#logs]=='SHORTCUT_IGNORED screens=15,26\n',logs[#logs])
 pulse=true;frame();pulse=false;frame();assert(not held and #logs==logged+1,'The binding is ignored off the map, logged once')
-map_top,stack=true,'15';toggle();assert(held,'Back on the map F8 opens it')
-map_top=false;toggle();assert(held,'Off the map F8 does not close it either')
+map_top,stack=true,'15';toggle();assert(held,'Back on the map F7 opens it')
+map_top=false;toggle();assert(held,'Off the map F7 does not close it either')
 key=true;frame();map_top=true;frame();key=false;frame();assert(held,'A key held while returning to the map does not act')
 map_anchor=nil;toggle();assert(held,'The map without its BACK hint does not act');map_anchor={x=48,y=32,w=118,h=40,scale=1}
 toggle();assert(not held)

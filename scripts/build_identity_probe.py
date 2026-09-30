@@ -26,7 +26,7 @@ def source(search=False,publish=False,dialog=False,version=None):
                        ('make_environments', 'template_environments.lua'), ('make_composition_inputs', 'composition_inputs.lua'),
                        ('make_composition_prediction', 'composition_prediction.lua'), ('make_composition_capture', 'composition_capture.lua'),
                        ('make_base_inputs', 'operation_base_inputs.lua'),
-                       ('sha256', 'bytes_sha256.lua')]:
+                       ('sha256', 'bytes_sha256.lua'), ('ModInventory', 'mod_inventory.lua')]:
         parts.append('local '+name+'=(function()\n'+(root/file).read_text()+'\nend)()')
     parts.append('local predict_identity=make_identity(make_rng)')
     parts.append('local predict_composition=make_composition_prediction(make_rng,choose_category,choose_level,make_mission_choice(make_rng),make_finalizer(make_rng))')
@@ -56,6 +56,8 @@ def source(search=False,publish=False,dialog=False,version=None):
         adapter=adapter.replace('read_only=false','read_only=false,preview_prediction=true')
         adapter=adapter.replace("assert(M.read_only,'Preview snapshots are read-only')","assert(M.read_only or M.preview_prediction,'Preview snapshots are read-only')")
         parts.append(adapter)
+        if dialog:
+            parts.append('M.version='+repr(version))
         parts.append((root/'live_publication_runtime.lua').read_text())
     else:
         parts.append(adapter.replace('read_only=false', 'read_only=true'))
@@ -76,7 +78,7 @@ def source(search=False,publish=False,dialog=False,version=None):
         runtime=runtime.replace('no refresh or selection will occur','search then publish one verified seed')
         runtime=runtime.replace('; read-only;', '; supervised live publication;')
     if dialog:
-        runtime=runtime.replace('0.10.1 search, publish and select',version+' docked dialog').replace('Ctrl+Shift+F9','F8 on the galactic map')
+        runtime=runtime.replace('0.10.1 search, publish and select',version+' docked dialog').replace('Ctrl+Shift+F9','F7 on the galactic map')
     parts.append(runtime)
     return ('\n'.join(parts)+'\n').encode()
 

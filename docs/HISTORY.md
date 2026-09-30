@@ -5,6 +5,14 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
+**Next in-game test: v0.22.0 mod list in the log.** On the first frame the
+log lists the loaders (`LOADER`) and every Lua mod they started or failed to
+start (`MODS`, then one `MOD` line each, sorted by name). Bingus Shared
+Loader records no versions, so a version is the `version` field of the mod's
+`require` result or of its global, named after the entry's last path segment
+(`mod_bindings_menu` becomes `ModBindingsMenu`); otherwise `unknown`. Our own
+global now carries `version`. Not yet seen in game.
+
 **Next in-game test: [v0.21.0 input ownership after a resolution change](INPUT_OWNERSHIP.md).**
 Changing the resolution and then opening the dialog stopped the mod with
 `Modal input ownership lost`: the game had put back a window flag the mouse
@@ -12,12 +20,15 @@ gate had set. The gate now takes its flags back and counts the drift, a lost
 ownership closes the dialog instead of stopping the mod, and the log names
 the flag that moved. Not yet tested after a resolution change.
 
-**Next in-game test: [v0.21.0 F8 on the map only](KEYBIND_HINT_TEST.md#rebinding).**
-The shortcut is F8 instead of Ctrl+Shift+F8, and a key bound on the MODS
+**Next in-game test: [v0.22.0 F7 on the map only](KEYBIND_HINT_TEST.md#rebinding).**
+The shortcut is F7 instead of Ctrl+Shift+F8, and a key bound on the MODS
 tab replaces it. It only acts with the galactic map on top of the screen
 stack and its BACK hint shown, so the options page, and presumably the ESC
 menu, block it. Ignored presses log the screen stack, which will confirm
 the ESC menu's screen type. Not yet tested in game.
+The default moved from F8 to F7 because the Fast Enter Hellpod mod uses F8
+by default, and keyboard input reaches every addon and the game, so one press
+would have triggered both.
 
 **Next in-game test: [v0.21.0 rebinding on the MODS tab](KEYBIND_HINT_TEST.md#rebinding).**
 With Mod Bindings Menu installed the mod registers Reroll operations under

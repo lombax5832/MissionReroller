@@ -10,11 +10,11 @@ do
     local HINT_WIDGET=1696
     local hint_blocked=false
     -- The dialog opens and closes on the Reroll operations binding of Mod
-    -- Bindings Menu's MODS tab, or on F8 while that binding has no key or the
+    -- Bindings Menu's MODS tab, or on F7 while that binding has no key or the
     -- menu is not installed. The hint names the key in use. The shortcut
     -- only acts on the galactic map, never with another screen such as the
     -- options or ESC menu above it.
-    local DEFAULT_KEY=0x77
+    local DEFAULT_KEY=0x76
     local screens_logged
     -- One section is open at a time, or none. The enemy section shows the
     -- rules of one group: a checked mission, or 0 for any mission.
@@ -234,7 +234,7 @@ do
             if gap.queued then gap.queued=nil;report,report_tone='Search cancelled','idle' end
             key_down=true;return
         end
-        -- A bound key replaces F8; an unreadable binding keeps both.
+        -- A bound key replaces F7; an unreadable binding keeps both.
         local down=pulse or bind_state~='bound' and user32.GetAsyncKeyState(DEFAULT_KEY)<0
         local pressed=down and not key_down
         key_down=down
@@ -250,7 +250,7 @@ do
                 scope=ok and region and {region=region} or nil
                 router=make_router(gate);router:open()
                 local ok,list=pcall(screens)
-                emit('MODAL_OPEN scope='..(scope and 'region '..scope.region or 'planet')..' key='..(keys or 'F8')
+                emit('MODAL_OPEN scope='..(scope and 'region '..scope.region or 'planet')..' key='..(keys or 'F7')
                     ..' screens='..(ok and list or '?'))
             end
         end
@@ -435,5 +435,5 @@ do
         stingray.Script.set_temp_byte_count(temp);assert(ok,err)
     end
     M.dialog_enabled=true
-    emit('Mission filters: F8 or the Reroll operations binding on the MODS tab, on the galactic map only; native cursor; docked panel; key hint beside BACK '..(HINT_WIDGET and 'at widget '..HINT_WIDGET or 'disabled')..'; alone or hosting a lobby; all checked families in one operation; map difficulty; constellations per mission; repeat searches allowed')
+    emit('Mission filters: F7 or the Reroll operations binding on the MODS tab, on the galactic map only; native cursor; docked panel; key hint beside BACK '..(HINT_WIDGET and 'at widget '..HINT_WIDGET or 'disabled')..'; alone or hosting a lobby; all checked families in one operation; map difficulty; constellations per mission; repeat searches allowed')
 end

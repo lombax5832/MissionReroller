@@ -1,6 +1,7 @@
 -- Diagnostic only: nothing here publishes, calls the game generator or selects.
 local original_update,original_shutdown=rawget(_G,'update'),rawget(_G,'shutdown')
 local stopped,key_down,armed=false,true,nil
+local mods_logged=false
 local probe,last_poll,previous,stable=nil,-math.huge,nil,0
 local capture_failures,last_capture_error=0,nil
 local code_signatures={
@@ -134,6 +135,11 @@ end
 local function pack(...)return {n=select('#',...),...}end
 _G.update=function(...)
     local result=original_update and pack(original_update(...)) or {n=0}
+    -- Every mod has loaded by the first frame, so the list goes out then.
+    if not mods_logged then
+        mods_logged=true
+        pcall(function()for _,line in ipairs(ModInventory.lines(_G))do emit(line)end end)
+    end
     if not stopped then
         local ok,err=pcall(tick)
         if not ok then
