@@ -46,6 +46,15 @@ the buffer (`day_s=6606 buffer_s=1514`, missions at 09:22 to 10:04 and
 side. The city steps, the countdown and a twilight drop have not been
 run yet.
 
+Two panel fixes followed that run, before publication. The CHOSEN word
+showed only beside Night, most likely because a text the game creates
+empty stays blank after it is given a value; the words beside Day and Any
+time started empty. Every time of day
+row now holds CHOSEN, clear unless chosen, and the panel draws any empty
+text as a clear placeholder. The enemy section also kept room for two note
+lines under its rows even with none to show, which left a gap above TIME
+OF DAY; it now keeps room only for the lines it shows.
+
 **Not yet validated in game: v0.25.0 every offset in one file.** Players
 should see no change; the log's startup line becomes
 `build=25480438 hashes=verified signatures=33 anchors=24 verified`.

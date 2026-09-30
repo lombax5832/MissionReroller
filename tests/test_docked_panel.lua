@@ -69,6 +69,16 @@ assert(b.rows[1].h==38 and b.rows[1].y-b.rows[2].y==42 and b.rows[1].w==610,'Mod
 b=P.layout(1920,1080,model('modifiers',list(13,'modifier:')))
 -- Four section headers leave 29 units a row; the 19-unit labels still fit.
 assert(b.rows[1].h<38 and b.rows[1].h>=28,'Thirteen modifiers shrink their rows')
+-- The header after an open section follows its last row by the same space,
+-- unless the enemy section has note lines to show.
+local function gap(m)
+    local b=P.layout(1920,1080,m);local row=b.rows[#b.rows]
+    for i,section in ipairs(b.headers)do if section.id=='section:'..m.section then return row.y-(b.headers[i+1].y+b.headers[i+1].h)end end
+end
+local plain=gap(model('modifiers',list(3,'modifier:')))
+assert(gap(model('enemies',list(3,'constellation:2:'),{groups=three}))==plain,'No gap under enemies without notes')
+assert(gap(model('enemies',list(3,'constellation:2:'),{groups=three,forced='Predator Strain'}))==plain+28,'One note line')
+assert(gap(model('enemies',list(3,'constellation:0:'),{groups=three,forced='Predator Strain',note='Check a mission'}))==plain+48,'Two note lines')
 assert(not pcall(P.layout,1920,1080,model('missions',list(25))),'A page holds 24 missions')
 assert(not pcall(P.layout,639,480,model('missions',list(2))),'Viewport too small')
 local disabled=model('missions',list(3));disabled.items[2].enabled=false
@@ -86,6 +96,8 @@ local function engine(features)
         Gui={resolution=function()return 1920,1080 end,material=function()return {}end,
             rect=function(_,pos,size,c)r.rects=r.rects+1;local o={kind='rect',pos=pos,size=size,color=c};r.live[#r.live+1]=o;return o end,
             text=function(_,value,_,size,_,pos,c)
+                -- The game never shows a text that was created empty.
+                assert(value~='','A text is created empty')
                 r.texts=r.texts+1;local o={kind='text',value=value,size=size,pos=pos,color=c};r.live[#r.live+1]=o;return o
             end,
             update_rect=function(_,o,pos,size,c)r.updates=r.updates+1;o.pos,o.size,o.color=pos,size,c end,
@@ -182,6 +194,29 @@ m=model('time',{{id='time:any',name='Any time'},{id='time:day',name='Day'},{id='
 panel:show({},{},face,nowhere,m)
 assert(r.find('TIME OF DAY') and r.find('CHOSEN') and r.find('SHORT DAYS: HOLDS 14M / DAY 1H 4M')
     and r.find('STAYS ON THAT SIDE AFTER THE REROLL') and r.find('ANY TIME') and r.find('NIGHT'),'Time of day rows')
+-- Every row holds CHOSEN; only the chosen one shows it, whichever row that is.
+local function chosen()
+    local words,shown={},nil
+    for _,o in ipairs(r.live)do
+        if o.kind=='text' and o.value=='CHOSEN' then words[#words+1]=o;if o.color[1]>0 then assert(not shown,'one shown');shown=o end end
+    end
+    return #words,shown
+end
+-- The row label beside a word: the text of that value on the word's line
+-- (the header summary also reads the side).
+local function beside(word,value)
+    for _,o in ipairs(r.live)do
+        if o.kind=='text' and o.value==value and math.abs(o.pos[2]-word.pos[2])<5 then return true end
+    end
+end
+local count,shown=chosen()
+assert(count==3 and shown and beside(shown,'NIGHT'),'Night shows CHOSEN')
+m.items[3].mode=nil;m.items[2].mode='chosen';panel:show({},{},face,nowhere,m)
+count,shown=chosen()
+assert(count==3 and shown and beside(shown,'DAY'),'Day shows CHOSEN')
+m.items[2].mode=nil;m.items[1].mode='chosen';m.time_note=nil;panel:show({},{},face,nowhere,m)
+count,shown=chosen()
+assert(count==3 and shown and beside(shown,'ANY TIME'),'Any time shows CHOSEN')
 old=r.destroyed;panel:clear();assert(r.destroyed==old+1)
 -- Triangles and metrics are optional, and a failure turns them off.
 for _,features in ipairs({'none','failing','broken metrics'})do
