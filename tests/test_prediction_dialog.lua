@@ -369,6 +369,27 @@ ui_planet=600;frame()
 assert(last_model.status=='Open a planet on the war table first' and last_model.tone=='warn' and #last_model.items==0 and last_model.locked)
 assert(shown('OPEN A PLANET ON THE WAR TABLE FIRST') and shown('NO PLANET') and shown('NO PLANET CHOSEN') and not shown('DEMOCRACY'))
 up(dialog,'dialog_release')('test cleanup')
+-- The key hint follows the BACK hint every focused frame, whether or not the
+-- dialog is open, disappears with the map or the focus, and a failure
+-- disables it for the session without stopping the mod.
+local hint_anchor,hint_last,hint_shown,hint_cleared={x=48,y=32,w=118,h=40,scale=1},nil,0,0
+up(dialog,'hint',{show=function(_,anchor,f)assert(f.font=='a');hint_last=anchor;hint_shown=hint_shown+1 end,
+    clear=function()hint_last=nil;hint_cleared=hint_cleared+1 end},true)
+up(dialog,'back_hint',function()return hint_anchor end,true)
+frame();assert(hint_last==hint_anchor and hint_shown==1,'Hint shown on the map with the dialog closed')
+toggle();assert(hint_last==hint_anchor and hint_shown>1,'Hint stays while the dialog is open')
+hint_anchor=nil;frame();assert(hint_last==nil and hint_cleared>=1,'Hint cleared when the BACK hint is gone')
+hint_anchor={x=48,y=32,w=118,h=40,scale=1};frame();assert(hint_last==hint_anchor)
+-- Losing focus clears the hint in the frame and again when the dialog is released.
+local cleared=hint_cleared;frame(false);assert(hint_last==nil and hint_cleared>cleared,'Hint cleared without focus')
+frame();assert(hint_last==hint_anchor)
+up(dialog,'back_hint',function()error('Widget moved')end,true)
+local logged,shown_before=#logs,hint_shown
+frame();assert(hint_last==nil and #logs==logged+1 and logs[#logs]:find('HINT_BLOCKED',1,true) and logs[#logs]:find('Widget moved',1,true),
+    'A hint failure is logged once')
+frame();frame();assert(hint_shown==shown_before and #logs==logged+1,'A blocked hint is never retried')
+assert(not tostring(M.status):find('STOPPED',1,true),'A hint failure does not stop the mod')
+up(dialog,'dialog_release')('hint cleanup')
 -- A constellation input failure must leave mission and modifier filters usable.
 local built={faction=2,missions={{id=2,name='Survey'}},constellation_groups={}}
 up(real_catalogue,'api',{pointer=function()end},true)
@@ -381,4 +402,4 @@ local before=#logs
 assert(real_catalogue({planet=268,board=0},10)==built and real_catalogue({planet=268,board=0},10)==built)
 assert(#logs==before+1 and logs[#logs]:find('CONSTELLATION_CATALOGUE_BLOCKED',1,true) and logs[#logs]:find('Missing global effects',1,true),
     'Constellation failures are logged once and do not block the catalogue')
-print('Dialog: sections, groups, paging, locked states, city scope, constellation acceptance and exclusion per mission, real mouse router, filters, empty request, map difficulty, alt-tab, cancel, close, reopen and repeat passed')
+print('Dialog: sections, groups, paging, locked states, city scope, constellation acceptance and exclusion per mission, real mouse router, filters, empty request, map difficulty, alt-tab, cancel, close, reopen, repeat and key hint passed')

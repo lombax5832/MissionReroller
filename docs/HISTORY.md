@@ -5,6 +5,13 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
+**Next: [v0.21.0 key hint beside BACK](KEYBIND_HINT_TEST.md).**
+A `CTRL + SHIFT + F8  REROLL OPERATIONS` hint drawn to the right of the war
+table's own BACK hint, anchored to that native widget so it follows the
+game's scale. Implemented and tested offline; inactive until a live survey
+of the map screen object pins the widget's offset. Search, prediction and
+publication are those of v0.20.2.
+
 **Validated in game: [v0.20.2 hosting a lobby](LOBBY_HOST_TEST.md).**
 Tested in a lobby of two on 2026-09-29: the host rerolled and the other
 player saw the rerolled operation. The mod no longer stops when the session

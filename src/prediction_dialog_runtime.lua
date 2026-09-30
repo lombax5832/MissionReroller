@@ -1,8 +1,13 @@
 -- Modal UI for the in-process predictor. Losing focus releases input ownership
 -- but never cancels the search. Only an explicit cancel/close cancels work.
 do
-    local panel,gate,router,exe
+    local panel,hint,gate,router,exe
     local selected,difficulty,key_down={},10,true
+    -- The key hint sits beside the war table's own BACK hint, a widget of
+    -- the map screen object. Its offset in that object is pinned from a
+    -- scripts/survey_map_widgets.py run; nil draws no hint.
+    local HINT_WIDGET=nil
+    local hint_blocked=false
     -- One section is open at a time, or none. The enemy section shows the
     -- rules of one group: a checked mission, or 0 for any mission.
     local modifiers,section,mission_page,group_choice={},'missions',1,0
@@ -78,6 +83,32 @@ do
         for _,v in pairs(f)do assert(v~='0000000000000000','Font not ready')end
         return f
     end
+    -- The BACK hint's solved rectangle, or nil when the galactic map is not
+    -- the top screen or the hint is hidden. The map screen object is the one
+    -- inline subscriber of a UI manager event registry; a widget record keeps
+    -- its flags at +0 (0x10 visible), unscaled size at +36, inherited opacity
+    -- at +84, scale at +100/+140 and solved bottom-left position at +148/+156.
+    local single
+    local function back_hint()
+        if not HINT_WIDGET then return nil end
+        local screen=read(pointer(game+0x347ce28)+0x429c,24);local depth=u(screen,20)
+        if depth<1 or depth>5 or u(screen,(depth-1)*4)~=15 then return nil end
+        local entry=read(pointer(game+0x3326e68)+25224,24)
+        if u(entry,0)~=1 or u(entry,16)~=226 then return nil end
+        local owner=api.pointer(entry,8)
+        if not owner then return nil end
+        local w=read(owner+HINT_WIDGET,164)
+        single=single or ffi.new('float[1]')
+        local function f(o)ffi.copy(single,w:sub(o+1,o+4),4);return tonumber(single[0])end
+        if math.floor(u(w,0)/16)%2==0 then return nil end
+        local opacity=f(84)
+        if not (opacity>=0.995 and opacity<=1.01)then return nil end
+        local sx,sy=f(100),f(140)
+        local box={x=f(148),y=f(156),w=f(36)*sx,h=f(40)*sy,scale=sx}
+        for _,v in pairs(box)do if v~=v or v<0 or v>32768 then return nil end end
+        if sx<0.3 or sx>4 or math.abs(sx-sy)>0.01 or box.w<8 or box.h<8 then return nil end
+        return box
+    end
     local function check_window()
         for _,sig in ipairs(window_signatures)do
             assert(hex(read(exe+sig[1],#sig[2]/2))==sig[2],'Window binding signature mismatch')
@@ -93,10 +124,11 @@ do
         if gate then gate:release()end
         router=nil
         if panel then panel:clear()end
+        if hint then pcall(function()hint:clear()end)end
         emit('MODAL_RELEASE '..reason)
     end
     local function init()
-        exe=assert(api.module(nil));panel=Panel.new(assert(stingray))
+        exe=assert(api.module(nil));panel=Panel.new(assert(stingray));hint=Hint.new(stingray)
         ffi.cdef[[typedef struct { int32_t x,y; } MRD_POINT;
             typedef struct { int32_t left,top,right,bottom; } MRD_RECT;
             int GetCursorPos(MRD_POINT *); int ScreenToClient(void *,MRD_POINT *);
@@ -151,6 +183,15 @@ do
             running=false;report=M.search_report or captions[M.status] or M.status
             report_tone=M.search_report and 'warn' or tones[M.status] or 'bad'
             if M.status=='publication_test_passed' and router then router:close()end
+        end
+        -- The hint is cosmetic: a failure disables it for the session and is
+        -- logged once, without stopping the mod.
+        if hint and not hint_blocked then
+            local ok,err=pcall(function()
+                local anchor=focused and back_hint()
+                if anchor then hint:show(anchor,face())else hint:clear()end
+            end)
+            if not ok then hint_blocked=true;pcall(function()hint:clear()end);emit('HINT_BLOCKED '..tostring(err))end
         end
         if not focused then
             if router then dialog_release('focus lost; search continues')end
@@ -343,5 +384,5 @@ do
         stingray.Script.set_temp_byte_count(temp);assert(ok,err)
     end
     M.dialog_enabled=true
-    emit('Mission filters: Ctrl+Shift+F8; native cursor; docked panel; alone or hosting a lobby; all checked families in one operation; map difficulty; constellations per mission; repeat searches allowed')
+    emit('Mission filters: Ctrl+Shift+F8; native cursor; docked panel; key hint beside BACK '..(HINT_WIDGET and 'at widget '..HINT_WIDGET or 'disabled')..'; alone or hosting a lobby; all checked families in one operation; map difficulty; constellations per mission; repeat searches allowed')
 end
