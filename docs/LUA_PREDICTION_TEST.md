@@ -259,9 +259,10 @@ Validation before deployment:
 
 The decoder checks objective scope before reading progress, so unrelated changing
 progress cannot prevent a stable capture. Weighted mission usage resets per
-operation, as confirmed by the native trace. Conditional world modifiers with
-nonempty environment tags and the category-6 defense template gate deliberately
-remain unsupported and produce diagnostics. Constellation prediction and general
+operation, as confirmed by the native trace. The category-6 defense template
+gate deliberately remains unsupported and produces diagnostics. (Conditional
+world modifiers with environment tags were also refused until v0.22.1, which
+ports the world-modifier collector; see [HISTORY](HISTORY.md).) Constellation prediction and general
 new-seed search/publication are not enabled.
 
 ### Next human test
