@@ -37,7 +37,7 @@ frame();ready(s,2000000,now)
 for _=1,12 do frame()end
 assert(MissionRerollerExperiment.status=='search_matched' and narrowed==1 and complete==1,'Search must progress while unfocused')
 assert(MissionRerollerExperiment.search_result.seed==124 and first==124)
-assert(table.concat(logs):find('first_seed=124 resumed=false',1,true) and table.concat(logs):find('limit=262144',1,true))
+assert(table.concat(logs):find('first_seed=124 resumed=false',1,true) and table.concat(logs):find('limit=1000000',1,true))
 assert(table.concat(logs):find('published=false selected=false',1,true))
 assert(table.concat(logs):match('LUA_SEARCH_MATCH [^\n]*elapsed_s=[%d.]+ slices=%d+ work_ms=%d+ context_ms=%d+ jit=true missions='),'Timing is reported')
 ready(s,2000000,now);live=nil;unavailable='waiting for pending backend requests'

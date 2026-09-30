@@ -62,7 +62,7 @@ local search_hooks={}
 local search=factory('prediction_search_runtime.lua',runtime,{})(fake_host(config),lib,search_hooks)
 assert(last():find('; test outcome',1,true),last())
 assert(type(search.on_prediction_ready)=='function' and type(search.advance_prediction_search)=='function')
-assert(type(search.search_clock)=='function' and search.default_limit==262144)
+assert(type(search.search_clock)=='function' and search.default_limit==1000000)
 assert(search.advance_prediction_search('tick',0)==false,'No search is running')
 local dialog=factory('prediction_dialog_runtime.lua',runtime,{})(fake_host(config),lib,{default_limit=search.default_limit})
 for _,name in ipairs({'dialog_tick','dialog_release','validate_search_request'})do assert(type(dialog[name])=='function',name)end

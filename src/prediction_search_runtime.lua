@@ -13,7 +13,7 @@ local on_prediction_ready,advance_prediction_search
 local current_search,search_started,last_progress,max_slice
 local slices,step_time,context_time
 local wait_started,wait_total,last_wait_poll
-local default_limit=262144
+local default_limit=1000000
 -- The last range searched without a match, so an unchanged request continues
 -- after it instead of repeating it.
 local resume
