@@ -21,6 +21,10 @@ function P.layout(width,height,model)
         b.targets[#b.targets+1]=t;return t
     end
     local items,top=model.items or {},107
+    -- The enemy section's note lines below its rows: the planet-wide forces
+    -- and the hint, each only when there is one.
+    local lines=((model.forced or '')~='' and 1 or 0)+(model.note and 1 or 0)
+    local notes=lines>0 and 8+20*lines or 0
     local function usable(item)return not model.locked and item.enabled~=false end
     for i,section in ipairs(SECTIONS)do
         b.headers[i]=target('section:'..section.id,LEFT,top,INNER,52,true)
@@ -32,7 +36,7 @@ function P.layout(width,height,model)
                 local groups=model.groups or {}
                 local w=(INNER+4)/math.max(1,#groups)-4
                 for n,group in ipairs(groups)do b.groups[n]=target('group:'..group.id,LEFT+(n-1)*(w+4),top+10,w,36,true)end
-                first=top+(#groups>0 and 54 or 10);below=below+48;b.meta=first+9
+                first=top+(#groups>0 and 54 or 10);below=below+notes;b.meta=first+9
             elseif section.id=='missions' and (model.pages or 1)>1 then
                 b.pager[1]=target('previous_page',LEFT+INNER-64,top+6,30,26,true)
                 b.pager[2]=target('next_page',LEFT+INNER-30,top+6,30,26,true)
@@ -50,7 +54,7 @@ function P.layout(width,height,model)
                 for n,item in ipairs(items)do b.rows[n]=target(item.id,LEFT,first+(n-1)*(h+4),INNER,h,usable(item))end
                 last=first+#items*(h+4)-4
             end
-            if section.id=='enemies' then b.notes={last+17,last+37};last=last+48 end
+            if section.id=='enemies' then b.notes={last+17,last+37};last=last+notes end
             top=last+14
         end
     end
@@ -166,6 +170,9 @@ function P.new(e)
         local function text(id,value,x,cy,size,c,align,room)
             -- The design is set in capitals. The font atlas may lack glyphs outside ASCII.
             value=(tostring(value):upper():gsub('[^\32-\126]','?'))
+            -- A text created empty in game stays blank after it is given a
+            -- value, so an empty one is drawn as a clear placeholder instead.
+            if value=='' then value,c='-',color(0,0,0,0)end
             size=size*s
             local w
             if room then value,size,w=fit(value,size,math.max(room,size))end
@@ -261,7 +268,9 @@ function P.new(e)
                     rect('box'..n,t.x+14*s,cy-10*s,20*s,20*s,993,rule or outline)
                     rect('gap'..n,t.x+16*s,cy-8*s,16*s,16*s,994,on and yellow or dark)
                     rect('mark'..n,t.x+19*s,cy-1.5*s,10*s,3*s,995,out and red or none)
-                    local word=text('word'..n,WORDS[item.mode] or (section=='time' and '' or 'ANY'),t.x+t.w-14*s,cy,14,rule or muted,'right',120*s)
+                    -- A time of day row always holds its word, clear unless chosen.
+                    local word=section=='time' and text('word'..n,WORDS.chosen,t.x+t.w-14*s,cy,14,on and rule or color(0,0,0,0),'right',120*s)
+                        or text('word'..n,WORDS[item.mode] or 'ANY',t.x+t.w-14*s,cy,14,rule or muted,'right',120*s)
                     text('label'..n,item.name,t.x+43*s,cy,19,off and dim or rule or white,nil,t.w-73*s-word)
                 end
             end
