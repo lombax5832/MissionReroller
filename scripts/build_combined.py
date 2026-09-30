@@ -15,7 +15,8 @@ def source():
                       ('window_signatures','window_signatures.lua'),('make_cursor','window_cursor.lua'),
                       ('selection_signatures','selection_signatures.lua'),('make_selection','match_selection.lua')]:
         parts.append('local '+name+'=(function()\n'+(root/file).read_text()+'\nend)()')
-    parts.extend((root/file).read_text() for file in ['experiment_adapter.lua','combined_runtime.lua','combined_loop.lua'])
+    parts.append(build.inline_adapter())
+    parts.extend((root/file).read_text() for file in ['combined_runtime.lua','combined_loop.lua'])
     return ('\n'.join(parts)+'\n').encode()
 def main(output=None):
     output=Path(output) if output else build.ROOT/'releases'/f'Mission-Reroller-v{VERSION}.zip'

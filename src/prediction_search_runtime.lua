@@ -1,4 +1,14 @@
 -- Controlled read-only search checkpoint: fixed filter, no UI or publication.
+-- A runtime factory: the assembler runs this file as function(host,lib,hooks).
+-- hooks: bind_constellations, on_existing_match, on_search_match, and
+-- validate_search_request, which the assembler adds once the dialog exists.
+local M,emit,read,u,snapshot,config=host.M,host.emit,host.read,host.u,host.snapshot,host.config
+local Search,composition_factory=lib.Search,lib.composition_factory
+local candidate_factory,make_search_job=lib.candidate_factory,lib.make_search_job
+local bind_constellations,on_existing_match,on_search_match=hooks.bind_constellations,hooks.on_existing_match,hooks.on_search_match
+local api,game,ffi,kernel
+host.when_initialized(function(n)api,game,ffi,kernel=n.api,n.game,n.ffi,n.kernel end)
+local on_prediction_ready,advance_prediction_search
 local current_search,search_started,last_progress,max_slice
 local slices,step_time,context_time
 local wait_started,wait_total,last_wait_poll
@@ -59,6 +69,7 @@ on_prediction_ready=function(s,definitions,now)
             constellations.groups[group]=copy
         end
     end
+    local validate_search_request=hooks.validate_search_request
     if validate_search_request then
         local ok,err=pcall(validate_search_request,s,request)
         if not ok then M.status='search_failed';emit('FILTER_BLOCKED '..tostring(err));return end
@@ -156,7 +167,7 @@ on_prediction_ready=function(s,definitions,now)
         end
         table.sort(tag_rules);emit('LUA_SEARCH_CONSTELLATIONS '..table.concat(tag_rules,', '))
     end
-    emit(string.format('LUA_SEARCH_STARTED planet=%d region=%s baseline_seed=%u first_seed=%u resumed=%s difficulty=%d required=%s limit=%d read_only=true',
+    emit(string.format('LUA_SEARCH_STARTED planet=%d region=%s baseline_seed=%u first_seed=%u resumed=%s difficulty=%d required=%s limit=%d read_only='..tostring(M.read_only),
         s.planet,scope and scope.region or 'all',s.seed,first,tostring(resumed==true),request.difficulty,table.concat(names,' + '),limit))
 end
 advance_prediction_search=function(action,now)
@@ -208,7 +219,7 @@ advance_prediction_search=function(action,now)
                 for i,mission in ipairs(job.operation.missions)do tags[i]=mission.native_type..':'..tags[i]end
                 emit('LUA_SEARCH_MATCH_CONSTELLATIONS row='..job.operation.row..' missions='..table.concat(tags,','))
             end
-            emit(string.format('LUA_SEARCH_MATCH seed=%u row=%d attempts=%d seeds_per_second=%.0f ranges=%d bytes=%d max_slice_ms=%.3f %s missions=%s read_only=true published=false selected=false',
+            emit(string.format('LUA_SEARCH_MATCH seed=%u row=%d attempts=%d seeds_per_second=%.0f ranges=%d bytes=%d max_slice_ms=%.3f %s missions=%s read_only='..tostring(M.read_only)..' published=false selected=false',
                 job.seed,job.operation.row,job.attempts,job.attempts/elapsed,job.ranges,job.bytes,max_slice,timing,table.concat(missions,',')))
             if on_search_match then on_search_match(job,now)end
         else
@@ -226,4 +237,6 @@ advance_prediction_search=function(action,now)
     end
     return true
 end
-emit('Lua search checkpoint: ICBM + Geological Survey + Eradicate, difficulty 10; same shortcut cancels; alt-tab supported; no refresh or selection')
+emit('Lua search checkpoint: ICBM + Geological Survey + Eradicate, difficulty 10; same shortcut cancels; alt-tab supported; '..config.search_outcome)
+return {on_prediction_ready=on_prediction_ready,advance_prediction_search=advance_prediction_search,
+    search_clock=search_clock,default_limit=default_limit}

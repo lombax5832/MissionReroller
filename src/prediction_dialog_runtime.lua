@@ -1,5 +1,16 @@
 -- Modal UI for the in-process predictor. Losing focus releases input ownership
 -- but never cancels the search. Only an explicit cancel/close cancels work.
+-- A runtime factory: the assembler runs this file as function(host,lib,hooks).
+local M,emit,read,pointer,page,u,hex,snapshot=host.M,host.emit,host.read,host.pointer,host.page,host.u,host.hex,host.snapshot
+local Panel,Hint,Binding,Compatibility,FilterCatalogue=lib.Panel,lib.Hint,lib.Binding,lib.Compatibility,lib.FilterCatalogue
+local make_gate,make_router,window_signatures,make_cursor=lib.make_gate,lib.make_router,lib.window_signatures,lib.make_cursor
+local Search,Constellations,make_constellation_inputs=lib.Search,lib.Constellations,lib.make_constellation_inputs
+local make_composition_inputs,make_config,make_effects=lib.make_composition_inputs,lib.make_config,lib.make_effects
+local mission_eligible,make_environments=lib.mission_eligible,lib.make_environments
+local default_limit=hooks.default_limit
+local api,game,ffi,user32
+host.when_initialized(function(n)api,game,ffi,user32=n.api,n.game,n.ffi,n.user32 end)
+local dialog_tick,dialog_release,validate_search_request
 do
     local panel,hint,binding,gate,router,exe,cursor
     local selected,difficulty,key_down={},10,true
@@ -437,3 +448,4 @@ do
     M.dialog_enabled=true
     emit('Mission filters: F7 or the Reroll operations binding on the MODS tab, on the galactic map only; native cursor; docked panel; key hint beside BACK '..(HINT_WIDGET and 'at widget '..HINT_WIDGET or 'disabled')..'; alone or hosting a lobby; all checked families in one operation; map difficulty; constellations per mission; repeat searches allowed')
 end
+return {dialog_tick=dialog_tick,dialog_release=dialog_release,validate_search_request=validate_search_request}

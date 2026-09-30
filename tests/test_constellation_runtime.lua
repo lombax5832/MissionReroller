@@ -1,8 +1,6 @@
 -- Usage: luajit test_constellation_runtime.lua <built dialog entry>
-local function up(fn,name,value,set)
-    for i=1,100 do local k,v=debug.getupvalue(fn,i);if k==name then if set then debug.setupvalue(fn,i,value)end;return v end;if not k then break end end
-    error('Missing upvalue '..name)
-end
+local H=dofile((arg[0]:match('^(.*[/\\])') or '')..'harness.lua')
+local up=H.up
 local function word(n)return string.char(n%256,math.floor(n/256)%256,math.floor(n/65536)%256,math.floor(n/16777216)%256)end
 local logs={}
 CowboyBingusModLoader={api=1,version=18,open_log=function()return {write=function(_,s)logs[#logs+1]=s end,flush=function()end,close=function()end}end}
@@ -27,8 +25,7 @@ local function decode(bytes,offset)
     if value<0x10000 then return nil end
     return value
 end
-up(ready,'read',read,true);up(ready,'game',0x10000000,true)
-up(tick,'api',{read=read,pointer=decode,time=function()return 0 end},true)
+H.natives(update,{api={read=read,pointer=decode,time=function()return 0 end},game=0x10000000})
 jit.flush()
 local game,board,root,controller,level,screens=0x10000000,0x20000000,0x30000000,0x40000000,0x50000000,0x70000000
 local owner,variants,records,manager,sets=0x80000000,0x81000000,0x82000000,0x83000000,0x84000000
@@ -128,8 +125,8 @@ local advance=up(tick,'advance_prediction_search')
 local s={board=board,planet=268,seed=500,fingerprint='stable',operations=string.rep('\0',110*92),
     decoded={operations={{row=3,operation_id=5,seed=1,difficulty=10,missions={{native_type=72,seed=5,level_index=1}}}}}}
 local matched,existing,evaluated
-up(tick,'snapshot',function()return s end,true)
-up(ready,'validate_search_request',nil,true)
+up(ready,'snapshot',function()return s end,true)
+up(ready,'hooks').validate_search_request=nil
 up(ready,'composition_factory',function()return function()return {passed=true,independent_bases=true}end end,true)
 up(ready,'candidate_factory',function(take)return function(candidate,difficulty)
     take(board+0x12444c,4);evaluated=candidate

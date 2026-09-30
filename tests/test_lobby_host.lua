@@ -3,10 +3,8 @@
 -- dialog build and 'solo' for a build that must keep refusing a lobby.
 local ffi=require('ffi')
 local lobby=assert(arg[2])=='lobby'
-local function up(fn,key,value,set)
-    for i=1,100 do local k,v=debug.getupvalue(fn,i);if k==key then if set then debug.setupvalue(fn,i,value)end;return v end;if not k then break end end
-    error('Missing upvalue '..key)
-end
+local H=dofile((arg[0]:match('^(.*[/\\])') or '')..'harness.lua')
+local up=H.up
 CowboyBingusModLoader={api=1,version=18,open_log=function()return {write=function()end,flush=function()end,close=function()end}end}
 update=function()return 1,nil,3 end;shutdown=function()return 4,nil,6 end
 dofile(arg[1])
@@ -42,9 +40,7 @@ local kernel={VirtualQuery=function(a,m)
     m[0].Type=address(a)==base+0x3483c38 and 0x1000000 or 0x20000
     return ffi.sizeof(m[0])
 end}
-up(up(snapshot,'read'),'api',api,true)
-local page=up(snapshot,'page');up(page,'ffi',ffi,true);up(page,'kernel',kernel,true)
-up(snapshot,'game',ffi.cast('uint8_t *',base),true)
+H.natives(update,{api=api,ffi=ffi,kernel=kernel,game=ffi.cast('uint8_t *',base)})
 -- The board holds no operations here; decoding them is tested elsewhere.
 up(snapshot,'core',{inspect_snapshot=function()return {operations={}}end},true)
 local code=up(ownership,'expected_code'):gsub('..',function(v)return string.char(tonumber(v,16))end)
