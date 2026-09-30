@@ -74,7 +74,7 @@ replaces the old one.
 src/                         library modules and runtimes, joined at build time
 src/offsets.lua              every build-specific address and offset (docs/UPDATING.md)
 src/mods/ipodalexei/         mission_reroller.lua, the inert core the entry embeds
-scripts/build.py             release: NAME, VERSION, SUMMARY; MODULE/GUID from build_core
+scripts/build.py             release: NAME, DEFAULT_VERSION, manifest text; MODULE/GUID from build_core
 scripts/build_*.py           other configurations of the release source, listed in scripts/README.md
 scripts/check_live_*.py      live-memory checks through Memory Explorer
 scripts/check_offsets.py     src/offsets.lua against a game dump
@@ -155,7 +155,7 @@ parts enabled; `test_identity_probe.py`, `test_search_probe.py` and
 
 ```powershell
 $env:BINGUS_LOADER_ROOT = "$PWD\..\..\..\..\BingusSharedLoader"  # in a worktree only
-python -B scripts/build.py          # releases/Mission-Reroller-v<VERSION>.zip
+python -B scripts/build.py          # releases/Mission-Reroller-v<DEFAULT_VERSION>.zip
 python -B tests/test_package.py     # package checks, then tests/test_dialog.py
 ```
 
@@ -192,15 +192,16 @@ to do, and which log lines prove it worked or failed.
 
 1. Work on a branch in a worktree; merge into `main` as
    `Merge the <change> into main`.
-2. Release commit `Release <ver>: <what changed>`: bump `VERSION` in
-   `scripts/build.py`, update the version strings in `README.md`, add a
+2. Release commit `Release <ver>: <what changed>`: bump `DEFAULT_VERSION`
+   in `scripts/build.py` (local builds use it), update the version strings in `README.md`, add a
    `docs/HISTORY.md` entry at the top marked **Not yet validated in game**.
 3. After the user's in-game test, commit `Record the v<ver> in-game result`,
    changing the entry to **Validated in game** with the date and the log lines
    that prove it. Only the user's logs count as validation.
 4. Publish by pushing a tag `v<ver>` on the commit to ship
    (`git tag v<ver>; git push origin v<ver>`). `.github/workflows/release.yml`
-   then checks the tag against `VERSION`, builds, runs `test_package.py`,
+   then builds with the tag's version (`RELEASE_TAG`: the ZIP name, its
+   `manifest.json` and the in-game banner), runs `test_package.py`,
    creates the GitHub release with the ZIP and adds a new version of the
    main file on Nexus Mods (mod 16762). The notes for both are the
    `docs/HISTORY.md` entries for that version (`scripts/release_notes.py`).

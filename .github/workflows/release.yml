@@ -21,6 +21,9 @@ env:
   # The v3 API's unique mod ID for helldivers2/mods/16762; the changelog
   # endpoint rejects the game-scoped 16762.
   NEXUS_MOD_ID: '26280904900986'
+  # scripts/build.py takes the release version from the tag, so the ZIP, its
+  # manifest and the in-game banner carry it; other runs use DEFAULT_VERSION.
+  RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
 
 permissions:
   contents: write
