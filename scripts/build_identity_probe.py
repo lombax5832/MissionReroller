@@ -5,6 +5,8 @@ import build_core as build
 import build_combined
 
 VERSION = '0.8.0'
+# The one writer of M.status, created once M and emit exist (src/reroll_session.lua).
+SESSION = 'local reroll_session=make_reroll_session(M,emit)'
 
 
 def source(search=False,publish=False,dialog=False,version=None):
@@ -26,7 +28,8 @@ def source(search=False,publish=False,dialog=False,version=None):
                        ('make_environments', 'template_environments.lua'), ('make_composition_inputs', 'composition_inputs.lua'),
                        ('make_composition_prediction', 'composition_prediction.lua'), ('make_composition_capture', 'composition_capture.lua'),
                        ('make_base_inputs', 'operation_base_inputs.lua'),
-                       ('sha256', 'bytes_sha256.lua'), ('ModInventory', 'mod_inventory.lua')]:
+                       ('sha256', 'bytes_sha256.lua'), ('ModInventory', 'mod_inventory.lua'),
+                       ('make_reroll_session', 'reroll_session.lua')]:
         parts.append('local '+name+'=(function()\n'+(root/file).read_text()+'\nend)()')
     parts.append('local predict_identity=make_identity(make_rng)')
     parts.append('local predict_composition=make_composition_prediction(make_rng,choose_category,choose_level,make_mission_choice(make_rng),make_finalizer(make_rng))')
@@ -56,11 +59,13 @@ def source(search=False,publish=False,dialog=False,version=None):
         adapter=adapter.replace('read_only=false','read_only=false,preview_prediction=true')
         adapter=adapter.replace("assert(M.read_only,'Preview snapshots are read-only')","assert(M.read_only or M.preview_prediction,'Preview snapshots are read-only')")
         parts.append(adapter)
+        parts.append(SESSION)
         if dialog:
             parts.append('M.version='+repr(version))
         parts.append((root/'live_publication_runtime.lua').read_text())
     else:
         parts.append(adapter.replace('read_only=false', 'read_only=true'))
+        parts.append(SESSION)
     if dialog:
         parts.append((root/'constellation_runtime.lua').read_text())
     if search:
