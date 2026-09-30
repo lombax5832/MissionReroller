@@ -44,6 +44,8 @@ The words this project uses for its own concepts. Game facts are in
 - **Host** (`host` in the runtimes): the adapter's services and the build's
   config, as one table:
   - memory reads, the snapshot and the log;
+  - the map screen (`host.map`) and, in the builds that publish, the one
+    guarded memory write (`host.write`);
   - the reroll session;
   - the native handles, which arrive through `when_initialized`.
 

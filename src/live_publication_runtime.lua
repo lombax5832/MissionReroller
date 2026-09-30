@@ -2,11 +2,12 @@
 -- A runtime factory: the assembler runs this file as function(host,lib,hooks).
 local M,emit,read,pointer,page,u,hex=host.M,host.emit,host.read,host.pointer,host.page,host.u,host.hex
 local reroll_session=host.reroll_session
+local map,write=host.map,host.write
 local snapshot,participants,expected_code=host.snapshot,host.participants,host.expected_code
 local Search,make_publication,make_ui_selection=lib.Search,lib.make_publication,lib.make_ui_selection
 local selection_signatures,verify_predicted_board=lib.selection_signatures,lib.verify_predicted_board
-local api,game,ffi,kernel
-host.when_initialized(function(n)api,game,ffi,kernel=n.api,n.game,n.ffi,n.kernel end)
+local api,game,ffi
+host.when_initialized(function(n)api,game,ffi=n.api,n.game,n.ffi end)
 local on_existing_match,on_search_match,advance_live_publication
 local transaction,selector,ui_selection,candidate,publication_used
 local function word(n)
@@ -39,13 +40,7 @@ local function ownership(b)
     assert(hex(read(game+0x12d5670,#expected_code/2))==expected_code,'Publication signature changed')
     return tostring(session)..hex(source)
 end
-local function write_seed(b,seed)
-    page(b+0x78e84,4,0x20000)
-    local bytes=word(seed);local written=ffi.new('size_t[1]')
-    assert(kernel.WriteProcessMemory(kernel.GetCurrentProcess(),b+0x78e84,bytes,4,written)~=0
-        and written[0]==4,'Seed write failed')
-    assert(read(b+0x78e84,4)==bytes,'Seed write did not persist')
-end
+local function write_seed(b,seed)write(b+0x78e84,word(seed),'Seed')end
 local function notify(b)
     ffi.cast('void (*)(void *, uint32_t)',game+0x12d57e0)(b,2)
 end
@@ -61,19 +56,14 @@ local function select_match(s)
     local op
     for _,value in ipairs(s.decoded.operations)do if value.row==candidate.row then op=value end end
     assert(op and op.seed==candidate.operation_seed and op.difficulty==candidate.difficulty,'Predicted operation missing')
-    ui_selection=make_ui_selection({root=function()return pointer(game+0x3326aa0)end,
-        read=read,u32=function(bytes)return u(bytes,0)end,word=word,
+    ui_selection=make_ui_selection({map=map,read=read,word=word,
         page=function(a,n)page(a,n,0x20000)end,
         signature=function()
             local sig='44896308c7430cffffffffe8e859e4ff'
             assert(hex(read(game+0x148c348,#sig/2))==sig,'Normal UI click signature mismatch')
         end,
-        write=function(a,bytes)
-            page(a,#bytes,0x20000)
-            local count=ffi.new('size_t[1]')
-            assert(kernel.WriteProcessMemory(kernel.GetCurrentProcess(),a,bytes,#bytes,count)~=0
-                and count[0]==#bytes,'Map UI write failed')
-        end})
+        -- The selection checks its own write; a restore is not re-read.
+        write=function(a,bytes)write(a,bytes,'Map UI',false)end})
     ui_selection:apply(s.planet,candidate.difficulty,candidate.row)
     ffi.cast('void (*)(uintptr_t, uint32_t)',game+0x12d1d40)(0,candidate.row)
     assert(read(s.board+0x78e60,8)==s.selection:sub(1,8),'Planet fields changed during selection')
@@ -95,7 +85,6 @@ local function cleanup(reason)
     transaction=nil;selector=nil;ui_selection=nil
 end
 on_existing_match=function(s,op,now)
-    ffi.cdef[[int WriteProcessMemory(void *, void *, const void *, size_t, size_t *);]]
     candidate={seed=s.seed,planet=s.planet,row=op.row,difficulty=op.difficulty,operation_seed=op.seed}
     select_match(s);reroll_session.advance('selection_pending')
     emit('EXISTING_MATCH row='..op.row..' seed='..s.seed..' publication=false')
@@ -105,7 +94,6 @@ on_search_match=function(job,now)
     local s=job.baseline;local match=job.operation
     candidate={seed=job.seed,planet=s.planet,row=match.row,difficulty=match.difficulty,operation_seed=match.seed,operations=job.operations,required=job.required or {[1]=true,[2]=true,[3]=true},modifiers=job.modifiers,
         constellations=job.constellations,scope=job.scope}
-    ffi.cdef[[int WriteProcessMemory(void *, void *, const void *, size_t, size_t *);]]
     transaction=make_publication({
         preflight=function(before,e)
             local current,reason=snapshot(true)
@@ -114,9 +102,7 @@ on_search_match=function(job,now)
             assert(current.seed~=e.seed,'Candidate is already installed')
             assert(read(before.board+0x78e60,8)==before.selection:sub(1,8),'Canonical map planet differs')
             assert(u(before.selection,4)==e.planet,'Viewed planet changed')
-            local ui=pointer(game+0x3326aa0)
-            local displayed_planet=u(read(ui+0x4ef8,4),0)
-            local displayed_difficulty=u(read(ui+0x4f14,4),0)
+            local displayed_planet,displayed_difficulty=map.viewed()
             emit(string.format('PUBLICATION_UI planet=%u expected_planet=%u difficulty=%u expected_difficulty=%u campaign_row=%u',displayed_planet,e.planet,displayed_difficulty,e.difficulty,u(before.selection,8)))
             assert(displayed_planet==e.planet,'Keep the viewed planet open with operation icons visible until the search completes (UI planet='..displayed_planet..', expected='..e.planet..')')
             assert(displayed_difficulty==e.difficulty,'Display difficulty '..e.difficulty..' before starting (UI difficulty='..displayed_difficulty..')')

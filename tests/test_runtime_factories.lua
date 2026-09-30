@@ -22,12 +22,15 @@ end
 local lines={}
 local binders={}
 local make_reroll_session=factory('reroll_session.lua','',{})()
+local make_map_screen=factory('map_screen.lua','',{})()
 local function fake_host(config)
     local M,emit={status='initializing'},function(s)lines[#lines+1]=s end
     return {M=M,config=config,emit=emit,reroll_session=make_reroll_session(M,emit,{strict=true}),
         hex=function()return '' end,u=function()return 0 end,read=function()error('no memory')end,
         pointer=function()error('no memory')end,page=function()end,participants=function()end,
         snapshot=function()return nil,'open galactic map' end,initialize=function()end,expected_code='',
+        map=setmetatable({HINT_WIDGET=1696},{__index=function()return function()error('no memory')end end}),
+        write=function()error('no writes')end,
         when_initialized=function(bind)binders[#binders+1]=bind end,close_log=function()end}
 end
 -- Library values are opaque to a factory until its functions run.
@@ -38,18 +41,27 @@ local function last()return lines[#lines]end
 
 -- The adapter: its host, and nothing when the loader is unsupported.
 local g={CowboyBingusModLoader={api=1,version=18,open_log=function()return nil end}}
-local host=factory('experiment_adapter.lua','core,config',g)({},config)
+local host=factory('experiment_adapter.lua','core,config,make_map_screen',g)({},config,make_map_screen)
 local M=g.MissionRerollerExperiment
 assert(host and host.M==M and host.config==config and M.read_only==false and M.preview_prediction==true and M.version=='9.9.9')
 for _,name in ipairs({'emit','hex','u','read','pointer','page','participants','snapshot','initialize','when_initialized','close_log'})do
     assert(type(host[name])=='function','host.'..name)
 end
+for _,name in ipairs({'stack','screens','on_top','ui','viewed','rows_address','processed_row','pointed_row','back_hint'})do
+    assert(type(host.map[name])=='function','host.map.'..name)
+end
+assert(host.map.HINT_WIDGET==1696 and host.write==nil,'The adapter has no write; publishing builds add host.write')
+-- The guarded write registers for the native handles and returns the write.
+local write_binders={}
+local write=factory('guarded_write.lua','',{})()({read=function()end,page=function()end,
+    when_initialized=function(bind)write_binders[#write_binders+1]=bind end})
+assert(type(write)=='function' and #write_binders==1)
 assert(type(host.expected_code)=='string' and host.u('\1\2\0\0',0)==513)
 local old={CowboyBingusModLoader={api=1,version=15}}
-assert(factory('experiment_adapter.lua','core,config',old)({},{read_only=true})==nil)
+assert(factory('experiment_adapter.lua','core,config,make_map_screen',old)({},{read_only=true},make_map_screen)==nil)
 assert(old.MissionRerollerExperiment.status=='unsupported_loader' and old.MissionRerollerExperiment.read_only==true)
 local again={MissionRerollerExperiment={}}
-assert(factory('experiment_adapter.lua','core,config',again)({},config)==nil,'A second copy stays inert')
+assert(factory('experiment_adapter.lua','core,config,make_map_screen',again)({},config,make_map_screen)==nil,'A second copy stays inert')
 
 -- The runtimes, created in the assembler's order.
 local runtime='host,lib,hooks'

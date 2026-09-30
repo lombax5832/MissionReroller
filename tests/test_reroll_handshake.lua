@@ -59,8 +59,10 @@ local catalogue={faction=2,slots=3,compatibility=compatibility,profiles={{masks=
     constellation_groups={[0]={list={},set={}},[2]={list={},set={}}}}
 up(dialog,'context',function()return s,10 end,true)
 up(dialog,'catalogue_for',function()return catalogue end,true)
-up(dialog,'map_on_top',function()return true end,true)
-up(dialog,'back_hint',function()return nil end,true)
+-- The galactic map is the top screen; its BACK hint is not read.
+local map=up(dialog,'map')
+map.on_top=function()return true end
+map.back_hint=function()return nil end
 up(dialog,'cursor',{client=function()return 0,0,1200,820 end},true)
 up(dialog,'face',function()return {font='a',material='b',atlas='c'}end,true)
 local shown={}

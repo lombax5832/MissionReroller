@@ -32,7 +32,12 @@ def main():
     for name, (options, runtimes) in variants.items():
         source = probe.source(**options)
         assert source == probe.source(**options), name + ' build is not reproducible'
-        assert wrapped('experiment_adapter.lua', 'core,config') in source, name + ': adapter text changed'
+        assert wrapped('experiment_adapter.lua', 'core,config,make_map_screen') in source, name + ': adapter text changed'
+        assert b'\nlocal make_map_screen=(function()\n' + (SRC / 'map_screen.lua').read_text().encode() + b'\nend)()' in source, name
+        # Only the builds that publish carry the guarded write.
+        writes = 'publish' in options
+        assert (b'host.write=make_guarded_write(host)' in source) == writes, name + ': guarded write'
+        assert ((SRC / 'guarded_write.lua').read_text().encode() in source) == writes, name + ': guarded write text'
         for file in runtimes:
             assert source.count(wrapped(file, RUNTIME)) == 1, name + ': ' + file + ' text changed'
         for file in {'live_publication_runtime.lua', 'constellation_runtime.lua', 'prediction_search_runtime.lua',
@@ -50,7 +55,9 @@ def main():
     assert b"shortcut='F7 on the galactic map'" in release
     lua = os.environ['HD2_LUAJIT']
     subprocess.run([lua, str(ROOT / 'tests/test_runtime_factories.lua'), str(SRC)], check=True)
-    print('Runtime host: unchanged runtime files in every build, no leftover mode text in the release, factories passed')
+    # The host's map screen and guarded write (map_screen.lua, guarded_write.lua).
+    subprocess.run([lua, str(ROOT / 'tests/test_map_screen.lua'), str(SRC)], check=True)
+    print('Runtime host: unchanged runtime files in every build, no leftover mode text in the release, factories, map screen and guarded write passed')
 
 
 if __name__ == '__main__':
