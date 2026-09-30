@@ -1,0 +1,144 @@
+# Build, test and publish a release when a version tag (v1.2.3) is pushed.
+# Pull requests and manual runs (Actions > Release > Run workflow) build and
+# test only; the publishing steps run for tags alone.
+name: Release
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+  pull_request:
+  workflow_dispatch:
+
+env:
+  # Sibling checkouts the build and tests read. Bump these to take a newer
+  # loader or newer recorded seeds.
+  LOADER_REPO: CowboyBingus/BingusSharedLoader
+  LOADER_COMMIT: 3d7e3a120828178573ef1ee0a5c7eeae4a951865
+  KYC_REPO: CowboyBingus/KnowYourConstellation
+  KYC_COMMIT: 46cb418efe913f472509d0382535407242af2e39
+  # The commit pinned by BingusSharedLoader/dependencies.json, built nogc64.
+  LUAJIT_COMMIT: 24c20c94e7db195b640854619577441f9b4bc6be
+  NEXUS_MOD_ID: '16762'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      # The build and tests expect ../BingusSharedLoader and
+      # ../KnowYourConstellation, so every repo is a sibling in the workspace.
+      - uses: actions/checkout@v7
+        with:
+          path: MissionReroller
+      - uses: actions/checkout@v7
+        with:
+          repository: ${{ env.LOADER_REPO }}
+          ref: ${{ env.LOADER_COMMIT }}
+          path: BingusSharedLoader
+      - uses: actions/checkout@v7
+        with:
+          repository: ${{ env.KYC_REPO }}
+          ref: ${{ env.KYC_COMMIT }}
+          path: KnowYourConstellation
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Cache LuaJIT
+        id: luajit-cache
+        uses: actions/cache@v6
+        with:
+          path: LuaJIT/src
+          key: luajit-nogc64-${{ env.LUAJIT_COMMIT }}
+      - uses: actions/checkout@v7
+        if: steps.luajit-cache.outputs.cache-hit != 'true'
+        with:
+          repository: LuaJIT/LuaJIT
+          ref: ${{ env.LUAJIT_COMMIT }}
+          path: LuaJIT
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: steps.luajit-cache.outputs.cache-hit != 'true'
+      - name: Build LuaJIT
+        if: steps.luajit-cache.outputs.cache-hit != 'true'
+        shell: cmd
+        working-directory: LuaJIT/src
+        run: |
+          set NoDefaultCurrentDirectoryInExePath=
+          msvcbuild.bat nogc64
+      - name: Point the tests at LuaJIT
+        run: |
+          "HD2_LUAJIT=$env:GITHUB_WORKSPACE\LuaJIT\src\luajit.exe" >> $env:GITHUB_ENV
+          & "$env:GITHUB_WORKSPACE\LuaJIT\src\luajit.exe" -v
+
+      - name: Check the tag and collect release notes
+        if: startsWith(github.ref, 'refs/tags/')
+        working-directory: MissionReroller
+        run: |
+          python -B scripts/release_notes.py $env:GITHUB_REF_NAME > "$env:RUNNER_TEMP\notes.md"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Get-Content "$env:RUNNER_TEMP\notes.md"
+
+      - name: Build
+        id: build
+        working-directory: MissionReroller
+        run: |
+          $zip = python -B scripts/build.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $version = python -B -c "import sys; sys.path.insert(0, 'scripts'); import build; print(build.VERSION)"
+          "zip=$zip" >> $env:GITHUB_OUTPUT
+          "name=$(Split-Path $zip -Leaf)" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Test
+        working-directory: MissionReroller
+        run: |
+          python -B tests/test_package.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.build.outputs.name }}
+          path: ${{ steps.build.outputs.zip }}
+          if-no-files-found: error
+
+      - name: GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        working-directory: MissionReroller
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME "${{ steps.build.outputs.zip }}" `
+            --title "Mission Reroller $env:GITHUB_REF_NAME" --notes-file "$env:RUNNER_TEMP\notes.md" --verify-tag
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - name: Read release notes for Nexus Mods
+        if: startsWith(github.ref, 'refs/tags/')
+        id: notes
+        run: |
+          $delimiter = [guid]::NewGuid()
+          "changelog<<$delimiter" >> $env:GITHUB_OUTPUT
+          Get-Content "$env:RUNNER_TEMP\notes.md" >> $env:GITHUB_OUTPUT
+          "$delimiter" >> $env:GITHUB_OUTPUT
+
+      # Adds a new version to the existing main file on
+      # https://www.nexusmods.com/helldivers2/mods/16762 and archives the old one.
+      - name: Nexus Mods
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: Nexus-Mods/upload-action@c96019556046053aa26044b44396cd38929daf23 # v1.0.0-beta.10
+        with:
+          api_key: ${{ secrets.NEXUSMODS_API_KEY }}
+          file_id: ${{ vars.NEXUSMODS_FILE_ID }}
+          filename: ${{ steps.build.outputs.zip }}
+          version: ${{ steps.build.outputs.version }}
+          display_name: Mission Reroller
+          category: main
+          archive_existing_version: true
+          update_mod_version: true
+          mod_id: ${{ env.NEXUS_MOD_ID }}
+          changelog: ${{ steps.notes.outputs.changelog }}

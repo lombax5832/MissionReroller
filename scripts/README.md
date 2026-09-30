@@ -6,6 +6,7 @@
 | --- | --- |
 | `build.py` | `releases/Mission-Reroller-v<version>.zip`, the package published on Nexus Mods and GitHub. `MODULE`, `GUID`, `NAME`, `VERSION` and the summary in the manifest live here. |
 | `build_identity_probe.py` | `source()` assembles the single plaintext entry from `src/`; `build.py` calls it with `search`, `publish` and `dialog` enabled. Its own `main` is the read-only research probe below. |
+| `release_notes.py` | `python -B scripts/release_notes.py v<version>` prints that version's `docs/HISTORY.md` entries and fails when the tag and `VERSION` disagree. The release workflow uses it for the GitHub release and the Nexus Mods changelog. |
 | `build_core.py` | The inert development core (`Mission-Reroller-Development-v0.2.0.zip`): the pure filter and search controller with no memory access. `build_identity_probe.source()` embeds it. |
 
 `python -B scripts/build.py` builds the release; `python -B tests/test_package.py`
