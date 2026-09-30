@@ -143,10 +143,12 @@ up(advance,'on_search_match',function(job)matched=job end,true)
 jit.flush()
 local function search(required,groups)
     matched,existing,evaluated=nil,nil,nil
-    M.search_options={difficulty=10,required=required,constellations={groups=groups},limit=256}
-    -- A run enters the search as the capture hands it over; the last one
-    -- ended at its match, as the idle pipeline would settle it.
-    session.settle();session.advance('waiting_for_stable_inputs')
+    -- The dialog starts a run and the capture hands it over to the search;
+    -- the last one ended at its match, as the idle pipeline would settle it.
+    session.settle()
+    local request={difficulty=10,required=required,constellations={groups=groups},limit=256}
+    assert(session.start(request) and session.take_request() and session.view().request==request)
+    session.advance('waiting_for_stable_inputs')
     ready(s,0x60000000,now)
     for _=1,4000 do
         if M.status~='search_running' then break end
@@ -172,7 +174,6 @@ search({},{[0]={[2]='exclude',[3]='exclude'}})
 assert(M.status=='search_matched' and table.concat(logs,'\n'):find('LUA_SEARCH_CONSTELLATIONS operation=accept any exclude 2|3',1,true))
 search({},{[0]={[2]='accept'}});assert(M.status=='search_exhausted')
 family.ids[#family.ids]=nil
-M.search_options=nil
 text=table.concat(logs,'\n')
 assert(not text:find('SESSION_',1,true),'Every phase change follows the session rules: '..tostring(text:match('SESSION_[^\n]*')))
 print('Constellation runtime: search tagging, annotation, preview observer, stamp survey, alternate level slot and fail-quiet diagnostics passed')

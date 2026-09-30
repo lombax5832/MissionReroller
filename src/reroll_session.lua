@@ -3,6 +3,11 @@
 -- reports its phase here. This is the only writer of M.status, which mirrors
 -- the phase for the log, the research builds and their tests.
 --
+-- The session also holds the run's record: the request the dialog started it
+-- with, the pending start and cancel the pipeline takes, the search's report
+-- for the player, its progress in seeds and its finished job. A new run
+-- begins with an empty record; the last run's stays readable until then.
+--
 -- A run begins at an entry phase, only moves forward through the stages and
 -- ends in exactly one outcome. The pipeline calls settle() whenever no stage
 -- has work left, so a run that stopped at a checkpoint still ends. A call
@@ -49,6 +54,8 @@ return function(M,emit,options)
     local strict=options and options.strict
     local phase=phases[M.status] and M.status or 'initializing'
     local running,outcome,detail,run=false,nil,nil,0
+    -- The run record. pending: a start the pipeline has not taken yet.
+    local request,pending,cancelling,report,progress,result=nil,false,false,nil,0,nil
     local self={phases=phases}
     local function set(name,text)phase=name;detail=text;M.status=name end
     local function close(name,text)
@@ -60,7 +67,7 @@ return function(M,emit,options)
     local function reject(message)
         if strict then error('Reroll session: '..message,3)end
         emit('SESSION_REJECTED '..message)
-        M.cancel_requested=true
+        cancelling=true
         close('session_failed',message)
         return false
     end
@@ -78,6 +85,8 @@ return function(M,emit,options)
         if not running then
             if not p.entry then return reject(name..' outside a run')end
             running=true;outcome=nil;run=run+1
+            -- The last run's record must not stand for this one.
+            request,pending,report,progress,result=nil,false,nil,0,nil
         elseif p.stage<phases[phase].stage then
             return reject(name..' after '..phase)
         end
@@ -111,16 +120,30 @@ return function(M,emit,options)
         return true
     end
     -- The dialog's side of the handshake.
-    function self.start(request)
+    function self.start(filters)
         if not self.advance('requested')then return false end
-        -- The last run's report must not stand for this one.
-        M.search_options=request;M.request_search=true;M.search_attempts=0;M.search_report=nil
+        request,pending=filters,true
         return true
     end
-    function self.cancel()M.cancel_requested=true end
+    function self.cancel()cancelling=true end
+    -- The pipeline's side: each start and cancel is taken once, as true.
+    -- The run's filters are view().request.
+    function self.take_request()
+        local asked=pending;pending=false;return asked
+    end
+    function self.take_cancel()
+        local asked=cancelling;cancelling=false;return asked
+    end
+    -- The search's side of the record. report is the dialog's text for an
+    -- outcome that needs more than its caption; progress counts seeds tried;
+    -- result is the finished search job.
+    function self.report(text)report=text end
+    function self.progress(attempts)progress=attempts or 0 end
+    function self.result(job)result=job end
     function self.view()
         local p=phases[phase]
-        local view={phase=phase,running=running,outcome=outcome,detail=detail,run=run,progress=M.search_attempts or 0}
+        local view={phase=phase,running=running,outcome=outcome,detail=detail,run=run,
+            request=request,report=report,progress=progress,result=result}
         if running then
             view.caption=p.caption or 'Checking planet data';view.tone='busy';view.step=p.step or 1
         elseif outcome=='stopped' then view.caption,view.tone=M.status,'bad'

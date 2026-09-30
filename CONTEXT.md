@@ -31,6 +31,10 @@ The words this project uses for its own concepts. Game facts are in
     4. Publication: write the matching seed and verify the regenerated
        board.
     5. Selection: open the matching operation.
+  - **Run record**: what the session keeps for the current run besides its
+    phase: the filters it was started with, the pending start and cancel
+    the pipeline takes once each, and the search's report, progress (seeds
+    tried) and finished job. A new run begins with an empty record.
 - **Host** (`host` in the runtimes): the adapter's services and the build's
   config, as one table:
   - memory reads, the snapshot and the log;

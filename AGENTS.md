@@ -122,6 +122,10 @@ No single file in `src/` is the shipped entry. `scripts/build.py` calls
   `finish` / `settle` / `fail`; the dialog calls `start` / `cancel` / `view`.
   Nothing else writes `M.status`. A new status needs a row in its phase
   table; an unlisted one raises in tests and logs `SESSION_REJECTED` in game.
+  The session also holds the run record: the pipeline takes the dialog's
+  start and cancel with `take_request` / `take_cancel`, the search writes
+  `report` / `progress` / `result`, and `view()` shows them with the run's
+  `request`. None of it is on `M`.
 
 `build_combined.py`, `build_experiment.py` and `build_seed_test.py` are older
 research builds: they append the adapter inline through
