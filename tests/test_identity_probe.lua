@@ -232,6 +232,27 @@ assert(table.concat(logs):find('LUA_SEED_PREDICTION_PASS',1,true) and table.conc
 composition.passed=true;composition.errors={};level_ok=false
 down=false;frame();down=true;frame();for _=1,5 do frame()end
 assert(MissionRerollerExperiment.status=='level_test_mismatch','Composition pass must not hide a separate level failure')
+-- Capture reads yield once the frame's slice is used, so one poll spans
+-- several frames instead of stalling one. Reads outside a poll never yield.
+local sliced=up(prepare,'sliced_read')
+local clock,reads,frame_reads,most=0,0,0,0
+up(sliced,'slice_clock',function()return clock end,true)
+up(sliced,'read',function()reads=reads+1;frame_reads=frame_reads+1;clock=clock+0.01;return 'x' end,true)
+assert(sliced(0,1)=='x' and reads==1,'A read outside a poll must not yield')
+local plain=fake_probe.capture
+fake_probe.capture=function(...)for _=1,5 do sliced(0,1)end;return plain(...)end
+level_ok=true;reads=0
+local before=calls;down=false;frame();down=true
+local frames=0
+repeat frame_reads=0;frame();frames=frames+1;most=math.max(most,frame_reads)until calls>before or frames>60
+assert(calls==before+1 and MissionRerollerExperiment.status=='composition_test_passed','A sliced capture must still pass')
+assert(reads==4*2*5 and most<=2 and frames>=20,string.format('Polls must spread over frames: reads=%d most=%d frames=%d',reads,most,frames))
+-- A new request mid-poll discards the poll in flight.
+down=false;frame();down=true;frame();assert(reads>40 and calls==before+1)
+down=false;frame();down=true;frame()
+for _=1,40 do frame()end
+assert(calls==before+2,'Only the restarted request may complete')
+fake_probe.capture=plain
 up(update,'tick',function()error('synthetic failure')end,true)
 jit.flush() -- debug.setupvalue changes test wiring after the long retry loop.
 frame();assert(MissionRerollerExperiment.status:find('synthetic failure',1,true),MissionRerollerExperiment.status)
