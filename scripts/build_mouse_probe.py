@@ -12,7 +12,7 @@ def source():
     parts=['-- HD2-Addon: '+MODULE]
     for name,file in [('Search','search_session.lua'),('Panel','mouse_panel.lua'),
                       ('make_gate','window_mouse_gate.lua'),('make_router','modal_pointer.lua'),
-                      ('window_signatures','window_signatures.lua')]:
+                      ('window_signatures','window_signatures.lua'),('make_cursor','window_cursor.lua')]:
         parts.append('local '+name+'=(function()\n'+(root/file).read_text()+'\nend)()')
     parts.extend([prefix,(root/'mouse_probe_runtime.lua').read_text()])
     return ('\n'.join(parts)+'\n').encode()

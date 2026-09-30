@@ -1,16 +1,11 @@
 -- Real runtime and router with stubbed OS/render/memory boundaries.
 local ffi=require('ffi')
-ffi.cdef[[typedef struct {int32_t x,y;} MR_MOUSE_POINT;
-typedef struct {int32_t left,top,right,bottom;} MR_MOUSE_RECT;]]
 _G.ffi=ffi;initialized=true
 local key,focused,mouse=false,true,false
 local acquired,released=0,0
 local user={GetForegroundWindow=function()return nil end,
  GetWindowThreadProcessId=function(_,p)p[0]=focused and 1 or 2 end,
- GetAsyncKeyState=function(k)return ((k==1 and mouse) or (k~=1 and key)) and -32768 or 0 end,
- GetCursorPos=function(p)p[0].x=50;p[0].y=430;return 1 end,
- ScreenToClient=function()return 1 end,
- GetClientRect=function(_,r)r[0].right=640;r[0].bottom=480;return 1 end}
+ GetAsyncKeyState=function(k)return ((k==1 and mouse) or (k~=1 and key)) and -32768 or 0 end}
 kernel={GetCurrentProcessId=function()return 1 end}
 local now=0;api={time=function()now=now+0.1;return now end}
 local board=ffi.cast('uint8_t *',0x20000000);game=board
@@ -32,6 +27,7 @@ end
 dofile(assert(arg[1]))
 local tick=up(update,'tick')
 up(tick,'user',user)
+up(tick,'cursor',{client=function()return 50,430,640,480 end})
 up(tick,'panel',{clear=function()end,show=function()end})
 up(tick,'face',function()return {}end)
 up(tick,'gate',{acquire=function()acquired=acquired+1;return true end,

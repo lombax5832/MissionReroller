@@ -5,6 +5,19 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
+**Not yet validated in game: v0.20.3 cursor reads shared with other addons.**
+A user's log ended with `STOPPED: ... bad argument #1 to 'GetCursorPos'
+(cannot convert 'struct 2306 [1]' to 'struct 1129 *')` the moment the dialog
+opened. LuaJIT keeps the first `ffi.cdef` of a function name for the whole
+VM and ignores later ones, and every addon shares that VM. Another addon had
+declared `GetCursorPos` with its own POINT struct first, so the dialog's own
+struct was rejected. `src/window_cursor.lua` now resolves `GetCursorPos`,
+`ScreenToClient` and `GetClientRect` by address and calls them through
+unnamed function pointers with untyped parameters, which no other
+declaration can change. The dialog, the combined test build and the mouse
+test build use it. `tests/test_window_cursor.lua` reproduces the clash
+against the real user32 and passes. Nothing else changed.
+
 **Validated in game: [v0.20.2 hosting a lobby](LOBBY_HOST_TEST.md).**
 Tested in a lobby of two on 2026-09-29: the host rerolled and the other
 player saw the rerolled operation. The mod no longer stops when the session

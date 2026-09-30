@@ -12,7 +12,7 @@ import build_identity_probe as probe
 MODULE = build_combined.MODULE
 GUID = build_combined.GUID
 NAME = 'Mission Reroller'
-VERSION = '0.20.2'
+VERSION = '0.20.3'
 SUMMARY = ('docked dialog; alone or hosting a lobby; all mission types; city scope; '
            'fast seed search; mission, modifier and constellation filters')
 ROOT = build_core.ROOT

@@ -7,7 +7,7 @@ import build_combined as build
 lua=os.environ.get('HD2_LUAJIT',str(ROOT.parent/'tools/src/LuaJIT/src/luajit.exe'))
 for test,src in [('test_match_selection.lua','match_selection.lua'),('test_search_session.lua','search_session.lua'),
                  ('test_mouse_panel.lua','mouse_panel.lua'),('test_window_mouse_gate.lua','window_mouse_gate.lua'),
-                 ('test_modal_pointer.lua','modal_pointer.lua')]:
+                 ('test_modal_pointer.lua','modal_pointer.lua'),('test_window_cursor.lua','window_cursor.lua')]:
     subprocess.run([lua,str(ROOT/'tests'/test),str(ROOT/'src'/src)],check=True)
 with tempfile.TemporaryDirectory() as folder:
     s=build.source();entry=Path(folder)/'combined.lua';entry.write_bytes(s)

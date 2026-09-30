@@ -1,7 +1,7 @@
 -- Modal UI for the in-process predictor. Losing focus releases input ownership
 -- but never cancels the search. Only an explicit cancel/close cancels work.
 do
-    local panel,gate,router,exe
+    local panel,gate,router,exe,cursor
     local selected,difficulty,key_down={},10,true
     -- One section is open at a time, or none. The enemy section shows the
     -- rules of one group: a checked mission, or 0 for any mission.
@@ -97,10 +97,7 @@ do
     end
     local function init()
         exe=assert(api.module(nil));panel=Panel.new(assert(stingray))
-        ffi.cdef[[typedef struct { int32_t x,y; } MRD_POINT;
-            typedef struct { int32_t left,top,right,bottom; } MRD_RECT;
-            int GetCursorPos(MRD_POINT *); int ScreenToClient(void *,MRD_POINT *);
-            int GetClientRect(void *,MRD_RECT *);]]
+        cursor=make_cursor(ffi)
         gate=make_gate(stingray.Window,check_window)
     end
     local function context()
@@ -170,12 +167,9 @@ do
         end
         key_down=down
         if not router then return end
-        local hwnd=user32.GetForegroundWindow()
-        local p=ffi.new('MRD_POINT[1]');local r=ffi.new('MRD_RECT[1]')
-        assert(user32.GetCursorPos(p)~=0 and user32.ScreenToClient(hwnd,p)~=0 and user32.GetClientRect(hwnd,r)~=0,'Mouse position unavailable')
-        assert(r[0].right>0 and r[0].bottom>0,'Invalid client dimensions')
+        local cx,cy,cw,ch=cursor.client(user32.GetForegroundWindow())
         local width,height=stingray.Gui.resolution()
-        local x=tonumber(p[0].x)*width/r[0].right;local y=height-tonumber(p[0].y)*height/r[0].bottom
+        local x=cx*width/cw;local y=height-cy*height/ch
         local s,why,view
         if not running then s,why,view=context();if s then difficulty=why;view=s.planet..':'..difficulty end end
         if s and scope then

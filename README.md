@@ -6,8 +6,8 @@ operation modifiers it must or must not have, and the enemy forces each
 mission must or must not carry. It runs inside the game's Lua VM as an addon
 for [Bingus Shared Loader](https://github.com/CowboyBingus/BingusSharedLoader).
 
-Current release: **v0.20.2**, `releases/Mission-Reroller-v0.20.2.zip`
-([GitHub release](https://github.com/lombax5832/MissionReroller/releases/tag/v0.20.2)).
+Current release: **v0.20.3**, `releases/Mission-Reroller-v0.20.3.zip`
+([GitHub release](https://github.com/lombax5832/MissionReroller/releases/tag/v0.20.3)).
 
 ## Requirements
 
@@ -21,7 +21,7 @@ Current release: **v0.20.2**, `releases/Mission-Reroller-v0.20.2.zip`
 
 ## Install
 
-1. Import the loader ZIP and `Mission-Reroller-v0.20.2.zip` into your mod
+1. Import the loader ZIP and `Mission-Reroller-v0.20.3.zip` into your mod
    manager and enable both.
 2. Keep the loader last in the load order, then Purge and Deploy.
 3. Launch the game. `BingusSharedLoader.log` in
@@ -102,7 +102,7 @@ The mod's log is `MissionRerollerExperiment.log` in
 | The log has a `STOPPED:` line | The mod found something it did not expect and released the mouse without writing anything further. Send the line with a bug report. |
 | `game.dll hash mismatch` or `executable hash mismatch` | The game was updated. Wait for a release for the new build. |
 
-When reporting a problem, include both logs and the `Mission Reroller 0.20.2`
+When reporting a problem, include both logs and the `Mission Reroller 0.20.3`
 line near the top of the mod's log.
 
 ## Building from source

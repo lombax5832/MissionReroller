@@ -6,7 +6,7 @@ local cursor,difficulty,selected=1,10,{}
 local keys={}
 local protected,report,last_status=nil,'Select a planet; Ctrl+F8 opens filters',nil
 local audited_seed
-local gate,router,exe,selector
+local gate,router,exe,selector,cursor
 local selection_finished=false
 local function invoke(s)
     assert(hex(read(game+0x12d5670,#expected_code/2))==expected_code,'helper signature changed')
