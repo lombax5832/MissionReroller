@@ -176,6 +176,15 @@ to do, and which log lines prove it worked or failed.
 3. After the user's in-game test, commit `Record the v<ver> in-game result`,
    changing the entry to **Validated in game** with the date and the log lines
    that prove it. Only the user's logs count as validation.
+4. Publish by pushing a tag `v<ver>` on the commit to ship
+   (`git tag v<ver>; git push origin v<ver>`). `.github/workflows/release.yml`
+   then checks the tag against `VERSION`, builds, runs `test_package.py`,
+   creates the GitHub release with the ZIP and adds a new version of the
+   main file on Nexus Mods (mod 16762). The notes for both are the
+   `docs/HISTORY.md` entries for that version (`scripts/release_notes.py`).
+   A tag publishes to players, so only the user decides when to push one.
+   The workflow pins the loader, KnowYourConstellation and LuaJIT commits;
+   bump them there when a newer loader should ship.
 
 Read `docs/HISTORY.md` before reworking a subsystem; it records why things
 are the way they are.
