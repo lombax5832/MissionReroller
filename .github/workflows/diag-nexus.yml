@@ -1,0 +1,20 @@
+name: Diagnose Nexus changelog
+on: pull_request
+jobs:
+  diag:
+    if: github.head_ref == 'diag-nexus-changelog'
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          KEY: ${{ secrets.NEXUSMODS_API_KEY }}
+        run: |
+          for url in \
+            https://api.nexusmods.com/v1/games/helldivers2/mods/16762/changelogs.json \
+            https://api.nexusmods.com/v1/games/helldivers2/mods/16762.json \
+            https://api.nexusmods.com/v3/games/helldivers2/mods/16762 \
+            https://api.nexusmods.com/v3/mod-files/8052744/versions \
+            https://api.nexusmods.com/v3/mod-files/8052744 ; do
+            echo "=== $url"
+            curl -s -H "apikey: $KEY" -H "User-Agent: MissionReroller-diag" "$url" | head -c 6000
+            echo
+          done
