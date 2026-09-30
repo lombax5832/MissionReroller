@@ -21,8 +21,10 @@ local function factory(file,params,g)
 end
 local lines={}
 local binders={}
+local make_reroll_session=factory('reroll_session.lua','',{})()
 local function fake_host(config)
-    return {M={status='initializing'},config=config,emit=function(s)lines[#lines+1]=s end,
+    local M,emit={status='initializing'},function(s)lines[#lines+1]=s end
+    return {M=M,config=config,emit=emit,reroll_session=make_reroll_session(M,emit,{strict=true}),
         hex=function()return '' end,u=function()return 0 end,read=function()error('no memory')end,
         pointer=function()error('no memory')end,page=function()end,participants=function()end,
         snapshot=function()return nil,'open galactic map' end,initialize=function()end,expected_code='',

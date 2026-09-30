@@ -74,7 +74,8 @@ def source(search=False,publish=False,dialog=False,version=None):
                        ('make_environments', 'template_environments.lua'), ('make_composition_inputs', 'composition_inputs.lua'),
                        ('make_composition_prediction', 'composition_prediction.lua'), ('make_composition_capture', 'composition_capture.lua'),
                        ('make_base_inputs', 'operation_base_inputs.lua'),
-                       ('sha256', 'bytes_sha256.lua'), ('ModInventory', 'mod_inventory.lua')]:
+                       ('sha256', 'bytes_sha256.lua'), ('ModInventory', 'mod_inventory.lua'),
+                       ('make_reroll_session', 'reroll_session.lua')]:
         library(name,file)
     derived('predict_identity','make_identity(make_rng)')
     derived('predict_composition','make_composition_prediction(make_rng,choose_category,choose_level,make_mission_choice(make_rng),make_finalizer(make_rng))')
@@ -103,6 +104,8 @@ def source(search=False,publish=False,dialog=False,version=None):
     # The adapter returns nothing when another copy already runs or the loader
     # is too old, after setting M.status; the addon then stays inert.
     parts.append('if not host then return end')
+    # The one writer of M.status (src/reroll_session.lua), shared by every runtime.
+    parts.append('host.reroll_session=make_reroll_session(host.M,host.emit)')
     parts.append('local lib={'+','.join(f'{name}={name}' for name in libraries)+'}')
     inputs='host,lib,hooks'
     identity_hooks=[]

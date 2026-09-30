@@ -46,18 +46,22 @@ up(advance,'select_match',function(s)
     up(advance,'selector',{started=1,context='same',planets=s.selection:sub(1,8)},true)
     up(advance,'ui_selection',{confirmed=function()return true end,commit=function()end,restore=function()end},true)
 end,true)
+-- A run reaches publication from the search. Open it in the session first,
+-- as the capture does, once the idle pipeline has settled the last.
+local session=up(tick,'reroll_session');local on_match=match
+match=function(...)session.settle();session.advance('waiting_for_stable_inputs');session.advance('search_matched');return on_match(...)end
 local job={baseline=before,seed=22,operation=p,operations={p}}
 match(job,0);assert(writes==1 and notifications==1 and MissionRerollerExperiment.status=='publication_pending')
 advance('tick',1);assert(selected==1 and MissionRerollerExperiment.status=='publication_test_passed')
 match(job,2);assert(writes==1,'Only one publication per test session')
 local function reset()
-    up(match,'publication_used',false,true);live=before;canonical=11
+    up(on_match,'publication_used',false,true);live=before;canonical=11
 end
 reset();difficulty=9;match(job,0);assert(writes==1 and MissionRerollerExperiment.status=='publication_blocked');difficulty=10
 reset();displayed_planet=4294967295;match(job,0)
 assert(writes==1 and MissionRerollerExperiment.status=='publication_blocked')
 assert(table.concat(logs):find('Keep the viewed planet open',1,true),'Closed map must report planet, not difficulty')
-assert(not up(match,'publication_used'),'Closed map must not consume publication allowance')
+assert(not up(on_match,'publication_used'),'Closed map must not consume publication allowance')
 displayed_planet=268
 reset();actual.seed=999;match(job,0);advance('tick',1)
 assert(canonical==11 and writes==3 and selected==1 and MissionRerollerExperiment.status=='publication_restored');actual.seed=888
@@ -65,7 +69,8 @@ reset();match(job,0);advance('cancel',1);assert(canonical==11 and writes==5 and 
 reset();partial=true;match(job,0);assert(canonical==11 and writes==7 and MissionRerollerExperiment.status=='publication_failed')
 reset();match(job,0);canonical=33
 assert(not pcall(advance,'cancel',1) and canonical==33,'Restoration must not overwrite an external seed')
-up(advance,'transaction',nil,true)
+-- In game the refused restoration stops the mod; here the run ends and the test goes on.
+up(advance,'transaction',nil,true);session.finish('publication_failed')
 -- A different user filter must be checked at publication, and the dialog can
 -- publish again after a completed attempt without a process restart.
 reset();MissionRerollerExperiment.dialog_enabled=true
@@ -76,7 +81,7 @@ match(job,0);advance('tick',1);assert(writes==prior+1 and MissionRerollerExperim
 live=before;canonical=11
 match(job,2);advance('tick',3);assert(writes==prior+2 and MissionRerollerExperiment.status=='publication_test_passed')
 local existing=up(up(tick,'on_prediction_ready'),'on_existing_match')
-existing(after,p,4);advance('tick',4)
+session.advance('waiting_for_stable_inputs');existing(after,p,4);advance('tick',4)
 assert(writes==prior+2 and MissionRerollerExperiment.status=='publication_test_passed','Existing match must select without seed writes')
 reset();job.modifiers={[0x1101e25c]='require'}
 match(job,0);assert(writes==prior+2 and MissionRerollerExperiment.status=='publication_blocked','Publication must enforce custom modifier rules')
@@ -101,4 +106,5 @@ after.selection=word(101)..selection:sub(5)
 advance('tick',1);assert(canonical==11 and MissionRerollerExperiment.status=='publication_restored','Unexpected primary planet change must reject result')
 after.selection=selection
 local a,b,c=shutdown();assert(a==4 and b==nil and c==6)
+assert(not table.concat(logs):find('SESSION_',1,true),'Every phase change follows the session rules: '..tostring(table.concat(logs):match('SESSION_[^%c]*')))
 print('Live search: preflight, publish/verify/select, one-shot guard, mismatch rollback, cancel, partial-write recovery and external seed protection passed')

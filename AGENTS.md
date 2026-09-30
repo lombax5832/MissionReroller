@@ -117,6 +117,11 @@ No single file in `src/` is the shipped entry. `scripts/build.py` calls
   reach into an assembled entry with `tests/harness.lua`: `H.up` for a
   closure variable, `H.natives(update,{...})` to hand every runtime fake
   native handles as `initialize()` would.
+- Status changes go through `src/reroll_session.lua`, created on the host as
+  `host.reroll_session` right after the adapter. Runtimes call `advance` /
+  `finish` / `settle` / `fail`; the dialog calls `start` / `cancel` / `view`.
+  Nothing else writes `M.status`. A new status needs a row in its phase
+  table; an unlisted one raises in tests and logs `SESSION_REJECTED` in game.
 
 `build_combined.py`, `build_experiment.py` and `build_seed_test.py` are older
 research builds: they append the adapter inline through

@@ -6,6 +6,10 @@ CowboyBingusModLoader={api=1,version=18,open_log=function()return {write=functio
 update=function()return 1,nil,3 end;shutdown=function()return 4,nil,6 end
 dofile(arg[1])
 local tick=up(update,'tick');local dialog=up(tick,'dialog_tick');local M=MissionRerollerExperiment
+-- The pipeline's side of the handshake, played through the real session as
+-- identity_probe_runtime does: take the request and report phases.
+local session=up(dialog,'reroll_session')
+local function take()assert(M.request_search,'No request to take');M.request_search=nil;session.advance('waiting_for_stable_inputs')end
 local real_context=up(dialog,'context');local real_catalogue=up(dialog,'catalogue_for')
 local key,mouse=false,false;local x,y=0,0
 local user={GetForegroundWindow=function()return nil end,
@@ -116,7 +120,10 @@ click('section:missions');frame();assert(last_model.section=='missions' and ids(
 click('start')
 assert(M.request_search and M.search_options.required[2] and M.search_options.required[4])
 assert(not M.search_options.required[1] and M.search_options.difficulty==10)
-M.request_search=nil;M.status='search_running';M.search_attempts=2731;frame()
+take();frame()
+assert(last_model.running and last_model.status=='Checking planet data' and last_model.step==1)
+session.advance('capture_retry');frame();assert(last_model.status=='Retrying changed planet data' and last_model.step==1)
+session.advance('search_running');M.search_attempts=2731;frame()
 assert(last_model.running and last_model.locked and not last_model.can_start and not last_model.can_clear)
 assert(last_model.status=='Searching seeds' and last_model.tone=='busy' and last_model.step==2)
 assert(last_model.detail=='2,731 of 262,144 seeds searched',last_model.detail)
@@ -129,29 +136,29 @@ click('clear');assert(last_selected[2] and last_selected[4],'A running search ca
 click('section:modifiers');frame();assert(last_model.section=='modifiers' and find('modifier:'..0x1101e25c).enabled==false)
 click('modifier:'..0x1101e25c);frame();assert(last_model.items[1].mode==nil)
 click('section:missions');frame()
-for status,step in pairs({waiting_for_stable_inputs=1,capture_retry=1,search_waiting_backend=2,publication_pending=3,selection_pending=4})do
-    M.status=status;frame();assert(last_model.running and last_model.step==step,status)
+for _,case in ipairs({{'search_waiting_backend',2,'Waiting for game requests'},{'search_matched',2,'Checking planet data'},
+    {'publication_pending',3,'Refreshing operations'},{'selection_pending',4,'Opening matching operation'}})do
+    session.advance(case[1]);frame();assert(last_model.running and last_model.step==case[2] and last_model.status==case[3],case[1])
 end
-M.status='search_running';M.search_attempts=0;frame()
+M.search_attempts=0;frame()
 frame(false);assert(not held and not M.cancel_requested,'Alt-tab must preserve search')
 toggle();assert(acquired==2 and last_model.running)
-click('cancel');assert(M.cancel_requested);M.cancel_requested=nil;M.status='cancelled';frame()
+click('cancel');assert(M.cancel_requested);M.cancel_requested=nil;session.finish('cancelled');frame()
 assert(not last_model.running and last_model.status=='Search cancelled' and last_model.tone=='idle' and last_model.can_start)
 click('section:modifiers');frame()
 click('close');frame();frame();assert(not held)
 toggle();assert(acquired==3 and last_selected[2] and last_selected[4],'Reopening retains filter')
 assert(last_model.section=='missions','Reopening starts on the missions')
-click('start');assert(M.request_search);M.request_search=nil;M.status='search_running';frame()
-M.status='publication_test_passed';frame();frame();frame();assert(not held,'Success closes modal')
+click('start');assert(M.request_search);take();session.advance('search_running');frame()
+session.finish('publication_test_passed');frame();frame();frame();assert(not held,'Success closes modal')
 toggle();assert(acquired==4);click('start');assert(M.request_search,'Can start another search')
-M.request_search=nil
-M.status='cancelled';frame()
+take();session.finish('cancelled');frame()
 click('section:modifiers');frame();click('modifier:'..0x1101e25c);frame()
 assert(last_model.items[1].mode=='require' and last_model.summaries.modifiers=='1 rule' and last_model.rules==3)
 assert(last_model.status=='Ready to search','Editing the request discards the last report')
 click('modifier:'..0x1101e25c);frame();assert(last_model.items[1].mode=='exclude')
 click('start');assert(M.search_options.modifiers[0x1101e25c]=='exclude')
-M.request_search=nil;M.status='cancelled';frame()
+take();session.finish('cancelled');frame()
 -- Survey (2) and Democracy (4) are checked: one group of constellations each.
 click('section:enemies');frame()
 assert(tabs()=='Geological Survey* | Spread Democracy' and last_model.group==2 and ids()=='constellation:2:2 constellation:2:4',tabs()..' '..ids())
@@ -169,12 +176,12 @@ assert(last_model.summaries.enemies=='3 rules')
 click('start');assert(M.request_search)
 local sent=M.search_options.constellations.groups
 assert(sent[2][4]=='accept' and not sent[2][2] and sent[4][2]=='accept' and sent[4][6]=='exclude' and not sent[0] and M.search_options.required[2])
-M.request_search=nil;M.status='search_running';frame()
+take();session.advance('search_running');frame()
 assert(last_model.group==4 and find('constellation:4:2').enabled==false and find('group:2').enabled,'A search locks the rules, not the groups')
 click('constellation:4:2');frame();assert(last_model.items[1].mode=='accept')
 click('group:2');frame();assert(last_model.group==2 and ids()=='constellation:2:2 constellation:2:4')
 click('group:4');frame()
-M.status='cancelled';frame()
+session.finish('cancelled');frame()
 click('constellation:4:6');frame();assert(last_model.items[2].mode==nil and sent[4][6]=='exclude','A third click clears it; the request is a copy')
 -- Excluding everything a mission can draw is refused.
 click('constellation:4:2');click('constellation:4:6');click('constellation:4:6');frame()
@@ -201,10 +208,10 @@ click('constellation:0:6');click('constellation:0:2');click('constellation:0:2')
 assert(last_model.items[3].mode=='accept' and last_model.items[1].mode=='exclude' and last_model.can_start)
 click('start');assert(M.request_search and M.search_options.constellations.groups[0][6]=='accept'
     and M.search_options.constellations.groups[0][2]=='exclude' and next(M.search_options.required)==nil)
-M.request_search=nil;M.status='cancelled';frame()
+take();session.finish('cancelled');frame()
 click('section:missions');frame();click(2);click('start')
 assert(M.request_search and next(M.search_options.constellations.groups)==nil,'Checking a mission discards the any-mission constellations')
-M.request_search=nil;M.status='cancelled';frame()
+take();session.finish('cancelled');frame()
 click(4);click('section:enemies');frame();click('constellation:2:2');click('group:4');frame();click('constellation:4:6')
 click('section:modifiers');frame()
 planet=269;frame()
@@ -213,7 +220,7 @@ assert(#last_model.items==1 and last_model.items[1].id=='modifier:'..0xf6f1b0c7 
 assert(last_model.status=='Unavailable filters cleared for this planet/difficulty' and last_model.tone=='warn' and last_model.faction==3)
 click('start');assert(next(M.search_options.modifiers)==nil,'Faction changes must prune old modifier rules')
 assert(next(M.search_options.constellations.groups)==nil,'Faction changes must prune constellations and their missions')
-M.request_search=nil;M.status='cancelled';frame()
+take();session.finish('cancelled');frame()
 click('section:enemies');frame()
 assert(tabs()=='Spread Democracy*' and ids()=='constellation:4:14' and last_model.forced=='',ids())
 click('constellation:4:14');frame();assert(last_model.items[1].mode=='accept')
@@ -236,11 +243,11 @@ planet=269;frame();assert(last_model.pages==1 and last_model.page==1 and ids()==
 click(4);click('section:modifiers');frame()
 assert(M.search_options.scope==nil and last_model.scope=='planet','Nothing pointed at: whole planet')
 -- Opening the dialog on a city's operation limits it to that city.
-M.request_search=nil;M.status='cancelled';frame()
+session.finish('cancelled');frame()
 -- Closing the dialog cancels a running search, and says so when it reopens.
-click('start');assert(M.request_search);M.request_search=nil;M.status='search_running';frame()
+click('start');assert(M.request_search);take();session.advance('search_running');frame()
 click('close');assert(M.cancel_requested==true,'Close cancels the search')
-M.cancel_requested=nil;M.status='cancelled';frame();frame();assert(not held)
+M.cancel_requested=nil;session.finish('cancelled');frame();frame();assert(not held)
 toggle();assert(held and not last_model.running and last_model.status=='Search cancelled' and last_model.can_start)
 local opened=acquired
 click('close');frame();frame();assert(not held)
@@ -248,7 +255,7 @@ pointed=1;toggle();assert(acquired==opened+1)
 assert(catalogue_scope==1 and last_model.scope=='city' and last_model.section=='missions',last_model.scope)
 assert(logs[#logs]=='MODAL_OPEN scope=region 1 key=F7 screens=15\n',logs[#logs])
 click('start');assert(M.request_search and M.search_options.scope.region==1 and M.search_options.required[4])
-M.request_search=nil;M.status='cancelled';frame()
+take();session.finish('cancelled');frame()
 pointed=nil;frame();assert(catalogue_scope==1,'The city is fixed while the dialog stays open')
 -- The city's operation in progress cannot be rerolled; other operations can.
 local function record(row,level,where)
@@ -269,7 +276,7 @@ click('close');frame();frame();toggle()
 assert(catalogue_scope==nil and logs[#logs]=='MODAL_OPEN scope=planet key=F7 screens=15\n','Reopening without a city returns to the planet')
 click('close');frame();frame();pointed=3;toggle()
 assert(catalogue_scope==nil and last_model.scope=='planet','A city of another planet is ignored')
-click('start');assert(M.request_search and M.search_options.scope==nil);M.request_search=nil;M.status='cancelled';frame()
+click('start');assert(M.request_search and M.search_options.scope==nil);take();session.finish('cancelled');frame()
 pointed=nil
 up(dialog,'dialog_release')('test cleanup');assert(not held and released==opened+3)
 -- Real context logic: viewed-planet requests, retained presentation through
@@ -289,10 +296,10 @@ up(real_context,'read',function(address,n)
 end,true)
 up(dialog,'context',real_context,true)
 jit.flush() -- Discard traces compiled against the previous injected context.
-M.status='cancelled';frame();toggle();frame()
+session.finish('cancelled');frame();toggle();frame()
 assert(#last_model.items==1 and last_model.faction==3,'Remote planet faction catalogue must populate')
 assert(last_model.ready,'Viewed-planet reroll must not require travel')
-click('start');assert(M.request_search,'Remote Start must accept the filter');M.request_search=nil;M.status='cancelled';frame()
+click('start');assert(M.request_search,'Remote Start must accept the filter');take();session.finish('cancelled');frame()
 -- A short gap in the planet data is not shown: nothing is dimmed, the status
 -- stays, and the request can be edited.
 local before={status=last_model.status,tone=last_model.tone,detail=last_model.detail}
@@ -320,7 +327,7 @@ local searches=#logs
 unavailable=false;frame()
 assert(M.request_search and M.search_options.required[4] and M.search_options.difficulty==10,'Fresh data starts the waiting search')
 assert(#logs==searches+1 and logs[#logs]=='DIALOG_SEARCH planet=269 region=all difficulty=10 players=3\n' and last_model.running)
-M.request_search=nil;M.status='cancelled';frame()
+take();session.finish('cancelled');frame()
 -- Cancel, close, another planet and a lasting gap each drop a waiting start.
 unavailable=true;frame();click('start');frame();assert(last_model.running)
 click('cancel');frame()
@@ -446,4 +453,5 @@ local before=#logs
 assert(real_catalogue({planet=268,board=0},10)==built and real_catalogue({planet=268,board=0},10)==built)
 assert(#logs==before+1 and logs[#logs]:find('CONSTELLATION_CATALOGUE_BLOCKED',1,true) and logs[#logs]:find('Missing global effects',1,true),
     'Constellation failures are logged once and do not block the catalogue')
+assert(not table.concat(logs):find('SESSION_',1,true),'Every phase change followed the session rules')
 print('Dialog: sections, groups, paging, locked states, city scope, constellation acceptance and exclusion per mission, real mouse router, filters, empty request, map difficulty, alt-tab, cancel, close, reopen, repeat and key hint passed')
