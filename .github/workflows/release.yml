@@ -32,31 +32,31 @@ jobs:
     steps:
       # The build and tests expect ../BingusSharedLoader and
       # ../KnowYourConstellation, so every repo is a sibling in the workspace.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           path: MissionReroller
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: ${{ env.LOADER_REPO }}
           ref: ${{ env.LOADER_COMMIT }}
           path: BingusSharedLoader
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: ${{ env.KYC_REPO }}
           ref: ${{ env.KYC_COMMIT }}
           path: KnowYourConstellation
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
       - name: Cache LuaJIT
         id: luajit-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: LuaJIT/src
           key: luajit-nogc64-${{ env.LUAJIT_COMMIT }}
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.luajit-cache.outputs.cache-hit != 'true'
         with:
           repository: LuaJIT/LuaJIT
@@ -101,7 +101,7 @@ jobs:
           python -B tests/test_package.py
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.build.outputs.name }}
           path: ${{ steps.build.outputs.zip }}
