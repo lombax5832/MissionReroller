@@ -4,6 +4,16 @@ local stopped,key_down,armed=false,true,nil
 local mods_logged=false
 local probe,last_poll,previous,stable=nil,-math.huge,nil,0
 local capture_failures,last_capture_error=0,nil
+-- A poll captures the board twice, about 50 ms of reads each offline and more
+-- in game. It runs as a coroutine whose reads yield once the frame's slice is
+-- used, the slice of the seed search, so it no longer stalls one frame.
+local poll,slice_end
+local capture_slice=0.016
+local function slice_clock()return search_clock and search_clock() or api.time()end
+local function sliced_read(address,size)
+    if slice_end and slice_clock()>=slice_end then coroutine.yield()end
+    return read(address,size)
+end
 local code_signatures={
     {0x11e3c10,1104,'e600b7f917c0dae668397ec326b9ec53df4705e0c1135d5880be8fcaa91d65bd'},
     {0x11e4060,1136,'5cc7271a512f5caf431abcc5b3e0fcbeb99c325eeae368b03f3ec52427e1661f'},
@@ -30,9 +40,9 @@ local function prepare()
         assert(sha256(read(game+sig[1],sig[2]))==sig[3],'Generator signature mismatch')
     end
     assert(hex(read(game+0x23c6780,8))=='000000000000f03d','RNG scaling constant mismatch')
-    probe=make_probe(read,u,predict_identity,make_special_inputs(read,u,api.pointer),
+    probe=make_probe(sliced_read,u,predict_identity,make_special_inputs(sliced_read,u,api.pointer),
         function(cached_read)return make_level_inputs(cached_read,u,game)end,
-        make_level_verification(make_rng,choose_level),composition_factory(read,u,api.pointer,game))
+        make_level_verification(make_rng,choose_level),composition_factory(sliced_read,u,api.pointer,game))
     M.status='ready_read_only'
     emit('LUA_IDENTITY_READY signatures=verified read_only=true')
 end
@@ -70,30 +80,42 @@ local function tick()
     if requested or (down and not key_down) then
         if advance_live_publication and advance_live_publication('cancel',now) then key_down=down;return end
         if advance_prediction_search and advance_prediction_search('cancel',now) then key_down=down;return end
-        armed=now;previous=nil;stable=0;M.status='waiting_for_stable_inputs'
+        armed=now;poll=nil;previous=nil;stable=0;M.status='waiting_for_stable_inputs'
         capture_failures=0;last_capture_error=nil;M.last_result=nil;M.level_result=nil;M.composition_result=nil
         emit('LUA_IDENTITY_ARMED; no refresh or selection will occur')
     end
     key_down=down
     if advance_prediction_search then advance_prediction_search('tick',now)end
     if advance_live_publication then advance_live_publication('tick',now)end
-    if not armed then return end
+    if not armed then poll=nil;return end
     if now-armed>30 then
-        armed=nil;M.status='capture_timeout';emit('LUA_IDENTITY_BLOCKED stable map inputs unavailable; press shortcut to retry')
+        armed=nil;poll=nil;M.status='capture_timeout';emit('LUA_IDENTITY_BLOCKED stable map inputs unavailable; press shortcut to retry')
         if last_capture_error then emit('LUA_CAPTURE_DETAIL failures='..capture_failures..' last='..last_capture_error)end
         return
     end
-    if now-last_poll<0.5 then return end
-    last_poll=now
-    local s,why=snapshot(true)
-    if not s then previous=nil;stable=0;M.status=why or 'waiting';return end
-    local captured=capture(s)
-    if not captured then return end
-    local again=snapshot(true)
-    local repeated=again and capture(again)
-    if not repeated or repeated.fingerprint~=captured.fingerprint then
-        previous=nil;stable=0;return
+    if not poll then
+        if now-last_poll<0.5 then return end
+        last_poll=now
+        poll=coroutine.create(function()
+            local s,why=snapshot(true)
+            if not s then previous=nil;stable=0;M.status=why or 'waiting';return end
+            local captured=capture(s)
+            if not captured then return end
+            local again=snapshot(true)
+            local repeated=again and capture(again)
+            if not repeated or repeated.fingerprint~=captured.fingerprint then
+                previous=nil;stable=0;return
+            end
+            return s,captured
+        end)
     end
+    slice_end=slice_clock()+capture_slice
+    local ok,s,captured=coroutine.resume(poll)
+    slice_end=nil
+    if not ok then poll=nil;error(s,0)end
+    if coroutine.status(poll)~='dead' then return end
+    poll=nil
+    if not captured then return end
     stable=previous==captured.fingerprint and stable+1 or 1
     previous=captured.fingerprint
     if stable<4 then return end
