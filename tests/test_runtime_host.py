@@ -32,8 +32,9 @@ def main():
     for name, (options, runtimes) in variants.items():
         source = probe.source(**options)
         assert source == probe.source(**options), name + ' build is not reproducible'
-        assert wrapped('experiment_adapter.lua', 'core,config,make_map_screen') in source, name + ': adapter text changed'
-        assert b'\nlocal make_map_screen=(function()\n' + (SRC / 'map_screen.lua').read_text().encode() + b'\nend)()' in source, name
+        assert wrapped('experiment_adapter.lua', probe.ADAPTER) in source, name + ': adapter text changed'
+        # Every module receives the offsets' numbers as its chunk argument.
+        assert b'\nlocal make_map_screen=(function(...)\n' + (SRC / 'map_screen.lua').read_text().encode() + b'\nend)(O)' in source, name
         # Only the builds that publish carry the guarded write.
         writes = 'publish' in options
         assert (b'host.write=make_guarded_write(host)' in source) == writes, name + ': guarded write'

@@ -89,7 +89,9 @@ return function()
 end
 
 end)()
-local expected_code='32c04584c974370f57c033c00f1181888e07000f1181988e07000f1181a88e07000f1181b88e07000f1181c88e0700488981d88e07008981e08e0700b00184d2751c83b9848e07000074134584c9750e84c07447ba02000000e912010000488b0563e51a0248ba2d7f954c2df45158480fafc248ba4f8167f77e7b05144803c2ba020000004889053ce51a0248c1e8208981848e0700e9d5000000c3cccccccc458bc84c8d8180720f004881c1109a0f00e94afff0ffccccccccccccccccccccc20000cccccccccccccccccccccccccc488b0599771a02488b0d9a771a0280b8f8020700007448488b0592771a0280b8e6670100007538488b05d20b050280b88d10000000752880b89910000000751f4883b8e808000000751583b998a21700007c0c83b9a4a21700007c03b001c332c0c3cccccccccccccccccccccccccccc48c7c0ffffffff660f1f84000000000048ffc080bc01ec6941000075f34885c00f95c0c3cccccccccccccccccccccccc4057488b0507771a024c8bc18bfa8b88d86201004c8d90e062010085c90f849600000048895c24108bd9488974241833f60f1f40006666660f1f840000000000418b90d0801f0041bbffffffff4d8b0a8bc685d2742266660f1f8400000000008bc84881c108f801004803c94d390cc87449ffc03bc272e8488d8a08f8010048c1e1048d42014903c8418980d0801f004183fbff75060f57c00f110109790c4983c2084c89098971084883eb017591488b742418488b5c24105fc3448bd883f8ff74b58bc84881c108f8010048c1e1044903c8ebc7cccccccccccccccccccccc488b1529761a0241b802000000488b9298b30000e9f7000000cccccccccccccc'
+-- The build's offsets: offsets (src/offsets.lua) for the first-frame checks,
+-- O (src/offset_values.lua) for the reads.
+local hashes=offsets.hashes
 local loader=rawget(_G,'CowboyBingusModLoader')
 if not loader or (loader.api or 0)<1 or (loader.version or 0)<16 then
     M.status='unsupported_loader'; return
@@ -134,9 +136,9 @@ end
 -- The players of the session: one alone, up to four in a lobby. Only the
 -- dialog build accepts a lobby; the earlier builds were tested alone.
 local function participants(session)
-    local n=u(read(session+0x162d8,4),0)
+    local n=u(read(session+O.session.player_count,4),0)
     assert(n>=1 and n<=(M.dialog_enabled and 4 or 1),'owner count outside supervised bounds')
-    local bytes,list,known=read(session+0x162e0,n*8),{},{}
+    local bytes,list,known=read(session+O.session.players,n*8),{},{}
     for i=0,n-1 do
         local id=bytes:sub(i*8+1,i*8+8)
         assert(id~=string.rep('\0',8) and not known[id],'invalid source owner')
@@ -146,6 +148,39 @@ local function participants(session)
 end
 local initialized=false
 local binders={}
+local bases={}
+local function sorted_names(section)
+    local names={};for name in pairs(section)do names[#names+1]=name end
+    table.sort(names);return names
+end
+-- A code entry of offsets.lua still holds its bytes, or its SHA-256; an
+-- entry within another is checked with it.
+local function verify_code(names)
+    for _,name in ipairs(names)do
+        local entry=assert(offsets.code[name],'unknown code entry '..tostring(name))
+        local at=bases[entry.module]+entry.rva
+        if entry.bytes then
+            assert(hex(read(at,#entry.bytes/2))==entry.bytes,'offset signature '..name..' mismatch')
+        elseif entry.sha256 then
+            assert(sha256(read(at,entry.size))==entry.sha256,'offset signature '..name..' mismatch')
+        end
+    end
+end
+-- Every code entry, and the instruction that anchors each global.
+local function verify_offsets()
+    local names=sorted_names(offsets.code)
+    verify_code(names)
+    local anchored=0
+    for _,name in ipairs(sorted_names(offsets.globals))do
+        local entry=offsets.globals[name]
+        if entry.anchor then
+            local bytes=entry.anchor.bytes
+            assert(hex(read(bases[entry.module]+entry.anchor.rva,#bytes/2))==bytes,'offset anchor '..name..' mismatch')
+            anchored=anchored+1
+        end
+    end
+    return #names,anchored
+end
 local function initialize()
     ffi=require('ffi'); api=create_api(); kernel=ffi.load('kernel32')
     ffi.cdef[[
@@ -162,48 +197,50 @@ local function initialize()
         uint32_t GetWindowThreadProcessId(void *, uint32_t *);
     ]]
     game=assert(api.module('game.dll'),'missing game.dll')
-    assert(api.module_hash(game)=='2E2C3B7C2500646DADD5F2B4C6E0504DBB7E7896139F64CDDC0D1813C718F51E','game.dll hash mismatch')
-    assert(api.module_hash(assert(api.module(nil)))=='F5FEE03DCFDB2E553A4752C283590950AC13316B376D8196AA556FF0400D5F06','executable hash mismatch')
-    assert(hex(read(game+0x12d5670,#expected_code/2))==expected_code,'helper signature mismatch')
+    local exe=assert(api.module(nil))
+    assert(api.module_hash(game)==hashes.game,'game.dll hash mismatch')
+    assert(api.module_hash(exe)==hashes.exe,'executable hash mismatch')
+    bases.game,bases.exe=game,exe
+    local signatures,anchors=verify_offsets()
     user32=ffi.load('user32')
     initialized=true
     for _,bind in ipairs(binders)do bind({api=api,game=game,ffi=ffi,kernel=kernel,user32=user32})end
-    emit('build=25480438 hashes=verified helper_signature=verified')
+    emit('build='..O.build..' hashes=verified signatures='..signatures..' anchors='..anchors..' verified')
 end
 local function snapshot(viewed_planet)
     if viewed_planet then assert(M.read_only or M.preview_prediction,'Preview snapshots are read-only')end
-    local b=pointer(game+0x347cee8)
-    local session=pointer(game+0x347cef0)
-    local backend=pointer(game+0x347cee0)
-    local root=pointer(game+0x3326340)
+    local b=pointer(game+O.rva.board)
+    local session=pointer(game+O.rva.session)
+    local backend=pointer(game+O.rva.backend)
+    local root=pointer(game+O.rva.ui_root)
     local screen=map_screen.stack()
     if not map_screen.on_top(screen) then return nil,'open galactic map' end
-    local selection=read(b+0x17a298,20)
+    local selection=read(b+O.board.selection,20)
     local planet=u(selection,viewed_planet and 4 or 0)
     if planet>=512 then return nil,'select planet' end
-    local cache=read(b+0xf9a08,8)
-    if u(cache,0)~=planet or cache:byte(5)~=0 or u(read(b+0xffc0c,4),0)~=planet then
+    local cache=read(b+O.board.operation_cache,8)
+    if u(cache,0)~=planet or cache:byte(5)~=0 or u(read(b+O.board.mission_cache,4),0)~=planet then
         return nil,'waiting for caches'
     end
-    local pending=u(read(backend+0x31c48,4),0)
+    local pending=u(read(backend+O.backend.pending_requests,4),0)
     assert(pending<=64,'invalid backend request count')
     if pending~=0 then return nil,'waiting for pending backend requests' end
-    assert(u(read(backend+0x702fc,4),0)==14,'backend not ready')
-    assert(u(read(backend+0x702f8,4),0)~=0,'backend unavailable')
-    assert(read(session+0x167e6,1)=='\0','session gate set')
-    assert(read(root+0x108d,1)=='\0' and read(root+0x1099,1)=='\0' and
-           read(root+0x8e8,8)==string.rep('\0',8),'transition gates set')
+    assert(u(read(backend+O.backend.state,4),0)==14,'backend not ready')
+    assert(u(read(backend+O.backend.available,4),0)~=0,'backend unavailable')
+    assert(read(session+O.session.gate,1)=='\0','session gate set')
+    assert(read(root+O.ui_root.loading_gate,1)=='\0' and read(root+O.ui_root.transition_gate,1)=='\0' and
+           read(root+O.ui_root.transition,8)==string.rep('\0',8),'transition gates set')
     local source,sources,known=participants(session)
     local sc=#sources
     -- In a lobby the board belongs to its host, and only the host rerolls.
     -- Alone nothing more is read than before.
     if sc>1 then
-        local player=read(session+0xb398,8)
-        if not (known[player] and read(b+0x1f8078,8)==player)then return nil,'Only the host can reroll operations' end
+        local player=read(session+O.session.local_player,8)
+        if not (known[player] and read(b+O.board.selection_owner,8)==player)then return nil,'Only the host can reroll operations' end
     end
-    local dc=u(read(b+0x1f80d0,4),0)
+    local dc=u(read(b+O.board.owner_count,4),0)
     assert(dc<=5,'owner count outside supervised bounds')
-    local dest=read(b+0x1f8080,dc*16)
+    local dest=read(b+O.board.owners,dc*16)
     local ids={}; local union=0
     for i=0,dc-1 do
         local id=dest:sub(i*16+1,i*16+8)
@@ -212,29 +249,29 @@ local function snapshot(viewed_planet)
     end
     for _,id in ipairs(sources)do if not ids[id] then union=union+1 end end
     assert(union<=5,'owner union overflow')
-    page(game+0x3483c38,8,0x1000000) -- Only the native helper may update this module data.
-    page(b+0x78e84,4,0x20000)
-    page(b+0x1f8080,union*16,0x20000)
-    page(b+0x1f80d0,4,0x20000)
-    local canonical=read(b+0x78e84,96)
-    if canonical:sub(1,4)~=read(b+0x17a2bc,4) then return nil,'waiting for seed publication' end
-    local mc=u(read(b+0xffc08,4),0); assert(mc<=330,'mission count overflow')
-    local ops=read(b+0xf7280,110*92)
-    local missions=read(b+0xf9a10,mc*76)
-    assert(pointer(game+0x347cee8)==b and pointer(game+0x347cef0)==session,'root changed')
+    page(game+O.rva.rng_state,8,0x1000000) -- Only the native helper may update this module data.
+    page(b+O.board.seed,4,0x20000)
+    page(b+O.board.owners,union*16,0x20000)
+    page(b+O.board.owner_count,4,0x20000)
+    local canonical=read(b+O.board.seed,96)
+    if canonical:sub(1,4)~=read(b+O.board.published_seed,4) then return nil,'waiting for seed publication' end
+    local mc=u(read(b+O.board.mission_count,4),0); assert(mc<=330,'mission count overflow')
+    local ops=read(b+O.board.operations,110*92)
+    local missions=read(b+O.board.missions,mc*76)
+    assert(pointer(game+O.rva.board)==b and pointer(game+O.rva.session)==session,'root changed')
     -- The core decoder's first word denotes the buffer's planet. Normalize only
     -- this local decoder input; retain the raw selection in the stability key.
     local decoded_selection=viewed_planet and (selection:sub(5,8)..selection:sub(5)) or selection
-    local frame={selection=decoded_selection,operations=ops,operation_cache=cache,mission_count=read(b+0xffc08,4),mission_cache=read(b+0xffc0c,4),missions=missions,campaign_seed=canonical:sub(1,4),screen=screen}
-    local decoded=core.inspect_snapshot({build=25480438,session='inprocess',session_after='inprocess',before=frame,after=frame})
+    local frame={selection=decoded_selection,operations=ops,operation_cache=cache,mission_count=read(b+O.board.mission_count,4),mission_cache=read(b+O.board.mission_cache,4),missions=missions,campaign_seed=canonical:sub(1,4),screen=screen}
+    local decoded=core.inspect_snapshot({build=O.build,session='inprocess',session_after='inprocess',before=frame,after=frame})
     return {context=tostring(b)..'|'..planet..'|'..hex(canonical:sub(5))..'|'..hex(source),decoded=decoded, fingerprint=tostring(b)..tostring(session)..selection..cache..canonical..source..dest..ops..missions,
         board=b,selection=selection,operations=ops,missions=missions,planet=planet,seed=u(canonical,0),active=hex(canonical:sub(5)),sc=sc,dc=dc,union=union}
 end
 -- Runtime host: what the runtimes may use of the adapter. build_identity_probe
--- wraps this file as function(core,config,make_map_screen) and passes the
--- table to each runtime. The older research builds append the file inline without it.
+-- wraps this file as function(core,config,make_map_screen,offsets,O,sha256)
+-- and passes the table to each runtime.
 return {M=M,config=config,emit=emit,hex=hex,u=u,read=read,pointer=pointer,page=page,participants=participants,
-    snapshot=snapshot,initialize=initialize,expected_code=expected_code,map=map_screen,
+    snapshot=snapshot,initialize=initialize,map=map_screen,O=O,verify_code=verify_code,
     -- The native handles exist once initialize() has run on the first frame;
     -- it passes them to every function registered here.
     when_initialized=function(bind)binders[#binders+1]=bind end,

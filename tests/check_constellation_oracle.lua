@@ -3,7 +3,8 @@
 -- decoders, reading the saved static tables through an injected reader.
 local oracle=dofile(arg[1]);local root=arg[2]
 local R=dofile(root..'/constellation_prediction.lua')
-local make_inputs=dofile(root..'/constellation_inputs.lua')
+local H=dofile((arg[0]:match('^(.*[/\\])') or '')..'harness.lua')
+local make_inputs=H.module(root..'/constellation_inputs.lua')
 local game=0x10000000;local ranges={}
 for i,range in ipairs(oracle.ranges)do
     ranges[i]={first=game+range.rva,bytes=(range.hex:gsub('..',function(v)return string.char(tonumber(v,16))end))}

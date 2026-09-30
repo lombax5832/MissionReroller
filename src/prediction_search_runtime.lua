@@ -3,7 +3,7 @@
 -- hooks: bind_constellations, on_existing_match, on_search_match, and
 -- validate_search_request, which the assembler adds once the dialog exists.
 local M,emit,read,u,snapshot,config=host.M,host.emit,host.read,host.u,host.snapshot,host.config
-local reroll_session=host.reroll_session
+local reroll_session,O=host.reroll_session,host.O
 local Search,Planet,make_search_job=lib.Search,lib.Planet,lib.make_search_job
 local bind_constellations,on_existing_match,on_search_match=hooks.bind_constellations,hooks.on_existing_match,hooks.on_search_match
 local api,game,ffi,kernel
@@ -83,7 +83,7 @@ on_prediction_ready=function(s,definitions,now)
         emit('FILTER_BLOCKED operation in progress row='..fixed_row..'; its missions cannot be rerolled');return
     end
     local function baseline(frozen_read)
-        local key=frozen_read(s.board+0x101454+s.planet*0x118,4)
+        local key=frozen_read(s.board+O.board.campaign+0x1c+s.planet*O.campaign.definition_stride,4)
         assert(frozen_read(definitions,4)==key,'Planet definitions changed')
         local result=Planet.capture(frozen_read,u,api.pointer,game)(s,definitions)
         assert(result.passed and result.independent_bases,'Frozen baseline prediction mismatch')

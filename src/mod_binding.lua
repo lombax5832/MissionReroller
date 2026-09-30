@@ -3,16 +3,17 @@
 -- read every frame like a key, and its bound key is named for the hint
 -- beside BACK. The menu has no default keys for automatic bindings, so the
 -- runtime uses F7 while this binding has none, and without the menu.
+local O=...
 local B={}
 B.ID,B.LABEL,B.CATEGORY='ipodalexei.mission_reroller.reroll','Reroll operations','Mission Reroller'
--- Steam build 25480438, as Mod Bindings Menu v2.0 reads them: the game's
--- input owner, and its 256-bucket map of live bindings. A bucket is
+-- As Mod Bindings Menu v2.0 reads them (src/offsets.lua): the game's input
+-- owner, and its 256-bucket map of live bindings. A bucket is
 -- {u32 action code, u32 count, 16 x 20-byte mappings}; a mapping's first
 -- byte holds the device in its low nibble and the input kind in its high
 -- nibble, and the input index is the u16 at offset 4. Indices run across
 -- devices: DualSense 0-15, Xbox 16-31, mouse 32-48, then keyboard keys as
 -- 49 plus the Windows virtual-key code (tab 58, escape 76, right 88).
-B.INPUT_OWNER,B.BINDING_MAP,B.BUCKETS,B.BUCKET=0x347cf18,686800,256,328
+B.INPUT_OWNER,B.BINDING_MAP,B.BUCKETS,B.BUCKET=O.rva.input_owner,O.input_owner.binding_map,256,O.input_owner.bucket
 B.KEYBOARD,B.MOUSE,B.BUTTON,B.KEYBOARD_BASE=3,4,4,49
 -- env: read(address,n) and pointer(address) that fail by raising, u(bytes,offset),
 -- game (module base), menu() returning the ModBindingsMenu global or nil,

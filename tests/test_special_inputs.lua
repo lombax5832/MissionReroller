@@ -25,7 +25,8 @@ local function read(address,size)
     end
     error('Unexpected special-input read '..address)
 end
-local collect=dofile(arg[1]..'/special_operation_inputs.lua')(read,u,pointer)
+local H=dofile((arg[0]:match('^(.*[/\\])') or '')..'harness.lua')
+local collect=H.module(arg[1]..'/special_operation_inputs.lua')(read,u,pointer)
 local events,fingerprint=collect(board,planet,definitions)
 assert(#events==1 and events[1].id==2 and events[1].minimum==1 and events[1].maximum==10)
 local original_events=memory[campaign+0x6c048]

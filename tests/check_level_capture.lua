@@ -29,7 +29,8 @@ local function read(address,size)
     return table.concat(pieces)
 end
 local function u(s,o)local a,b,c,d=s:byte(o+1,o+4);assert(d);return a+b*256+c*65536+d*16777216 end
-local collect=dofile(root..'/src/level_inputs.lua')(read,u,tonumber(fixture.game))
+local H=dofile((arg[0]:match('^(.*[/\\])') or '')..'harness.lua')
+local collect=H.module(root..'/src/level_inputs.lua')(read,u,tonumber(fixture.game))
 local verify=dofile(root..'/src/level_verification.lua')(dofile(root..'/src/generation_rng.lua'),dofile(root..'/src/mission_level_choice.lua'))
 local total=0
 for _,case in ipairs(fixture.cases)do
@@ -59,8 +60,8 @@ for _,case in ipairs(fixture.cases)do
         if address==board+0x17a2c0 then return string.rep('\0',92)end
         return read(address,size)
     end
-    local probe=dofile(root..'/src/identity_probe.lua')(runtime_read,u,function()end,nil,
-        function(cached)return dofile(root..'/src/level_inputs.lua')(cached,u,ffi.cast('uint8_t*',tonumber(fixture.game)))end,verify)
+    local probe=H.module(root..'/src/identity_probe.lua')(runtime_read,u,function()end,nil,
+        function(cached)return H.module(root..'/src/level_inputs.lua')(cached,u,ffi.cast('uint8_t*',tonumber(fixture.game)))end,verify)
     local captured=probe:capture({board=ffi.cast('uint8_t*',board),planet=0,seed=case.seed,
         operations=opbytes,fingerprint='fixture',decoded={operations=operations}})
     local integrated=probe:compare_levels(captured)

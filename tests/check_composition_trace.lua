@@ -15,9 +15,10 @@ local function read(a,n)
 end
 local function u(s,o)local a,b,c,d=s:byte(o+1,o+4);return a+b*256+c*65536+d*16777216 end
 local function pointer(s)local value=ffi.new('uint64_t[1]');ffi.copy(value,s,8);if value[0]==0 then return nil end;return ffi.cast('uint8_t*',value[0])end
-local lookup_factory=dofile(root..'/configuration_lookup.lua')
+local H=dofile((arg[0]:match('^(.*[/\\])') or '')..'harness.lua')
+local lookup_factory=H.module(root..'/configuration_lookup.lua')
 local checked=0
-local effects=dofile(root..'/campaign_effects.lua')(read,u,pointer,tonumber(fixture.game),tonumber(fixture.board))
+local effects=H.module(root..'/campaign_effects.lua')(read,u,pointer,tonumber(fixture.game),tonumber(fixture.board))
 local effect_checks=0
 local Planet=dofile((arg[0]:match('^(.*[/\\])') or '')..'harness.lua').planet_model(root)
 local inputs=Planet.bind(read,u,pointer,tonumber(fixture.game),tonumber(fixture.board),fixture.planet).inputs()

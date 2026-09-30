@@ -3,10 +3,10 @@
 -- A runtime factory: the assembler runs this file as function(host,lib,hooks).
 local M,emit,read,pointer,page,u,hex,snapshot=host.M,host.emit,host.read,host.pointer,host.page,host.u,host.hex,host.snapshot
 local reroll_session=host.reroll_session
-local map,write=host.map,host.write
+local map,write,O,verify_code=host.map,host.write,host.O,host.verify_code
 local Panel,Hint,Binding,FilterCatalogue,EscapeGate=lib.Panel,lib.Hint,lib.Binding,lib.FilterCatalogue,lib.EscapeGate
 local FilterRequest=lib.FilterRequest
-local make_gate,make_router,window_signatures,make_cursor=lib.make_gate,lib.make_router,lib.window_signatures,lib.make_cursor
+local make_gate,make_router,make_cursor=lib.make_gate,lib.make_router,lib.make_cursor
 local Search,Constellations,Planet=lib.Search,lib.Constellations,lib.Planet
 local default_limit=hooks.default_limit
 local api,game,ffi,user32
@@ -80,7 +80,7 @@ do
     end
     local function face()
         local function hash(a)local b=read(a,8);return string.format('%08x%08x',u(b,4),u(b,0))end
-        local f={font=hash(game+0x3772268),material=hash(pointer(game+0x37c5478)+24),atlas=hash(game+0x3772ee8)}
+        local f={font=hash(game+O.rva.font),material=hash(pointer(game+O.rva.font_material)+24),atlas=hash(game+O.rva.font_atlas)}
         for _,v in pairs(f)do assert(v~='0000000000000000','Font not ready')end
         return f
     end
@@ -91,12 +91,13 @@ do
         return table.concat(list,',')
     end
     local function check_window()
-        for _,sig in ipairs(window_signatures)do
-            assert(hex(read(exe+sig[1],#sig[2]/2))==sig[2],'Window binding signature mismatch')
-        end
-        local app=pointer(exe+0x1a10210)
-        assert(u(read(app+0x3b8,4),0)==1,'Expected one game window')
-        local window=pointer(pointer(app+0x3c0))
+        -- The native window and cursor code (src/offsets.lua), checked before each use.
+        local ok,err=pcall(verify_code,{'window_focus_get','window_focus_set','window_argument','cursor_shown_get',
+            'cursor_shown_set','cursor_apply','cursor_restore'})
+        assert(ok,'Window binding signature mismatch: '..tostring(err))
+        local app=pointer(exe+O.rva.application)
+        assert(u(read(app+O.application.window_count,4),0)==1,'Expected one game window')
+        local window=pointer(pointer(app+O.application.windows))
         page(window+0x80,10,0x20000)
         local flag=read(window+0x89,1):byte();assert(flag==0 or flag==1,'Invalid focus flag')
         return tostring(window)

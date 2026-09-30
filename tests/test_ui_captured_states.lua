@@ -1,7 +1,8 @@
 -- Read-only captures from session 22836-967517250, selected row 29 then
 -- user-confirmed planet overview. Replay the actual UI selection adapter.
 local make=assert(loadfile(arg[1]))()
-local make_map=assert(loadfile((arg[1]:gsub('ui_operation_selection%.lua$','map_screen.lua'))))()
+local H=dofile((arg[0]:match('^(.*[/\\])') or '')..'harness.lua')
+local make_map=H.module((arg[1]:gsub('ui_operation_selection%.lua$','map_screen.lua')))
 local function raw(h)return(h:gsub('..',function(x)return string.char(tonumber(x,16))end))end
 local function word(n)return string.char(n%256,math.floor(n/256)%256,math.floor(n/65536)%256,math.floor(n/16777216)%256)end
 local function u(s)local a,b,c,d=s:byte(1,4);return a+b*256+c*65536+d*16777216 end

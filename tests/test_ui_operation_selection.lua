@@ -1,6 +1,7 @@
 local make=assert(loadfile(arg[1]))()
 -- The real map screen reads the map UI fields at their offsets.
-local make_map=assert(loadfile((arg[1]:gsub('ui_operation_selection%.lua$','map_screen.lua'))))()
+local H=dofile((arg[0]:match('^(.*[/\\])') or '')..'harness.lua')
+local make_map=H.module((arg[1]:gsub('ui_operation_selection%.lua$','map_screen.lua')))
 local root=100000;local writes=0;local memory={}
 local function word(n)return string.char(n%256,math.floor(n/256)%256,math.floor(n/65536)%256,math.floor(n/16777216)%256)end
 local function u(b)local a,c,d,e=b:byte(1,4);return a+c*256+d*65536+e*16777216 end

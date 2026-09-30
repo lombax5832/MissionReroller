@@ -21,7 +21,8 @@ local function read(a,n)
 end
 local function u(s,o)local a,b,c,d=s:byte(o+1,o+4);return a+b*256+c*65536+d*16777216 end
 local function pointer(s)local value=ffi.new('uint64_t[1]');ffi.copy(value,s,8);if value[0]==0 then return nil end;return ffi.cast('uint8_t*',value[0])end
-local function module(name)return dofile(root..'/'..name..'.lua')end
+local H=dofile((arg[0]:match('^(.*[/\\])') or '')..'harness.lua')
+local function module(name)return H.module(root..'/'..name..'.lua')end
 local game,definitions=tonumber(fixture.game),tonumber(fixture.definitions)
 game=ffi.cast('uint8_t*',game)
 local board=definitions-0x22b1a8

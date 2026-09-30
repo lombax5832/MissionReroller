@@ -4,7 +4,8 @@
 -- fake Win32 entry points, then once for real into this process's memory.
 local src=assert(arg[1])
 local ffi=require('ffi')
-local make_map=assert(loadfile(src..'/map_screen.lua'))()
+local H=dofile((arg[0]:match('^(.*[/\\])') or '')..'harness.lua')
+local make_map=H.module(src..'/map_screen.lua')
 local make_write=assert(loadfile(src..'/guarded_write.lua'))()
 local function word(n)return string.char(n%256,math.floor(n/256)%256,math.floor(n/65536)%256,math.floor(n/16777216)%256)end
 local function u(b,o)local a,c,d,e=b:byte(o+1,o+4);assert(e,'short read');return a+c*256+d*65536+e*16777216 end

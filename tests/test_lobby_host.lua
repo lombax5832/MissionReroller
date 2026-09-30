@@ -43,7 +43,7 @@ end}
 H.natives(update,{api=api,ffi=ffi,kernel=kernel,game=ffi.cast('uint8_t *',base)})
 -- The board holds no operations here; decoding them is tested elsewhere.
 up(snapshot,'core',{inspect_snapshot=function()return {operations={}}end},true)
-local code=up(ownership,'expected_code'):gsub('..',function(v)return string.char(tonumber(v,16))end)
+local code=up(up(ownership,'verify_code'),'offsets').code.campaign_helpers.bytes:gsub('..',function(v)return string.char(tonumber(v,16))end)
 -- players: the session's participants. me: the local player. owner: whose
 -- board it is. entries: the players the board already lists.
 local function scene(players,me,owner,entries)

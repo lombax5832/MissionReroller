@@ -4,6 +4,7 @@
 -- Built once from the library modules; a module a build leaves out (the
 -- search's predictor, the dialog's catalogue and tag inputs) leaves the
 -- method that needs it unavailable.
+local O=...
 return function(m)
     local predict=m.composition_prediction(m.rng,m.category,m.level_choice,m.mission_choice(m.rng),m.finalizer(m.rng))
     local make_bases=m.base_inputs(m.identity,m.special_inputs,m.environments)
@@ -18,7 +19,7 @@ return function(m)
         -- order of the native collectors.
         local function configuration(missing)
             if not config then
-                config=m.config(read,u,pointer,assert(pointer(read(game+0x347cdf8,8)),missing))
+                config=m.config(read,u,pointer,assert(pointer(read(game+O.rva.configuration,8)),missing))
             end
             return config
         end

@@ -4,6 +4,7 @@
 -- active operation remains an explicitly preserved input in either mode.
 -- bind is Planet.bind (planet_model.lua): the inputs decode through the
 -- capture's own cached reads.
+local O=...
 return function(bind,make_levels,predict,make_bases)
     local ffi=require('ffi')
     return function(read,u,pointer,game)
@@ -29,7 +30,7 @@ return function(bind,make_levels,predict,make_bases)
                 operations[#operations+1]={row=op.row,id=op.operation_id,seed=op.seed,difficulty=op.difficulty,
                     faction=u(snapshot.operations,at+36),category=u(snapshot.operations,at+28),explicit_hash=u(snapshot.operations,at+8)}
             end end
-            local bytes=take(snapshot.board+0x17a2c0,92);local active
+            local bytes=take(snapshot.board+O.board.active_snapshot,92);local active
             if bytes:byte(53)~=0 and bytes:byte(17)+bytes:byte(18)*256==snapshot.planet then
                 active={row=u(bytes,0),seed=u(bytes,12),id=bytes:byte(25),template_index=u(bytes,56),modifiers={}}
                 assert(bytes:byte(69)<=2,'Invalid preserved modifier count')

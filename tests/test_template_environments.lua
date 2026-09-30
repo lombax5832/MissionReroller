@@ -52,7 +52,8 @@ local function override(i,name,kind)
     put(at,hashes[name]);put(at+4,planet);put(at+8,kind);put(board+0x1f897c,i+1)
 end
 local effects={collect=function()return {}end,binding=function()return nil end}
-local environments=dofile(arg[1]..'/template_environments.lua')(read,u,pointer,game,board,effects,function()return nil end)
+local H=dofile((arg[0]:match('^(.*[/\\])') or '')..'harness.lua')
+local environments=H.module(arg[1]..'/template_environments.lua')(read,u,pointer,game,board,effects,function()return nil end)
 local function check(expected,message)
     local got=table.concat(environments(planet,{},true),',')
     assert(got==expected,message..': expected ['..expected..'] got ['..got..']')

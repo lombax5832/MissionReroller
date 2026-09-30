@@ -31,7 +31,8 @@ local function up(fn,name)
     for i=1,100 do local key,value=debug.getupvalue(fn,i);if key==name then return value end;if not key then break end end
     error('Missing upvalue '..name)
 end
-local function module(name)return dofile(root..'/'..name..'.lua')end
+local H=dofile((arg[0]:match('^(.*[/\\])') or '')..'harness.lua')
+local function module(name)return H.module(root..'/'..name..'.lua')end
 CowboyBingusModLoader={api=1,version=18,open_log=function()return nil end}
 update=function()end
 dofile(arg[3])

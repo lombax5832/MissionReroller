@@ -42,6 +42,19 @@ def lua_table(values):
     return '{'+','.join(f'{key}={lua_value(value)}' for key,value in values.items() if value is not None)+'}'
 
 
+# The adapter's inputs: the core, the build's mode, the map screen, the
+# offsets it verifies on the first frame, their numbers, and SHA-256.
+ADAPTER='core,config,make_map_screen,offsets,O,sha256'
+
+
+def release_offsets(root):
+    """offsets.lua without its research section, which only scripts/ reads."""
+    text=(root/'offsets.lua').read_text()
+    head,marker,tail=text.partition('\nresearch={\n')
+    assert marker and tail.rstrip().endswith('},\n}'),'offsets.lua must end with its research section'
+    return head+'\n}'
+
+
 def factory(root,file,params,args):
     """A source file run as a function of its explicit inputs, unchanged."""
     return f'(function({params})\n'+(root/file).read_text()+f'\nend)({args})'
@@ -57,9 +70,13 @@ def source(search=False,publish=False,dialog=False,version=None):
              "if rawget(_G,'MissionRerollerExperiment') then return end",
              'local core=(function()\n'+core+'\nend)()']
     libraries = []
+    # The offsets (offsets.lua without its research section) and their
+    # numbers O, which every module receives as its chunk argument (local O=...).
+    parts.append('local offsets=(function()\n'+release_offsets(root)+'\nend)()')
+    parts.append('local O=(function()\n'+(root/'offset_values.lua').read_text()+'\nend)()(offsets)')
     def library(name,file):
         libraries.append(name)
-        parts.append('local '+name+'=(function()\n'+(root/file).read_text()+'\nend)()')
+        parts.append('local '+name+'=(function(...)\n'+(root/file).read_text()+'\nend)(O)')
     def derived(name,expression):
         libraries.append(name)
         parts.append('local '+name+'='+expression)
@@ -86,7 +103,7 @@ def source(search=False,publish=False,dialog=False,version=None):
               'composition_prediction':'make_composition_prediction','capture':'make_composition_capture',
               'base_inputs':'make_base_inputs'}
     if dialog:
-        for name,file in [('Panel','docked_panel.lua'),('Hint','keybind_hint.lua'),('Binding','mod_binding.lua'),('EscapeGate','escape_gate.lua'),('Compatibility','mission_compatibility.lua'),('FilterCatalogue','filter_catalogue.lua'),('FilterRequest','filter_request.lua'),('make_gate','window_mouse_gate.lua'),('make_router','modal_pointer.lua'),('window_signatures','window_signatures.lua'),('make_cursor','window_cursor.lua'),
+        for name,file in [('Panel','docked_panel.lua'),('Hint','keybind_hint.lua'),('Binding','mod_binding.lua'),('EscapeGate','escape_gate.lua'),('Compatibility','mission_compatibility.lua'),('FilterCatalogue','filter_catalogue.lua'),('FilterRequest','filter_request.lua'),('make_gate','window_mouse_gate.lua'),('make_router','modal_pointer.lua'),('make_cursor','window_cursor.lua'),
                           ('Constellations','constellation_prediction.lua'),('make_constellation_inputs','constellation_inputs.lua')]:
             library(name,file)
         planet.update({'constellation_inputs':'make_constellation_inputs','catalogue':'FilterCatalogue',
@@ -94,7 +111,7 @@ def source(search=False,publish=False,dialog=False,version=None):
     if publish:
         for name,file in [('make_publication','seed_publication.lua'),('make_ui_selection','ui_operation_selection.lua'),
                           ('make_guarded_write','guarded_write.lua'),
-                          ('selection_signatures','selection_signatures.lua'),('verify_predicted_board','verify_predicted_board.lua')]:
+                          ('verify_predicted_board','verify_predicted_board.lua')]:
             library(name,file)
     if search:
         for name, file in [('make_frozen_reads','frozen_prediction_reads.lua'), ('make_seed_search','seed_search.lua'),
@@ -104,14 +121,14 @@ def source(search=False,publish=False,dialog=False,version=None):
         derived('make_search_job','make_prediction_job(make_frozen_reads,make_seed_search,Search)')
         planet['predictor']='make_candidate_predictor'
     # One construction path for every planet's prediction (src/planet_model.lua).
-    derived('Planet','(function()\n'+(root/'planet_model.lua').read_text()+'\nend)()({'
+    derived('Planet','(function(...)\n'+(root/'planet_model.lua').read_text()+'\nend)(O)({'
             +','.join(f'{key}={value}' for key,value in sorted(planet.items()))+'})')
     # The adapter and each runtime run as a function of explicit inputs:
     # host (the adapter's services and the build's config), lib (the modules
     # above) and hooks (entry points of the other runtimes, nil for a runtime
     # the build leaves out). No source text is rewritten.
     parts.append('local config='+lua_table(config(search,publish,dialog,version)))
-    parts.append('local host='+factory(root,'experiment_adapter.lua','core,config,make_map_screen','core,config,make_map_screen'))
+    parts.append('local host='+factory(root,'experiment_adapter.lua',ADAPTER,ADAPTER))
     # The adapter returns nothing when another copy already runs or the loader
     # is too old, after setting M.status; the addon then stays inert.
     parts.append('if not host then return end')

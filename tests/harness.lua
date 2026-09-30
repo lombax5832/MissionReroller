@@ -23,14 +23,34 @@ function H.natives(update,natives)
         if natives[k]~=nil then debug.setupvalue(initialize,i,natives[k])end
         if k=='initialized' then debug.setupvalue(initialize,i,true)end
     end
+    -- The module bases the offsets' code entries are checked against.
+    local bases=H.up(initialize,'bases')
+    bases.game,bases.exe=natives.game,natives.exe
     for _,bind in ipairs(H.up(initialize,'binders'))do bind(natives)end
+end
+
+-- The numbers of src/offsets.lua (src/offset_values.lua) for a src folder,
+-- as the build creates O; the table itself is the second value.
+local numbers={}
+function H.offsets(src)
+    if not numbers[src]then
+        local offsets=dofile(src..'/offsets.lua')
+        numbers[src]={dofile(src..'/offset_values.lua')(offsets),offsets}
+    end
+    return numbers[src][1],numbers[src][2]
+end
+
+-- A module file of src run as the build runs it: its chunk argument is O.
+function H.module(path)
+    local src=assert(path:match('^(.*)[/\\][^/\\]+$'),'module path needs a folder')
+    return assert(loadfile(path))((H.offsets(src)))
 end
 
 -- The planet model (src/planet_model.lua) built from the modules in src, as
 -- build_identity_probe.source() builds it for the release. Entries of
 -- `replace` override a module; the table of modules is the second value.
 function H.planet_model(src,replace)
-    local function module(name)return dofile(src..'/'..name..'.lua')end
+    local function module(name)return H.module(src..'/'..name..'.lua')end
     local rng=module('generation_rng')
     local m={rng=rng,identity=module('operation_identity')(rng),special_inputs=module('special_operation_inputs'),
         levels=module('level_inputs'),level_choice=module('mission_level_choice'),config=module('configuration_lookup'),

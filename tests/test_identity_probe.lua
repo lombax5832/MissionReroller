@@ -14,7 +14,8 @@ local function u(s,o)
     return a+b*256+c*65536+d*16777216
 end
 local function replace(s,offset,bytes)return s:sub(1,offset)..bytes..s:sub(offset+#bytes+1)end
-local make_probe=dofile(arg[2])
+local H=dofile((arg[0]:match('^(.*[/\\])') or '')..'harness.lua')
+local make_probe=H.module(arg[2])
 local row=string.rep('\0',92)
 row=replace(row,12,word(123));row=replace(row,16,string.char(12,1))
 row=replace(row,24,string.char(6));row=replace(row,32,string.char(1));row=replace(row,52,string.char(1))
@@ -139,21 +140,40 @@ MissionRerollerExperiment.read_only=false
 assert(not pcall(real_snapshot,true),'Preview mode must never be enabled for a writing adapter')
 MissionRerollerExperiment.read_only=true
 local prepare=up(tick,'prepare')
-local signatures=up(prepare,'code_signatures')
+-- The adapter checks every code entry and global anchor of src/offsets.lua
+-- on the first frame: bytes, or SHA-256 for the generator functions.
+local verify_offsets=up(up(prepare,'initialize'),'verify_offsets')
+local verify_code=up(verify_offsets,'verify_code')
+local offsets=up(verify_code,'offsets')
+local EXE=0x40000000
+local function base(entry)return entry.module=='exe' and EXE or 0 end
+local function raw(s)return(s:gsub('..',function(v)return string.char(tonumber(v,16))end))end
 local bad_signature=true
-up(prepare,'initialize',function()end,true)
-up(prepare,'api',{pointer=function()error('Unexpected pointer read during initialization')end},true)
-up(prepare,'game',0,true)
-up(prepare,'read',function(address,size)
-    if address==0x23c6780 then return string.char(0,0,0,0,0,0,240,61)end
-    for _,sig in ipairs(signatures)do
-        if address==sig[1] then assert(size==sig[2]);return sig[3]end
+up(verify_code,'bases',{game=0,exe=EXE},true)
+up(verify_code,'read',function(address,size)
+    for _,entry in pairs(offsets.code)do
+        if address==base(entry)+entry.rva then
+            if entry.bytes then assert(size==#entry.bytes/2);return raw(entry.bytes)end
+            assert(size==entry.size);return entry.sha256
+        end
+    end
+    for _,entry in pairs(offsets.globals)do
+        if entry.anchor and address==base(entry)+entry.anchor.rva then return raw(entry.anchor.bytes)end
     end
     error('Unexpected signature address')
 end,true)
-up(prepare,'sha256',function(bytes)return bad_signature and 'mismatch' or bytes end,true)
-assert(not pcall(prepare),'Changed generator signature must block initialization')
-bad_signature=false;prepare()
+up(verify_code,'sha256',function(bytes)return bad_signature and 'mismatch' or bytes end,true)
+assert(not pcall(verify_offsets),'Changed generator signature must block initialization')
+bad_signature=false
+local code_entries,anchors=verify_offsets()
+local expected_code,expected_anchors=0,0
+for _ in pairs(offsets.code)do expected_code=expected_code+1 end
+for _,entry in pairs(offsets.globals)do if entry.anchor then expected_anchors=expected_anchors+1 end end
+assert(code_entries==expected_code and anchors==expected_anchors and anchors>0)
+up(prepare,'initialize',function()end,true)
+up(prepare,'api',{pointer=function()error('Unexpected pointer read during initialization')end},true)
+up(prepare,'game',0,true)
+prepare()
 assert(MissionRerollerExperiment.status=='ready_read_only')
 local ffi=require('ffi')
 local now,focused,down,ready,calls=0,true,false,true,0
@@ -161,7 +181,7 @@ local changing=false
 local level_ok=true
 local composition
 local capture_attempts,fail_capture=0,nil
-local collect_invalid=dofile(arg[2]:gsub('identity_probe.lua$','level_inputs.lua'))(function(address,size)
+local collect_invalid=H.module((arg[2]:gsub('identity_probe.lua$','level_inputs.lua')))(function(address,size)
     if address==0x32e98e9 then return '\0'end
     if address==0xa183c then return word(1)end
     if address==0xa1820 then return word(0)end
