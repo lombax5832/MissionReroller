@@ -39,6 +39,20 @@ def rip_target(anchor):
     return anchor['rva'] + len(data) + struct.unpack_from('<i', data, len(data) - 4)[0]
 
 
+def sum_value(data, text):
+    """The value of sum='<struct>.<field>+0x10+...'."""
+    total = 0
+    for part in text.split('+'):
+        if '.' in part:
+            outer, name = part.split('.')
+            parts = data['structs'][outer][name]
+            assert len(parts['values']) == 1 and 'sum' not in parts, part + ': a single value that is no sum'
+            total += parts['values'][0]
+        else:
+            total += int(part, 0)
+    return total
+
+
 def encodes(data, number):
     """number is a 4-byte displacement or immediate somewhere after the opcode."""
     return struct.pack('<i', number) in data[2:]
@@ -91,7 +105,10 @@ def check_table(data):
             label = struct_name + '.' + field
             values = entry['values']
             assert values and all(isinstance(v, int) and v >= 0x100 for v in values), label + ': offsets below 0x100 stay inline'
-            assert ('anchor' in entry) != bool(entry.get('unverified')), label + ': an anchor or unverified=true'
+            kinds = [k for k in ('anchor', 'sum', 'unverified') if entry.get(k)]
+            assert len(kinds) == 1, label + ': one of anchor, sum or unverified=true'
+            if 'sum' in entry:
+                assert len(values) == 1 and values[0] == sum_value(data, entry['sum']), label + ': not ' + entry['sum']
             anchor = entry.get('anchor')
             if isinstance(anchor, dict):
                 # One instruction, checked on the first frame like a global's anchor.

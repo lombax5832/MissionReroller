@@ -31,6 +31,7 @@ them passed.
 | global | `anchor={rva,bytes}`: an instruction that addresses the global RIP-relatively and ends in that displacement | first frame; `test_offsets.py` (target); `check_offsets.py` |
 | field | `anchor='<code entry>'`: that code uses every value as a displacement or immediate (or the first plus multiples of a stride it uses) | `check_offsets.py` |
 | field | `anchor={rva,bytes}`: one instruction whose displacement or immediate is the value; `via='<struct>.<field>'` when the compiler folded that parent offset in; `module='exe'` in the executable | first frame; `test_offsets.py` (encoding); `check_offsets.py` |
+| field | `sum='<struct>.<field>+0x98'`: other fields plus constants, recomputed when they move | `test_offsets.py`; `check_offsets.py` |
 
 `unverified=true` marks an entry no anchor has been found for; nothing
 checks it, which is how two stale tables once survived a game update.

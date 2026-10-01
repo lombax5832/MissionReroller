@@ -335,6 +335,8 @@ def check_fields(data, images, reference, where, deltas, report):
         for field, entry in sorted(fields.items()):
             label, values = f'{struct_name}.{field}', entry['values']
             anchor = entry.get('anchor')
+            if 'sum' in entry:
+                continue  # after every other field, from their new values
             if not anchor:
                 report.counts['field unverified'] += 1
                 continue
@@ -369,6 +371,27 @@ def check_fields(data, images, reference, where, deltas, report):
                     seen = [b for (a, b) in changes if a == values[0]]
                     if len(seen) == 1:
                         report.fix('field', label, {'values': seen})
+
+
+def check_sums(data, report):
+    """Fields that are other fields plus constants, from those fields' values after any FIX."""
+    current = {(s, f): e['values'][0] for s, fields in data['structs'].items() for f, e in fields.items()}
+    for kind, name, values in report.fixes:
+        if kind == 'field' and 'values' in values:
+            current[tuple(name.split('.'))] = values['values'][0]
+    for struct_name, fields in sorted(data['structs'].items()):
+        for field, entry in sorted(fields.items()):
+            if 'sum' not in entry:
+                continue
+            total = sum(current[tuple(p.split('.'))] if '.' in p else int(p, 0) for p in entry['sum'].split('+'))
+            if total == entry['values'][0]:
+                report.counts['field ok'] += 1
+                continue
+            label = f'{struct_name}.{field}'
+            report.stale.append(label)
+            report.counts['field moved'] += 1
+            report.line(f'STALE field {label}={entry["values"][0]:#x}: {entry["sum"]} is now {total:#x}')
+            report.fix('field', label, {'values': [total]})
 
 
 def check_instruction_field(label, values, anchor, images, reference, deltas, report):
@@ -430,7 +453,7 @@ def find_anchors(data, images, reference):
     for struct_name, fields in sorted(data['structs'].items()):
         path = struct_path(data, struct_name)
         for field, entry in sorted(fields.items()):
-            if entry.get('anchor'):
+            if entry.get('anchor') or entry.get('sum'):
                 continue
             label = f'{struct_name}.{field}'
             for value in entry['values']:
@@ -636,6 +659,7 @@ def main(argv=None):
     where, deltas = check_code(data, images, reference, report)
     check_globals(data, images, reference, deltas, report)
     check_fields(data, images, reference, where, deltas, report)
+    check_sums(data, report)
     check_comments(images, reference, report)
     print('counts: ' + ', '.join(f'{k}={n}' for k, n in sorted(report.counts.items())))
     unverified = report.counts['global unverified'] + report.counts['field unverified']

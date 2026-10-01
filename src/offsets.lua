@@ -19,7 +19,9 @@
 --          {rva,bytes} whose displacement or immediate is the value; with
 --          via='<struct>.<field>' it is the value plus that field's (an
 --          offset the compiler folded in), and module='exe' when it is in the
---          executable. Smaller offsets inside a record stay inline.
+--          executable. A field that is other fields plus a constant says so
+--          with sum='<struct>.<field>+...' instead. Smaller offsets inside a
+--          record stay inline.
 -- research: RVAs only the Python tools under scripts/ use. The release
 --          build leaves this section out.
 --
@@ -143,10 +145,11 @@ structs={
         seed={0x78e84,anchor='campaign_helpers'},
         active_operation={0x78e88,anchor='campaign_helpers'},
         operations={0xf7280,anchor='campaign_helpers'},
-        operation_cache={0xf9a08,unverified=true},
+        -- Just past the 110 operation records of 92 bytes; reseed_board reads it from the operations.
+        operation_cache={0xf9a08,sum='board.operations+0x2788'},
         missions={0xf9a10,anchor='campaign_helpers'},
         mission_count={0xffc08,anchor={rva=0x6609bd,bytes='418b9108fc0f00'}},
-        mission_cache={0xffc0c,unverified=true},
+        mission_cache={0xffc0c,anchor={rva=0x12ddcf3,bytes='4539b00cfc0f00'}},
         campaign={0x101438,anchor='template_environments'},
         -- Three slots that cache planet definitions, keyed by the planet's definition id.
         definitions={0x22b1a8,0x2cc9ec,0x36e230,anchor='planet_lookup'},
@@ -158,9 +161,11 @@ structs={
         -- Galactic war time in seconds, a double; copies at 0x46028 and 0x147460.
         war_time={0x1f8058,anchor={rva=0x790b41,bytes='f20f108058801f00'}},
         selection_row={0x17a2a0,anchor={rva=0x6fde4a,bytes='8b82a0a21700'}},
-        published_seed={0x17a2bc,unverified=true},
-        active_snapshot={0x17a2c0,unverified=true},
+        -- The campaign copy of the seed and active operation, which 12d58e0 refreshes.
+        published_seed={0x17a2bc,sum='board.campaign+board.seed'},
+        active_snapshot={0x17a2c0,sum='board.campaign+board.active_operation'},
         selection_owner={0x1f8078,anchor='select_campaign_row'},
+        -- campaign_helpers indexes it as (i+0x1f808)*16, so no instruction holds the value.
         owners={0x1f8080,unverified=true},
         owner_count={0x1f80d0,anchor='campaign_helpers'},
         world_modifier_values={0x1f88f0,anchor={rva=0xac0dae,bytes='488bbdf0881f00'}},
@@ -171,7 +176,7 @@ structs={
         special_template_count={0x1f8918,anchor='special_events'},
         planet_overrides={0x1f891c,anchor={rva=0x11cd374,bytes='4439848b1c891f00'}},
         planet_override_count={0x1f897c,anchor={rva=0x11cd35f,bytes='448b9b7c891f00'}},
-        mission_preview={0x4168d0,unverified=true},
+        mission_preview={0x4168d0,anchor={rva=0x12d803a,bytes='488d8fd0684100'}},
     },
     -- board+board.campaign. Planet definitions are definition_stride bytes
     -- apart (definition id +0x18, identity key +0x1c, effects +0xb8, count
@@ -230,32 +235,35 @@ structs={
     -- ui_root.level_controller: the loaded or previewed level, 177deb0.
     level_controller={
         level={0x2c8,anchor={rva=0x1cfca8,bytes='488b89c8020000'}},
+        -- Not a level in 25480438: written once at construction and never read as a
+        -- level (only through +0x2c8). Kept as the fallback Know Your Constellation
+        -- reads; the kind check rejects whatever it holds.
         previous_level={0x288,unverified=true},
         stamp_manager={0x2d0,anchor='mission_candidates'},
     },
     level={
         stamps={0x8996b0,anchor={rva=0x90cd47,bytes='4c8d90b0968900'}},
-        stamp_size={0x108,unverified=true},
-        kind={0x8bc570,unverified=true},
-        explicit_tags={0x8bc654,unverified=true},
+        stamp_size={0x108,anchor={rva=0x5d0b54,bytes='4c69c108010000'}},
+        kind={0x8bc570,anchor={rva=0xf70f41,bytes='44898070c58b00'}},
+        explicit_tags={0x8bc654,anchor={rva=0xf70ff4,bytes='41b854c68b00'}},
         stamp_count={0x11a715c,anchor={rva=0x5d0b46,bytes='458b915c711a01'}},
     },
     -- A stamp record of a stamp set variant; its tag is at +0xd0.
     stamp={
-        size={0x1c8,unverified=true},
+        size={0x1c8,anchor={rva=0x177df96,bytes='4d69c0c8010000'}},
     },
     -- A biome definition of the level controller's stamp manager, f70f20.
     biome={
-        kind={0x2d0,unverified=true},
+        kind={0x2d0,anchor={rva=0x1267855,bytes='83b9d00200000b'}},
     },
     -- An environment entry of a biome, environment bytes apart.
     biome_environment={
-        size={0x11c,unverified=true},
-        weight={0x940,unverified=true},
-        id={0x958,unverified=true},
+        size={0x11c,anchor='mission_eligibility'},
+        weight={0x940,anchor={rva=0xfd307a,bytes='430f2f841a40090000'}},
+        id={0x958,anchor='mission_eligibility'},
     },
     world_modifier={
-        flags={0x110,unverified=true},
+        flags={0x110,anchor={rva=0x1267315,bytes='41f6821001000001'}},
     },
     global_effects={
         size={0x164,anchor={rva=0x11def83,bytes='4881c564010000'}},
@@ -286,8 +294,11 @@ structs={
         special_pool_count={0xa1834,anchor='level_choice'},
         pool_count={0xa183c,anchor='generate_operation_rows'},
     },
+    -- Every reader copies the whole row to the stack first (1758000, 11e2b60,
+    -- 11e3250), so the fields below appear as stack offsets; difficulty_tables
+    -- and compose_operation report a change to them as changed numbers.
     difficulty_row={
-        size={0x330,unverified=true},
+        size={0x330,anchor='compose_operation'},
         missions={0x108,unverified=true},
         budget={0x10c,unverified=true},
         constellation_draws={0x110,unverified=true},
@@ -301,9 +312,11 @@ structs={
     template={
         size={0x490,anchor='compose_operation'},
         modifiers={0x138,anchor='compose_operation'},
-        modifier_weights={0x13c,unverified=true},
-        rules={0x178,unverified=true},
-        rule_count={0x208,unverified=true},
+        -- Each modifier is {hash, weight}, read as one qword.
+        modifier_weights={0x13c,sum='template.modifiers+4'},
+        rules={0x178,anchor='mission_candidates'},
+        rule_count={0x208,anchor='mission_candidates'},
+        -- 11e4cd0, their only reader, addresses the templates from +0x18.
         tag_rows={0x20c,unverified=true},
         tag_row_count={0x48c,unverified=true},
     },
@@ -311,19 +324,20 @@ structs={
         size={0x380,anchor='mission_candidates'},
         title_key={0x340,anchor={rva=0x1758a6b,bytes='8b942e40030000'}},
         horde_tag={0x360,anchor={rva=0xad0dda,bytes='488b941160030000'}},
-        biomes={0x368,unverified=true},
-        biome_count={0x370,unverified=true},
+        biomes={0x368,anchor='mission_eligibility'},
+        biome_count={0x370,anchor='mission_eligibility'},
     },
     map_ui={
         planet={0x4ef8,anchor={rva=0x6618e1,bytes='48c781f84e0000ffffffff'}},
         -- The viewed planet's sky (725160 runs 1023d70 on it): its seed, the
         -- settings (quaternion +0xc, viewer body +0x2c) and the environment.
         sky_seed={0x23b0,anchor='sky_orbit'},
-        sky_settings={0x24d0,unverified=true},
+        sky_settings={0x24d0,anchor={rva=0x72a18b,bytes='4d8da6d0240000'}},
         sky={0x2530,anchor={rva=0x142af79,bytes='0fb68730250000'}},
         rows={0x4f00,anchor={rva=0x6618ec,bytes='48c781004f0000ffffffff'}},
         difficulty={0x4f14,anchor={rva=0x724070,bytes='8b80144f0000'}},
-        processed_row={0x4f98,unverified=true},
+        -- The row word of the second 0x98-byte view-state record (527ee0).
+        processed_row={0x4f98,sum='map_ui.rows+0x98'},
     },
     -- A body of a sky, size bytes apart from the environment's start
     -- (quaternions +0x94 and +0xa4); periods, phase and blends in 101c7c0
@@ -351,7 +365,7 @@ structs={
     },
     input_owner={
         binding_map={0xa7ad0,anchor={rva=0x6c7684,bytes='488b98d07a0a00'}},
-        bucket={0x148,unverified=true},
+        bucket={0x148,anchor={rva=0x6c76a9,bytes='4c69c148010000'}},
     },
     application={
         window_count={0x3b8,anchor='window_argument'},
