@@ -33,9 +33,15 @@ def code_length(entry):
 
 
 def rip_target(anchor):
+    """A global's anchor is a RIP-relative instruction that ends in its displacement."""
     data = bytes.fromhex(anchor['bytes'])
-    assert len(data) == 7 and 0x48 <= data[0] <= 0x4f and data[2] & 0xc7 == 5, anchor
-    return anchor['rva'] + 7 + struct.unpack_from('<i', data, 3)[0]
+    assert 6 <= len(data) <= 15 and data[-5] & 0xc7 == 5, anchor
+    return anchor['rva'] + len(data) + struct.unpack_from('<i', data, len(data) - 4)[0]
+
+
+def encodes(data, number):
+    """number is a 4-byte displacement or immediate somewhere after the opcode."""
+    return struct.pack('<i', number) in data[2:]
 
 
 def uses_displacement(data, value):
@@ -86,11 +92,26 @@ def check_table(data):
             values = entry['values']
             assert values and all(isinstance(v, int) and v >= 0x100 for v in values), label + ': offsets below 0x100 stay inline'
             assert ('anchor' in entry) != bool(entry.get('unverified')), label + ': an anchor or unverified=true'
-            if 'anchor' in entry:
-                owner = code[entry['anchor']]
+            anchor = entry.get('anchor')
+            if isinstance(anchor, dict):
+                # One instruction, checked on the first frame like a global's anchor.
+                assert len(values) == 1, label + ': an instruction anchors a single value'
+                assert set(anchor) <= {'rva', 'bytes', 'via', 'module'} and anchor['rva'] > 0, label
+                assert anchor.get('module', 'game') in MODULES, label
+                data_bytes = bytes.fromhex(anchor['bytes'])
+                assert re.fullmatch(r'(?:[0-9a-f]{2})+', anchor['bytes']) and len(data_bytes) <= 15, label
+                plus = 0
+                if 'via' in anchor:
+                    outer, name = anchor['via'].split('.')
+                    plus = data['structs'][outer][name]['values'][0]
+                    assert len(data['structs'][outer][name]['values']) == 1, label + ': via names a single value'
+                assert encodes(data_bytes, values[0] + plus), label + ': the anchor does not encode it'
+            elif anchor is not None:
+                owner = code[anchor]
                 # Hashed code is checked against a dump by scripts/check_offsets.py.
                 if 'bytes' in owner:
-                    assert uses_displacement(bytes.fromhex(owner['bytes']), values[0]), label + ': ' + entry['anchor'] + ' does not use it'
+                    for value in values:
+                        assert uses_displacement(bytes.fromhex(owner['bytes']), value), label + ': ' + anchor + ' does not use it'
             fields += 1
     assert fields > 0
     for name, entry in data.get('research', {}).items():
