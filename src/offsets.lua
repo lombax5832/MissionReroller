@@ -361,6 +361,8 @@ structs={
     },
     map_screen={
         -- The BACK hint widget record, scripts/survey_map_widgets.py on 2026-09-29.
+        -- No method of the map screen found (1481c90, 148ffa0) uses 0x6a0; the
+        -- lea [rbx+0x6a0] users work on a sibling object of the dispatcher.
         hint_widget={0x6a0,unverified=true},
     },
     input_owner={
