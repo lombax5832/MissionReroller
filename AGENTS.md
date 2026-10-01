@@ -79,6 +79,7 @@ scripts/build_*.py           other configurations of the release source, listed 
 scripts/check_live_*.py      live-memory checks through Memory Explorer
 scripts/check_offsets.py     src/offsets.lua against a game dump
 tests/                       Python drivers and LuaJIT tests
+CHANGELOG.md                 player-facing notes per published version
 docs/HISTORY.md              development log, newest first
 docs/*_TEST.md, *RESEARCH.md one file per in-game test or research topic
 artifacts/                   gitignored captures and oracles, main checkout only
@@ -194,7 +195,8 @@ to do, and which log lines prove it worked or failed.
    `Merge the <change> into main`.
 2. Release commit `Release <ver>: <what changed>`: bump `DEFAULT_VERSION`
    in `scripts/build.py` (local builds use it), update the version strings in `README.md`, add a
-   `docs/HISTORY.md` entry at the top marked **Not yet validated in game**.
+   `docs/HISTORY.md` entry at the top marked **Not yet validated in game**
+   and a `CHANGELOG.md` section (see **Publishing a tag**).
 3. After the user's in-game test, commit `Record the v<ver> in-game result`,
    changing the entry to **Validated in game** with the date and the log lines
    that prove it. Only the user's logs count as validation.
@@ -209,24 +211,25 @@ It builds with the tag's version (`RELEASE_TAG` sets the ZIP name, its
 GitHub release, then uploads the ZIP as a new version of the main file on
 Nexus Mods (mod 16762, file `vars.NEXUSMODS_FILE_ID`, key
 `secrets.NEXUSMODS_API_KEY`) and posts a changelog. Both sets of notes come
-from `docs/HISTORY.md` through `scripts/release_notes.py`.
+from the `CHANGELOG.md` section for that version through
+`scripts/release_notes.py`; `docs/HISTORY.md` is never published.
 
-1. **Write the changelog.** The notes for `v<ver>` are every
-   `docs/HISTORY.md` paragraph whose first line starts with `**` and names
-   `v<ver>` in its bold heading, running to the next such heading:
-   `**Not yet validated in game: v<ver> <title>.**` The status prefix
-   (`Not yet validated in game:`, `Validated in game:`, `Next in-game test:`)
-   is dropped, so players read `**v<ver> <title>.**`. Write it for players,
-   what changes for them first. A body line starting with `**` and naming a
-   version ends the entry early, so start bullets with `- `. Done when
-   `python -B scripts/release_notes.py v<ver>` prints the whole entry and
-   nothing more.
+1. **Write the changelog.** Add `## v<ver> <title>` at the top of
+   `CHANGELOG.md`, with `- ` bullets that say what a player sees or does
+   differently: new options, changed behaviour, fixed problems. Leave out
+   how it works, tests, log lines, file names, addresses and refactors; a
+   release with nothing visible says so in one line. The heading is not
+   published. When earlier versions were never tagged, the section covers
+   their player-visible changes too.
+   `tests/test_release_notes.py`, in the release gate, rejects code spans,
+   links, file names, addresses and log tags. Done when
+   `python -B scripts/release_notes.py v<ver>` prints the section.
 2. **Check the tagged build** from the main checkout:
    `$env:RELEASE_TAG='v<ver>'; python -B scripts/build.py; python -B tests/test_package.py; Remove-Item Env:RELEASE_TAG`.
    Done when it writes `releases/Mission-Reroller-v<ver>.zip` and prints
    `test_package: passed`.
 3. **Push `main`.** The workflow builds the tagged commit, so the release
-   commit and its `docs/HISTORY.md` entry must be on it. Done when
+   commit and its `CHANGELOG.md` section must be on it. Done when
    `git status` shows `main` level with `origin/main`.
 4. **Tag**, with the user's go-ahead: `git tag v<ver>; git push origin v<ver>`.
    Only `vX.Y.Z` triggers the workflow; `v1.2.3-rc1` publishes nothing.
@@ -247,8 +250,8 @@ When the run fails, read `gh run view <id> --log-failed` and match the step:
   tag stays) and `gh run rerun <id>`.
 - **Only the changelog** (`Mod file version created successfully`, then
   `Failed to add changelog entries`): the file is live. Fix
-  `docs/HISTORY.md` on `main` if needed, push, and run
-  `gh workflow run nexus-changelog.yml -f tag=v<ver>`; it reads the entries
+  `CHANGELOG.md` on `main` if needed, push, and run
+  `gh workflow run nexus-changelog.yml -f tag=v<ver>`; it reads the section
   and `NEXUS_MOD_ID` from `main`. The changelog endpoint takes the unique
   mod ID in `NEXUS_MOD_ID`, not 16762 (`Mod not found: 16762`).
 

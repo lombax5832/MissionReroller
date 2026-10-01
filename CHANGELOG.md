@@ -1,0 +1,16 @@
+# Mission Reroller changelog
+
+What changed for players in each published version, newest first. The
+release workflow posts a version's section, without its heading, as the
+GitHub release notes and the Nexus Mods changelog. How each change was
+made and tested is in the development log, [docs/HISTORY.md](docs/HISTORY.md).
+
+## v0.27.0 Day or night
+
+- New TIME OF DAY section in the panel: Any time, Day or Night.
+- With Day or Night, the matched operation's missions stay on that side for
+  2.5 hours after the reroll, clear of the 30 minutes around dawn and dusk.
+- On planets and moons whose days are too short for that, the filter holds
+  for half of a day or night instead, and the panel says how long.
+- When only a city can match and it is on the wrong side, the panel counts
+  down to when it will be ready instead of searching.
