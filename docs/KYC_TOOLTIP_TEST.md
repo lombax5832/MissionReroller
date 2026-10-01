@@ -72,8 +72,9 @@ patch byte-identical to that build):
 
 - With Know Your Constellation installed, the tooltips show (steps 1-2).
 - Without it, they do not (step 8).
+- After a reroll, the tooltip's units match the missions that were
+  generated (step 6).
 
-Not yet recorded: the log lines above, the starred rows' note-only box
-without Know Your Constellation, the window sizes (step 7) and the check
-against Know Your Constellation's own box after a reroll (step 6). Not
-validated in game until the user's logs are recorded here.
+Validated in game by the user's report on 2026-09-30, also for v0.28.0. No
+log lines were quoted, and the window sizes (step 7) and the starred rows'
+note-only box without Know Your Constellation were not reported separately.
