@@ -66,4 +66,14 @@ built with `--allow-untested`).
 
 ## Result
 
-Not yet run.
+2026-09-30, reported by the user, with Mission Reroller `4f8e09c` and the
+Know Your Constellation fork `export-roster-api` at `18213aa` (deployed
+patch byte-identical to that build):
+
+- With Know Your Constellation installed, the tooltips show (steps 1-2).
+- Without it, they do not (step 8).
+
+Not yet recorded: the log lines above, the starred rows' note-only box
+without Know Your Constellation, the window sizes (step 7) and the check
+against Know Your Constellation's own box after a reroll (step 6). Not
+validated in game until the user's logs are recorded here.
