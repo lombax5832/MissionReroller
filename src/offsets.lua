@@ -69,6 +69,17 @@ code={
     composition_174ab50={module='game',rva=0x174ab50,size=335,sha256='0bd16770e68656de8fb7e84f9d62a64cda0e8ffa0d81c25c539ef4e79d743ab9',from='174ab50, checked by the identity probe since v0.8; role not recorded'},
     composition_174b110={module='game',rva=0x174b110,size=464,sha256='4b395978f97967bfc97024b41ab6b63246c120019aa369f91d358321b543a7a4',from='174b110, checked by the identity probe since v0.8; role not recorded'},
     difficulty_cap={module='game',rva=0x11ebb40,size=152,sha256='5feaccab97b046561f786f2e60533112168f152ebcd19f38ad1e190c9a08e6a9',from='11ebb40, the difficulty cap from configuration'},
+    -- Game functions the Lua ports or mirrors, so that a change to one is reported.
+    mission_generator={module='game',rva=0x11e5670,size=2479,sha256='42b18b44a0305695c9800db455c029936099ae6818e0899668146ae32b908d36',from='11e5670, the mission generator 12d5550 calls; resets the weighted-choice usage, src/composition_prediction.lua'},
+    world_modifiers={module='game',rva=0x1267460,size=1757,sha256='9bfb554a9a35dd81cc334b6e5581a428dbcf1d82057dfb1c070e36cadd40ea3a',from='1267460, collects the active world modifiers of a planet, src/template_environments.lua'},
+    world_modifier_rules={module='game',rva=0x12672b0,size=248,sha256='e90a798fa373f15af8e667e97eda482156f57047df00db541b165ec2093abdc5',from='12672b0, whether a world modifier applies to a planet, src/template_environments.lua'},
+    planet_global_effects={module='game',rva=0x12e1210,size=177,sha256='69cf4beed2908309384487e4889b80c6190569460944e56dc0e6bd09bdc275e1',from='12e1210, the global effects that apply to a planet, src/constellation_inputs.lua and src/template_environments.lua'},
+    global_effect_entries={module='game',rva=0x11deda0,size=647,sha256='3f6cfd07568ac2833dcf6c43aad053165d586b58e5b05e6e3d28a8acf7f36a91',from='11deda0, the global effect entries, src/constellation_inputs.lua'},
+    difficulty_tables={module='game',rva=0x1758000,size=2542,sha256='024764812851f88c0b534aeb8ef0525817bdf790823d83eb7b3dc2cab713e1cb',from='1758000, the difficulty rows and the constellation fallback, src/constellation_prediction.lua'},
+    enemy_tag_order={module='game',rva=0x177dd80,size=277,sha256='90d75e1e339e79ca48f8194313a9e2703301843e8b385941ef595d942fb626fd',from='177dd80, the enemy-tag resolution order, src/constellation_prediction.lua'},
+    mission_exclusions={module='game',rva=0x177deb0,size=580,sha256='407ecedd04478500d5d7d98137eda180ac321215a451e860094860acac9974a3',from='177deb0, level-owned constellation inputs and mission exclusions, src/constellation_prediction.lua'},
+    configuration_key={module='game',rva=0x7bb8c0,size=114,sha256='5f6ebb6996126298f77a2dff82ca660fc10ed79ffa9605b51c92e5aa1dc3075f',from='7bb8c0, configuration key folding, src/configuration_lookup.lua'},
+    stamp_records={module='game',rva=0xf70f20,size=761,sha256='333283ea3b864b0081c8d884694b16cfe62b16aa1621566d1c57a03d3dae13db',from='f70f20, the stamp records reachable from the loaded definitions, src/constellation_runtime.lua'},
     -- The viewed planet's sky, which src/planet_sky.lua reproduces
     -- (docs/DAY_NIGHT_RESEARCH.md).
     sky_time_of_day={module='game',rva=0x1017ef0,size=1725,sha256='4e367c1e600c50d47ee4fb1df5aa4ffb5cc0811b89037c455570d9666eaac286',from='1017ef0, the time of day at a point, src/planet_sky.lua'},
