@@ -61,3 +61,21 @@ override, Purge / Deploy, launch. Read `BingusSharedLoader.log` and
 4. Hover a mission of the selected operation.
    - Pass: a `CONSTELLATION_CHECK … agree=` line.
    - Fail: `CONSTELLATION_CHECK_BLOCKED`.
+
+## Result, 2026-10-01
+
+Run by the user with the branch build (banner `Mission Reroller 0.28.0`):
+
+- Step 1 passed: `mods/ipodalexei/mission_reroller_experiment: loaded` and
+  `build=25480438 hashes=verified signatures=47 anchors=77 verified`; no
+  `STOPPED:` line.
+- Steps 2 and 3, as far as the war table allowed: no planet had an active
+  invasion, so `invasion_modifiers` was not exercised in game. A search on
+  planet 215 requiring two modifiers and Geological Survey ended in
+  `PREDICTION_CHECK descriptors_match=true`,
+  `PREDICTION_VERIFIED selected_row=27 active_preserved=true` and
+  `PUBLICATION_STATE_VERIFIED … map_ui_row_confirmed=true`. The log does not
+  show whether that planet had an environment-tag effect.
+- Step 4 passed: three `CONSTELLATION_CHECK … agree=true` lines.
+
+Still open: a prediction on an invaded planet, for `invasion_modifiers`.
