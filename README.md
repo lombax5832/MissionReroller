@@ -138,7 +138,7 @@ The mod's log is `MissionRerollerExperiment.log` in
 | `offset signature <name> mismatch` or `offset anchor <name> mismatch` | The game files are the supported build, but the code the mod relies on differs in memory, usually because another mod changed it. Send the line with a list of your mods. |
 
 When reporting a problem, include both logs. Near the top, the mod's log
-names its version (`Mission Reroller 0.27.0 docked dialog`) and, from the
+names its version (`Mission Reroller 0.28.0 docked dialog`) and, from the
 first frame, every Lua mod the loaders started: a `MODS` count, then one
 `MOD <name> version=<version> status=<status>` line each. A version reads
 `unknown` when that mod does not publish one.

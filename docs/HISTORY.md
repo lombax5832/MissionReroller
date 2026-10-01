@@ -5,6 +5,32 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
+**Not yet validated in game: v0.28.0 Know Your Constellation names and unit
+tooltips.** Enemy forces now use Know Your Constellation v4.0's names, and
+the three tags a map stamp can add (Bile Bugs, Hunter Swarms, Predator
+Strain) carry a `*`. Pointing at an enemy row shows a tooltip left of the
+panel, on layers 1016-1018 above Know Your Constellation's box.
+- **Units from Know Your Constellation, not a copy.** The tooltip calls
+  `EnemyIntelligence.roster`, an export proposed upstream on the fork branch
+  `export-roster-api` (api 1: `build`, `from_native`, `title`, `forecast`).
+  `src/unit_forecast.lua` uses it only when api is 1, its roster build is
+  this game build and Know Your Constellation has not disabled itself, and
+  rechecks that on every hover. A roster that raises turns unit tooltips off
+  for the session; the mod keeps running. Log lines start with `KYC_ROSTER`.
+- **Inputs.** The catalogue's `forecast(tag)` gives the planet-wide tags the
+  configuration keeps plus the hovered one, and the spawn weights Know Your
+  Constellation applies: category 72 campaign effects and type 15 global
+  effects (`constellation_inputs.spawn`), read on the first hover only.
+- **Layout.** The panel is docked on the right and Know Your Constellation's
+  box hangs under the planet panel on the left, so only the tooltip needed a
+  higher layer. It stays inside the window and cuts the small enemies to
+  "and N more" when it would not fit.
+- **In game so far.** The user saw the tooltips with the export build
+  installed and none without Know Your Constellation. The log lines and the
+  remaining steps of [KYC_TOOLTIP_TEST.md](KYC_TOOLTIP_TEST.md) are still to
+  be recorded. Players see the units only once a Know Your Constellation
+  release ships the export.
+
 **Validated in game: v0.27.0 day or night.** The panel has a
 fourth section, TIME OF DAY: Any time, Day or Night. With Day or Night the
 matched operation's missions stay on that side for 2.5 hours after the
