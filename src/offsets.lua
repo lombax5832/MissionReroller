@@ -6,14 +6,20 @@
 -- code:    game or executable bytes the mod relies on, checked on the first
 --          frame. An entry holds its bytes, a size and SHA-256, or names the
 --          entry whose bytes contain it (within).
--- globals: module-relative addresses. anchor is a 7-byte instruction that
---          addresses the global RIP-relative ({rva,bytes}), checked on the
---          first frame; tests check that it addresses rva. A global no such
---          instruction reaches says unverified=true.
+-- globals: module-relative addresses. anchor is an instruction that
+--          addresses the global RIP-relative and ends in that displacement
+--          ({rva,bytes}), checked on the first frame; tests check that it
+--          addresses rva. A global no such instruction reaches says
+--          unverified=true.
 -- structs: field offsets, strides and sizes of 0x100 or more, relative to
---          the struct named by the table. A field is {value, anchor=<code
---          entry whose bytes use it as a displacement>} or {value,
---          unverified=true}. Smaller offsets inside a record stay inline.
+--          the struct named by the table. A field is {value, anchor=...} or
+--          {value, unverified=true}. The anchor is the name of a code entry
+--          whose bytes use every value as a displacement or immediate (or the
+--          first plus multiples of a stride it uses), or one instruction
+--          {rva,bytes} whose displacement or immediate is the value; with
+--          via='<struct>.<field>' it is the value plus that field's (an
+--          offset the compiler folded in), and module='exe' when it is in the
+--          executable. Smaller offsets inside a record stay inline.
 -- research: RVAs only the Python tools under scripts/ use. The release
 --          build leaves this section out.
 --
@@ -50,7 +56,7 @@ code={
     special_events={module='game',rva=0x11e44d0,size=960,sha256='761e9b878f605a026082169dd67c4a2f5cae070d03a840ac2027499531689801',from='11e44d0, special campaign events, src/special_operation_inputs.lua'},
     exclusion_mask={module='game',rva=0x11e4b50,size=248,sha256='0847b63474ce07ef97714cd0acf6d71d76e9a1a4ec1acee82d0d25789bee0dc3',from='11e4b50, the exclusion mask'},
     reseed_board={module='game',rva=0x12d5550,size=288,sha256='b4c826d4744fdbbc161f2da037c544451c77caea400dfe5b87c77233f060289a',from='12d5550, the board wrapper around 11e5670'},
-    planet_lookup={module='game',rva=0x12dbd70,size=64,sha256='f021d86754fcf3cb8658ab2e205d01a9df0d85eb0fd24f8f7893ef0f3e315ca1',from='12dbd70, the shared planet lookup'},
+    planet_lookup={module='game',rva=0x12dbd70,size=251,sha256='d8badf0ab4ccd9e8480958210b0e9ead6e36232cebdcddbfe18be4ac30fe5dbd',from='12dbd70, the shared planet lookup: two definition slots, the overflow list, then the third slot'},
     level_choice={module='game',rva=0x11e6020,size=743,sha256='f5570461586131f1cc890d3745194440ae83dd0c2b1bb468db9f947c33fbc848',from='11e6020, src/mission_level_choice.lua'},
     mission_eligibility={module='game',rva=0x11e6800,size=338,sha256='f5dfdd2ba5a53230faa8ad361012721980e49da2a121ad7ad7a44f03d0372358',from='11e6800, src/mission_eligibility.lua'},
     mission_candidates={module='game',rva=0x11e5100,size=1291,sha256='5d9b9f3fb65fd7f0b39817b4919bebea8bd14995f77694053c7f8e0e6aebb488',from='11e5100, candidate eligibility'},
@@ -127,33 +133,33 @@ structs={
         active_operation={0x78e88,anchor='campaign_helpers'},
         operations={0xf7280,anchor='campaign_helpers'},
         operation_cache={0xf9a08,unverified=true},
-        missions={0xf9a10,unverified=true},
-        mission_count={0xffc08,unverified=true},
+        missions={0xf9a10,anchor='campaign_helpers'},
+        mission_count={0xffc08,anchor={rva=0x6609bd,bytes='418b9108fc0f00'}},
         mission_cache={0xffc0c,unverified=true},
         campaign={0x101438,anchor='template_environments'},
         -- Three slots that cache planet definitions, keyed by the planet's definition id.
         definitions={0x22b1a8,0x2cc9ec,0x36e230,anchor='planet_lookup'},
         alternate_generation={0x147478,anchor='template_environments'},
         -- Records of 44 bytes: a hash (0x2cb22ffb marks a planet), then the planet.
-        world_markers={0x17a09c,unverified=true},
-        world_marker_count={0x17a14c,unverified=true},
+        world_markers={0x17a09c,anchor={rva=0x11ccf5f,bytes='498d809ca01700'}},
+        world_marker_count={0x17a14c,anchor={rva=0x11ccf51,bytes='458b884ca11700'}},
         selection={0x17a298,anchor='campaign_helpers'},
         -- Galactic war time in seconds, a double; copies at 0x46028 and 0x147460.
-        war_time={0x1f8058,unverified=true},
-        selection_row={0x17a2a0,unverified=true},
+        war_time={0x1f8058,anchor={rva=0x790b41,bytes='f20f108058801f00'}},
+        selection_row={0x17a2a0,anchor={rva=0x6fde4a,bytes='8b82a0a21700'}},
         published_seed={0x17a2bc,unverified=true},
         active_snapshot={0x17a2c0,unverified=true},
         selection_owner={0x1f8078,anchor='select_campaign_row'},
         owners={0x1f8080,unverified=true},
         owner_count={0x1f80d0,anchor='campaign_helpers'},
-        world_modifier_values={0x1f88f0,unverified=true},
-        world_modifier_ids={0x1f88f8,unverified=true},
-        world_modifier_count={0x1f8900,unverified=true},
+        world_modifier_values={0x1f88f0,anchor={rva=0xac0dae,bytes='488bbdf0881f00'}},
+        world_modifier_ids={0x1f88f8,anchor={rva=0xac0dc8,bytes='4c8b95f8881f00'}},
+        world_modifier_count={0x1f8900,anchor={rva=0xac0dba,bytes='448b8500891f00'}},
         special_templates={0x1f8908,anchor='special_events'},
         special_template_ids={0x1f8910,anchor='special_events'},
         special_template_count={0x1f8918,anchor='special_events'},
-        planet_overrides={0x1f891c,unverified=true},
-        planet_override_count={0x1f897c,unverified=true},
+        planet_overrides={0x1f891c,anchor={rva=0x11cd374,bytes='4439848b1c891f00'}},
+        planet_override_count={0x1f897c,anchor={rva=0x11cd35f,bytes='448b9b7c891f00'}},
         mission_preview={0x4168d0,unverified=true},
     },
     -- board+board.campaign. Planet definitions are definition_stride bytes
@@ -161,23 +167,23 @@ structs={
     -- +0xc8); the planet_* fields are planet_stride bytes apart, and
     -- planet_record is the whole record (faction +0x24, region +0x40).
     campaign={
-        definition_stride={0x118,unverified=true},
-        planet_count={0x23014,unverified=true},
+        definition_stride={0x118,anchor='planet_lookup'},
+        planet_count={0x23014,anchor={rva=0x177e5fe,bytes='3bb04c441200',via='board.campaign'}},
         operation_bindings={0x23018,anchor='campaign_effects'},
         operation_binding_count={0x26018,anchor='campaign_effects'},
-        planet_stride={0x130,unverified=true},
+        planet_stride={0x130,anchor='campaign_effects'},
         planet_record={0x46020,anchor='generate_operation_rows'},
-        planet_faction={0x46044,unverified=true},
-        planet_enabled={0x46050,unverified=true},
-        planet_region={0x46060,unverified=true},
+        planet_faction={0x46044,anchor={rva=0xfe807e,bytes='4283bc094460040001'}},
+        planet_enabled={0x46050,anchor={rva=0x5bf514,bytes='42389c0988741400',via='board.campaign'}},
+        planet_region={0x46060,anchor={rva=0xb958cf,bytes='428b840198741400',via='board.campaign'}},
         planet_effects={0x460e8,anchor='campaign_effects'},
         planet_effect_count={0x46168,anchor='campaign_effects'},
-        planet_state={0x46170,unverified=true},
-        campaign_planet_count={0x6c044,unverified=true},
+        planet_state={0x46170,anchor={rva=0x72552c,bytes='488d9770610400'}},
+        campaign_planet_count={0x6c044,anchor={rva=0x725512,bytes='448b8744c00600'}},
         special_events={0x6c048,anchor='composition_174ab50'},
         special_event_count={0x70048,anchor='composition_174ab50'},
-        bases={0x7004c,unverified=true},
-        base_count={0x7284c,unverified=true},
+        bases={0x7004c,anchor={rva=0x133ce24,bytes='498d8184141700',via='board.campaign'}},
+        base_count={0x7284c,anchor={rva=0x1267ac2,bytes='448b87843c1700',via='board.campaign'}},
         events={0x72c58,anchor='campaign_effects'},
         event_count={0x77a58,anchor='campaign_effects'},
         invasions={0x77a60,anchor='composition_174ab50'},
@@ -187,11 +193,11 @@ structs={
     },
     -- campaign+campaign.events, event bytes apart.
     event={
-        size={0x9c0,unverified=true},
-        effects={0x920,unverified=true},
-        effect_count={0x92c,unverified=true},
-        planets={0x930,unverified=true},
-        planet_count={0x9b0,unverified=true},
+        size={0x9c0,anchor='campaign_effects'},
+        effects={0x920,anchor='campaign_effects'},
+        effect_count={0x92c,anchor='campaign_effects'},
+        planets={0x930,anchor='campaign_effects'},
+        planet_count={0x9b0,anchor='campaign_effects'},
     },
     session={
         local_player={0xb398,anchor='campaign_helpers'},
@@ -200,28 +206,28 @@ structs={
         gate={0x167e6,anchor='campaign_effects'},
     },
     backend={
-        pending_requests={0x31c48,unverified=true},
+        pending_requests={0x31c48,anchor={rva=0x12be6c1,bytes='83be481c030040'}},
         available={0x702f8,anchor='campaign_helpers'},
-        state={0x702fc,unverified=true},
+        state={0x702fc,anchor={rva=0xab0197,bytes='8b80fc020700'}},
     },
     ui_root={
-        transition={0x8e8,unverified=true},
+        transition={0x8e8,anchor='campaign_helpers'},
         loading_gate={0x108d,anchor='campaign_effects'},
         transition_gate={0x1099,anchor='campaign_effects'},
         level_controller={0xae288,anchor='mission_candidates'},
     },
     -- ui_root.level_controller: the loaded or previewed level, 177deb0.
     level_controller={
-        level={0x2c8,unverified=true},
+        level={0x2c8,anchor={rva=0x1cfca8,bytes='488b89c8020000'}},
         previous_level={0x288,unverified=true},
-        stamp_manager={0x2d0,unverified=true},
+        stamp_manager={0x2d0,anchor='mission_candidates'},
     },
     level={
-        stamps={0x8996b0,unverified=true},
+        stamps={0x8996b0,anchor={rva=0x90cd47,bytes='4c8d90b0968900'}},
         stamp_size={0x108,unverified=true},
         kind={0x8bc570,unverified=true},
         explicit_tags={0x8bc654,unverified=true},
-        stamp_count={0x11a715c,unverified=true},
+        stamp_count={0x11a715c,anchor={rva=0x5d0b46,bytes='458b915c711a01'}},
     },
     -- A stamp record of a stamp set variant; its tag is at +0xd0.
     stamp={
@@ -241,15 +247,15 @@ structs={
         flags={0x110,unverified=true},
     },
     global_effects={
-        size={0x164,unverified=true},
-        count={0x2c80,unverified=true},
+        size={0x164,anchor={rva=0x11def83,bytes='4881c564010000'}},
+        count={0x2c80,anchor={rva=0x8f3654,bytes='8b87802c0000'}},
     },
     objectives={
-        active={0xfc40,unverified=true},
-        entries={0xfc70,unverified=true},
-        size={0x7e0,unverified=true},
-        entry_rows={0x280,unverified=true},
-        count={0x17a40,unverified=true},
+        active={0xfc40,anchor={rva=0x72ca20,bytes='438b843c40fc0000'}},
+        entries={0xfc70,anchor={rva=0x126772a,bytes='4c8d9670fc0000'}},
+        size={0x7e0,anchor={rva=0x72ca19,bytes='4c69e0e0070000'}},
+        entry_rows={0x280,anchor={rva=0x1267731,bytes='458b8a80020000'}},
+        count={0x17a40,anchor={rva=0x72c9f7,bytes='4539b7407a0100'}},
     },
     effect_manager={
         count={0xd000,anchor='campaign_effects'},
@@ -279,11 +285,11 @@ structs={
         constellation_blockers={0x234,0x258,0x27c,unverified=true},
     },
     state_modifiers={
-        size={0x498,unverified=true},
+        size={0x498,anchor={rva=0x1267885,bytes='4869f898040000'}},
     },
     template={
-        size={0x490,unverified=true},
-        modifiers={0x138,unverified=true},
+        size={0x490,anchor='compose_operation'},
+        modifiers={0x138,anchor='compose_operation'},
         modifier_weights={0x13c,unverified=true},
         rules={0x178,unverified=true},
         rule_count={0x208,unverified=true},
@@ -291,21 +297,21 @@ structs={
         tag_row_count={0x48c,unverified=true},
     },
     mission_type={
-        size={0x380,unverified=true},
-        title_key={0x340,unverified=true},
-        horde_tag={0x360,unverified=true},
+        size={0x380,anchor='mission_candidates'},
+        title_key={0x340,anchor={rva=0x1758a6b,bytes='8b942e40030000'}},
+        horde_tag={0x360,anchor={rva=0xad0dda,bytes='488b941160030000'}},
         biomes={0x368,unverified=true},
         biome_count={0x370,unverified=true},
     },
     map_ui={
-        planet={0x4ef8,unverified=true},
+        planet={0x4ef8,anchor={rva=0x6618e1,bytes='48c781f84e0000ffffffff'}},
         -- The viewed planet's sky (725160 runs 1023d70 on it): its seed, the
         -- settings (quaternion +0xc, viewer body +0x2c) and the environment.
         sky_seed={0x23b0,anchor='sky_orbit'},
         sky_settings={0x24d0,unverified=true},
-        sky={0x2530,unverified=true},
-        rows={0x4f00,unverified=true},
-        difficulty={0x4f14,unverified=true},
+        sky={0x2530,anchor={rva=0x142af79,bytes='0fb68730250000'}},
+        rows={0x4f00,anchor={rva=0x6618ec,bytes='48c781004f0000ffffffff'}},
+        difficulty={0x4f14,anchor={rva=0x724070,bytes='8b80144f0000'}},
         processed_row={0x4f98,unverified=true},
     },
     -- A body of a sky, size bytes apart from the environment's start
@@ -322,23 +328,23 @@ structs={
         spin_blend={0x1c4,anchor='sky_sun'},
     },
     screen_owner={
-        stack={0x429c,unverified=true},
+        stack={0x429c,anchor={rva=0x5c08e0,bytes='488d829c420000'}},
     },
     ui_manager={
         -- The map screen's subscriber entry, scripts/survey_map_widgets.py.
-        registry={0x6288,unverified=true},
+        registry={0x6288,anchor={rva=0xb2a7a0,bytes='8b8188620000'}},
     },
     map_screen={
         -- The BACK hint widget record, scripts/survey_map_widgets.py on 2026-09-29.
         hint_widget={0x6a0,unverified=true},
     },
     input_owner={
-        binding_map={0xa7ad0,unverified=true},
+        binding_map={0xa7ad0,anchor={rva=0x6c7684,bytes='488b98d07a0a00'}},
         bucket={0x148,unverified=true},
     },
     application={
-        window_count={0x3b8,unverified=true},
-        windows={0x3c0,unverified=true},
+        window_count={0x3b8,anchor='window_argument'},
+        windows={0x3c0,anchor='window_argument'},
     },
 },
 

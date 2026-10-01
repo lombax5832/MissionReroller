@@ -111,7 +111,8 @@ def check_table(data):
                 # Hashed code is checked against a dump by scripts/check_offsets.py.
                 if 'bytes' in owner:
                     for value in values:
-                        assert uses_displacement(bytes.fromhex(owner['bytes']), value), label + ': ' + anchor + ' does not use it'
+                        data_bytes = bytes.fromhex(owner['bytes'])
+                        assert uses_displacement(data_bytes, value) or encodes(data_bytes, value), label + ': ' + anchor + ' does not use it'
             fields += 1
     assert fields > 0
     for name, entry in data.get('research', {}).items():

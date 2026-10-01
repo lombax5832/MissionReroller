@@ -153,6 +153,16 @@ def check_code(data, images, reference, report):
             continue
         old, length = reference(entry['module']), code_length(entry)
         found = code_match.find(old, entry['rva'], length, image)
+        if len(found) > 1 and not old.code(entry['rva']):
+            # A constant found twice: keep the copy the reference build's code addressed.
+            addressed = set()
+            for at in old.rip_users(entry['rva'])[:8]:
+                new, _ = relocate_instruction(old, at, image, deltas[entry['module']])
+                ins = image.instruction(new) if new is not None else None
+                if ins and ins.rip in found:
+                    addressed.add(ins.rip)
+            if len(addressed) == 1:
+                found = sorted(addressed)
         if len(found) == 1:
             new = found[0]
             where[name] = new
@@ -286,6 +296,11 @@ def check_fields(data, images, reference, where, deltas, report):
             rva = where.get(anchor, owner['rva'])
             listing = image.listing(rva, code_length(owner))
             missing = [v for v in values if not any(i.uses(v) for i in listing)]
+            if missing and values[0] not in missing:
+                # Slots of an array the code walks: the first value plus a stride it uses.
+                strides = {i.imm for i in listing if i.imm and i.imm > 0}
+                missing = [v for v in missing if not any((v - values[0]) % s == 0 and 0 < (v - values[0]) // s <= 8
+                                                         for s in strides)]
             if not missing:
                 report.counts['field ok'] += 1
                 continue
@@ -327,8 +342,8 @@ def check_instruction_field(label, values, anchor, images, reference, deltas, re
         report.line(f'STALE field {label}={values[0]:#x}: anchor not found ({how})')
         return
     value = (ins.disp if old.disp == number else ins.imm) - anchor['plus']
-    if anchor['plus']:
-        report.line(f'  folded offset: the value assumes the via field kept its value; check it')
+    if anchor['plus'] and value != values[0]:
+        report.line(f'  folded offset: {value:#x} assumes the via field kept its value; check it')
     report.counts['field moved'] += 1
     report.line(f'STALE field {label}={values[0]:#x}: anchor {how}, now {ins.text}')
     report.fix('field', label, {'anchor': {'rva': new, 'bytes': ins.bytes.hex()}, 'values': [value]})
@@ -552,8 +567,10 @@ def main(argv=None):
     parser.add_argument('--reference')
     parser.add_argument('--find-anchors', action='store_true')
     parser.add_argument('--write', action='store_true', help='apply the FIX lines to src/offsets.lua')
+    parser.add_argument('--table', default=str(offsets.SOURCE), help='another copy of offsets.lua (tests)')
     args = parser.parse_args(argv)
-    data = offsets.raw()
+    table = Path(args.table)
+    data = offsets.raw(table)
     # The workspace's dumps/, found upward so a worktree resolves it too.
     workspace = next((p for p in ROOT.parents if (p / 'dumps').is_dir()), ROOT.parent)
     default = workspace / 'dumps' / f'build-{data["build"]}'
@@ -575,7 +592,7 @@ def main(argv=None):
     else:
         print(f'all anchored entries match {images.folder}; {unverified} unverified entries are not checked')
     if args.write and report.fixes:
-        write(report.fixes)
+        write(report.fixes, table)
     # The installed game may be newer than the dump; say so, without failing the dump check.
     if not installed_hashes(data):
         print('the installed game is not the build offsets.lua names; see docs/UPDATING.md')
