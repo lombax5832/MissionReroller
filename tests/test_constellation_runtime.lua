@@ -79,7 +79,7 @@ poll()
 local text=table.concat(logs,'\n')
 assert(text:find('CONSTELLATION_CHECK planet=268 row=3 type=72 seed=123456 difficulty=10 faction=2',1,true),text)
 assert(text:find('predicted=[Hunter Swarms (BugPredators)] level=2c8 explicit=[] stamps=1 stamp=13(type=adc32faa variant=0 index=1) later_tagged=[]',1,true),text)
-assert(text:find('full=[Hunter Swarms (BugPredators), Shriekers (GM_BugShrieker_Traveler)] agree=false',1,true),text)
+assert(text:find('full=[Hunter Swarms (BugPredators), Roving Shriekers (GM_BugShrieker_Traveler)] agree=false',1,true),text)
 assert(text:find('CONSTELLATION_STAMP_SURVEY sets=1 records=2 tagged=1 tags=[13:1] examples=[0000feed/0/1=13] truncated=false',1,true),text)
 before=#logs;poll();poll();assert(#logs==before,'Each previewed mission is logged once')
 -- The alternate level slot, explicit tags and no stamp.

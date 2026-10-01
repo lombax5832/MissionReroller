@@ -89,6 +89,18 @@ assert(d.constellation_groups[10].open and C.possible(d,{[10]=true},{},{groups={
 assert(d.constellation_groups[0].open and C.possible(d,{},{},{groups={[0]=all}}))
 forced={9};c=sample(true)
 assert(ids(c.constellation_groups[9])=='2,8' and c.forced[1]==9,'Planet-wide tags hide only-when-empty candidates')
+-- The unit tooltip's input: kept planet-wide tags plus the hovered one, and
+-- the spawn weights, read once and only when asked.
+local spawns=0
+tags.spawn=function(planet,effect)
+    assert(planet==100 and effect==4294967295);spawns=spawns+1;return {[7]=2},{[8]=0.5}
+end
+forced={9,6,9};c=sample(true);assert(spawns==0,'No spawn reads before a hover')
+local input=c.forecast(2)
+assert(input.faction==2 and input.difficulty==10 and table.concat(input.tags,',')=='9,2','Disabled and repeated tags dropped')
+assert(input.zone[7]==2 and input.war[8]==0.5)
+assert(table.concat(c.forecast(9).tags,',')=='9' and spawns==1,'A planet-wide tag is not added twice; weights read once')
+tags.spawn=nil;forced={9}
 draws=0;assert(ids(sample(true).constellation_groups[0])=='','No draw, no constellation')
 assert(next(sample(false).constellation_groups)==nil,'Catalogues without tag inputs offer none')
 -- City scope: only accepted rows contribute missions, modifiers and effects.

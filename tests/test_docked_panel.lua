@@ -93,7 +93,7 @@ local function engine(features)
     r.e={Application={worlds=function()return {1,2}end,main_world=function()return 1 end},
         World={create_screen_gui=function()r.created=r.created+1;r.live={};return {}end,
             destroy_gui=function()r.destroyed=r.destroyed+1;r.live={}end},
-        Gui={resolution=function()return 1920,1080 end,material=function()return {}end,
+        Gui={resolution=function()return r.width or 1920,r.height or 1080 end,material=function()return {}end,
             rect=function(_,pos,size,c)r.rects=r.rects+1;local o={kind='rect',pos=pos,size=size,color=c};r.live[#r.live+1]=o;return o end,
             text=function(_,value,_,size,_,pos,c)
                 -- The game never shows a text that was created empty.
@@ -218,6 +218,73 @@ m.items[2].mode=nil;m.items[1].mode='chosen';m.time_note=nil;panel:show({},{},fa
 count,shown=chosen()
 assert(count==3 and shown and beside(shown,'ANY TIME'),'Any time shows CHOSEN')
 old=r.destroyed;panel:clear();assert(r.destroyed==old+1)
+-- The enemy tooltip: left of the panel, level with the hovered row, above
+-- Know Your Constellation's box and inside the window at every size.
+local function units(large,small)
+    local tip={title='Predator Strain',with='Hive World',large={},small={},footer='Possible encounters.',credit='Unit data: KYC'}
+    for i=1,large do tip.large[i]={name='Large '..i,ticks=11-i}end
+    for i=1,small do tip.small[i]='Small enemy '..i end
+    return tip
+end
+local function drawn(kind,z)
+    local found={}
+    for _,o in ipairs(r.live)do
+        if o.kind==kind and o.pos[3]==z and (kind~='text' or o.value~='') and (kind~='rect' or o.color[1]~=0 or o.size[1]>1) then found[#found+1]=o end
+    end
+    return found
+end
+for _,size in ipairs({{1920,1080},{1024,768},{3440,1440},{640,480}})do
+    r=engine('full');r.width,r.height=size[1],size[2];panel=P.new(r.e)
+    local tips=0
+    m=model('enemies',list(11,'constellation:2:','Constellation'),{groups=three,forced='Hive World',
+        tooltip=function(item)tips=tips+1;return item.id=='constellation:2:3' and {title=item.name,note='* The map can add this'} or units(6,30)end})
+    local b=P.layout(size[1],size[2],m)
+    for _,n in ipairs({1,11})do
+        local row=b.rows[n]
+        panel:show({},{},face,{x=row.x+4,y=row.y+4},m)
+        local body=assert(drawn('rect',1016)[1],'Tooltip body')
+        local name=size[1]..'x'..size[2]..' row '..n
+        assert(body.pos[1]>=0 and body.pos[2]>=0 and body.pos[1]+body.size[1]<=size[1] and body.pos[2]+body.size[2]<=size[2],name..': inside the window')
+        assert(body.pos[1]+body.size[1]<=b.x,name..': left of the panel')
+        assert(n==11 or math.abs(body.pos[2]+body.size[2]-(row.y+row.h))<1e-6 or body.pos[2]+body.size[2]>=size[2]-16*b.s-1e-6,name..': level with its row')
+        assert(r.find('PREDATOR STRAIN') or r.find('CONSTELLATION '..n),name)
+        assert(r.find('LARGE ENEMIES') and r.find('SPAWN RATE') and r.find('LARGE 1') and r.find('WITH HIVE WORLD') and r.find('UNIT DATA: KYC'),name)
+        for _,o in ipairs(drawn('text',1018))do
+            assert(o.pos[1]>=body.pos[1] and o.pos[1]<body.pos[1]+body.size[1] and o.pos[2]>=body.pos[2] and o.pos[2]<=body.pos[2]+body.size[2],name..': text inside '..o.value)
+        end
+        -- Ticks: six meters of ten, filled 10 down to 5.
+        local lit=0
+        for _,o in ipairs(drawn('rect',1017))do if o.size[2]==12*b.s and o.color[2]==240 then lit=lit+1 end end
+        assert(lit==10+9+8+7+6+5,name..': meter ticks '..lit)
+        local more=false
+        for _,o in ipairs(r.live)do if o.kind=='text' and o.value:find('^AND %d+ MORE$') then more=true end end
+        assert(not more,name..': the tooltip scales with the window, so thirty enemies fit')
+    end
+    panel:show({},{},face,nowhere,m);assert(#drawn('rect',1016)==0 and not r.find('LARGE ENEMIES'),'The tooltip leaves with the pointer')
+    local row=b.rows[3];panel:show({},{},face,{x=row.x+4,y=row.y+4},m)
+    assert(r.find('* THE MAP CAN ADD THIS') and not r.find('LARGE ENEMIES') and #drawn('rect',1016)==1,'A note-only tooltip')
+    local calls=tips;panel:show({},{},face,{x=row.x+5,y=row.y+5},m);assert(tips==calls+1 and r.updates>=0)
+end
+-- More small enemies than the window holds: the last lines become "and N more".
+r=engine('full');r.width,r.height=1280,720;panel=P.new(r.e)
+m=model('enemies',list(3,'constellation:2:'),{groups=three,tooltip=function()return units(8,400)end})
+local row=P.layout(1280,720,m).rows[1];panel:show({},{},face,{x=row.x+4,y=row.y+4},m)
+local body,shown,more=assert(drawn('rect',1016)[1]),0,nil
+for _,o in ipairs(r.live)do
+    if o.kind=='text' and o.pos[3]==1018 then
+        more=more or tonumber(o.value:match('^AND (%d+) MORE$'))
+        for _ in o.value:gmatch('SMALL ENEMY %d+')do shown=shown+1 end
+    end
+end
+assert(body.pos[2]>=0 and body.pos[2]+body.size[2]<=720 and more and shown+more==400,'Trimmed to the window: '..shown..'+'..tostring(more))
+panel:clear()
+r=engine('full');panel=P.new(r.e)
+m=model('enemies',list(3,'constellation:2:'),{groups=three,tooltip=function()error('roster broke')end})
+local row=P.layout(1920,1080,m).rows[1];panel:show({},{},face,{x=row.x+4,y=row.y+4},m)
+assert(#drawn('rect',1016)==0 and r.find('OPTION 1'),'A failing tooltip leaves the panel drawn')
+m.section='modifiers';m.items=list(3,'modifier:');panel:show({},{},face,{x=row.x+4,y=row.y+4},m)
+assert(#drawn('rect',1016)==0,'Only enemy rows have tooltips')
+panel:clear()
 -- Triangles and metrics are optional, and a failure turns them off.
 for _,features in ipairs({'none','failing','broken metrics'})do
     r=engine(features);panel=P.new(r.e)
@@ -230,4 +297,4 @@ for _,features in ipairs({'none','failing','broken metrics'})do
     assert(level.pos[1]<1216+25+610-#level.value*level.size*0.5 and level.pos[1]>1216+25+305,'Estimated widths keep text inside')
     panel:clear()
 end
-print('docked panel: layouts at four resolutions, retained updates, section switch and optional primitives: passed')
+print('docked panel: layouts at four resolutions, retained updates, section switch, enemy tooltips inside the window and optional primitives: passed')

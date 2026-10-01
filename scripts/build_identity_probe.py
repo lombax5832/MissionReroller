@@ -106,7 +106,8 @@ def source(search=False,publish=False,dialog=False,version=None):
               'base_inputs':'make_base_inputs'}
     if dialog:
         for name,file in [('Panel','docked_panel.lua'),('Hint','keybind_hint.lua'),('Binding','mod_binding.lua'),('EscapeGate','escape_gate.lua'),('Compatibility','mission_compatibility.lua'),('FilterCatalogue','filter_catalogue.lua'),('FilterRequest','filter_request.lua'),('make_gate','window_mouse_gate.lua'),('make_router','modal_pointer.lua'),('make_cursor','window_cursor.lua'),
-                          ('Constellations','constellation_prediction.lua'),('make_constellation_inputs','constellation_inputs.lua')]:
+                          ('Constellations','constellation_prediction.lua'),('make_constellation_inputs','constellation_inputs.lua'),
+                          ('UnitForecast','unit_forecast.lua')]:
             library(name,file)
         planet.update({'constellation_inputs':'make_constellation_inputs','catalogue':'FilterCatalogue',
                        'compatibility':'Compatibility','options':'Search.options','labels':'Constellations.names'})

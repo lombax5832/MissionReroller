@@ -5,7 +5,7 @@ local M,emit,read,pointer,page,u,hex,snapshot=host.M,host.emit,host.read,host.po
 local reroll_session=host.reroll_session
 local map,write,O,verify_code=host.map,host.write,host.O,host.verify_code
 local Panel,Hint,Binding,FilterCatalogue,EscapeGate=lib.Panel,lib.Hint,lib.Binding,lib.FilterCatalogue,lib.EscapeGate
-local FilterRequest=lib.FilterRequest
+local FilterRequest,UnitForecast=lib.FilterRequest,lib.UnitForecast
 local make_gate,make_router,make_cursor=lib.make_gate,lib.make_router,lib.make_cursor
 local Search,Constellations,Planet,DayNight=lib.Search,lib.Constellations,lib.Planet,lib.DayNight
 local default_limit=hooks.default_limit
@@ -17,6 +17,9 @@ do
     local difficulty,key_down=10,true
     -- The player's Filters and the panel's model (src/filter_request.lua).
     local filters
+    -- Unit tooltips of the enemy rows from Know Your Constellation's roster,
+    -- when that mod runs (src/unit_forecast.lua).
+    local forecaster
     -- Escape closes the dialog. While it is open the game's own Escape
     -- mappings are taken out of its binding map (src/escape_gate.lua), so
     -- the war table does not go BACK as well. They are put back once the
@@ -213,7 +216,9 @@ do
     end
     dialog_tick=function(focused,now)
         if not panel then init()end
-        filters=filters or FilterRequest.new(Search.options,FilterCatalogue,Constellations.names)
+        filters=filters or FilterRequest.new(Search.options,FilterCatalogue,Constellations.names,Constellations.stamped)
+        -- Logs on the first frame whether unit tooltips can run; rechecked on every hover.
+        if not forecaster then forecaster=UnitForecast.new(emit,_G);forecaster:roster()end
         if not router then restore_escape(not focused)end
         local run=reroll_session.view()
         if running and not run.running then
@@ -339,6 +344,10 @@ do
         local model=filters:model(catalogue,{shown=s or running or retained,fresh=s~=nil,retained=retained,running=running,
             queued=gap.queued~=nil,fixed=fixed,overdue=overdue,run=run,why=why,report=report,tone=report_tone,
             difficulty=difficulty,scope=scope,limit=default_limit,sky=sky})
+        if model.section=='enemies' then
+            local shown,forced=catalogue,model.forced
+            model.tooltip=function(item)return forecaster:tip(item,shown,forced)end
+        end
         -- Losing input ownership closes the dialog and restores the window;
         -- it does not stop the mod. A running search continues, as on focus loss.
         local ok,action=pcall(router.step,router,x,y,user32.GetAsyncKeyState(1)<0,Panel.layout(width,height,model).targets)
