@@ -1,4 +1,4 @@
--- Decode template-environment tags (177e4e0): biome, campaign effects, the
+-- Decode template-environment tags (177e5b0): biome, campaign effects, the
 -- active world modifiers (1267460) and the operation's binding.
 local O=...
 return function(read,u,pointer,game,board,effects,biome_definition)

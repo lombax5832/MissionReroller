@@ -196,6 +196,8 @@ def check_code(data, images, reference, report):
         report.line(f'  {name}: closest function {start:#x} similarity {ratio:.2f}; review the port ({entry["from"]})')
         for (a, b), n in sorted(code_match.changed_numbers(old, entry['rva'], length, image, start).items()):
             report.line(f'    number {a:#x} -> {b:#x} ({n}x)')
+            for place in lua_uses(a):
+                report.line(f'      {place}')
     for name, entry in sorted(code.items()):
         if 'within' not in entry:
             continue
@@ -213,6 +215,55 @@ def check_code(data, images, reference, report):
             report.counts['code stale'] += 1
             report.line(f'STALE code {name}: {entry["within"]} is stale')
     return where, deltas
+
+
+def lua_uses(number, limit=6):
+    """src/ lines outside offsets.lua that add number as an offset: where an inline offset lives."""
+    if number < 8:
+        return []  # too common to point anywhere
+    pattern = re.compile(r'[+*]\s*(?:0x0*%x|%d)\b' % (number, number), re.I)
+    found = []
+    for path in sorted((ROOT / 'src').rglob('*.lua')):
+        if path.name == 'offsets.lua':
+            continue
+        for n, line in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):
+            if pattern.search(line.split('--', 1)[0]):
+                found.append(f'src/{path.relative_to(ROOT / "src").as_posix()}:{n}: {line.strip()[:100]}')
+    return found[:limit] + ([f'... {len(found) - limit} more'] if len(found) > limit else [])
+
+
+def check_comments(images, reference, report):
+    """game.dll function RVAs in src/ comments that no longer start a function.
+
+    offsets.lua is left out: its entries are checked themselves, and its from
+    notes also name instruction sites, pages and executable code.
+    """
+    image = images('game')
+    old = reference('game') if reference else None
+
+    def starts(img, rva):
+        span = img.function(rva)
+        # A leaf function has no .pdata record; it follows padding or a return.
+        return bool(span and span[0] == rva) or img.data[rva - 1] in (0xcc, 0xc3)
+
+    for path in sorted((ROOT / 'src').rglob('*.lua')):
+        if path.name == 'offsets.lua':
+            continue
+        for n, line in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):
+            notes = line.split('--', 1)[1] if '--' in line else ''
+            for token in re.findall(r'\b([0-9a-f]{6,7})\b', notes):
+                rva = int(token, 16)
+                if not image.code(rva) or starts(image, rva):
+                    continue
+                hint = ''
+                if old and old.code(rva) and (old_span := old.function(rva)) and old_span[0] == rva:
+                    found = code_match.find(old, rva, old_span[1] - old_span[0], image)
+                    hint = f', now {found[0]:x}' if len(found) == 1 else ''
+                    if not hint and not found:
+                        best = code_match.closest(old, rva, old_span[1] - old_span[0], image, [0])
+                        hint = f', closest {best[0]:x} (similarity {best[1]:.2f})' if best else ''
+                report.counts['comment stale'] += 1
+                report.line(f'COMMENT src/{path.relative_to(ROOT / "src").as_posix()}:{n}: {token} is not a function start{hint}')
 
 
 def check_globals(data, images, reference, deltas, report):
@@ -585,6 +636,7 @@ def main(argv=None):
     where, deltas = check_code(data, images, reference, report)
     check_globals(data, images, reference, deltas, report)
     check_fields(data, images, reference, where, deltas, report)
+    check_comments(images, reference, report)
     print('counts: ' + ', '.join(f'{k}={n}' for k, n in sorted(report.counts.items())))
     unverified = report.counts['global unverified'] + report.counts['field unverified']
     if report.stale:
