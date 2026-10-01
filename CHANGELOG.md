@@ -15,3 +15,19 @@ made and tested is in the development log, [docs/HISTORY.md](docs/HISTORY.md).
   for half of a day or night instead, and the panel says how long.
 - When only a city can match and it is on the wrong side, the panel counts
   down to when it will be ready instead of searching.
+
+## v0.24.0 Fixes
+
+- Fixed the panel showing NO PLANET CHOSEN on planets such as Brilliance and
+  Fronteria; their options now list normally.
+- Fixed the game stuttering for a few seconds after clicking Reroll
+  operations.
+- Fixed a search that could show "running" forever; it now ends with "Seed
+  prediction unavailable for this planet".
+
+## v0.22.0 Works alongside other mods
+
+- Fixed potential conflict preventing this mod from working when other mods
+  are installed.
+- Added support for Mod Bindings Menu.
+- Default keybind changed to F7.
