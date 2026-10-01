@@ -128,9 +128,16 @@ class Image:
             flags = struct.unpack_from('<I', data, table + i * 40 + 36)[0]
             self.sections.append((rva, rva + size, bool(flags & EXECUTABLE)))
         rva, size = struct.unpack_from('<II', data, pe + 24 + 112 + 3 * 8)  # the exception directory
-        functions = sorted(struct.unpack_from('<II', data, rva + i * 12) for i in range(size // 12))
-        self.starts = [f[0] for f in functions]
-        self.ends = [f[1] for f in functions]
+        records = sorted(struct.unpack_from('<II', data, rva + i * 12) for i in range(size // 12))
+        # A function has one record per unwind region (prologue, body,
+        # epilogues), back to back; padding separates functions.
+        self.starts, self.ends = [], []
+        for start, end in records:
+            if self.ends and start == self.ends[-1]:
+                self.ends[-1] = end
+            else:
+                self.starts.append(start)
+                self.ends.append(end)
         self._listings = {}
 
     def code(self, rva):
