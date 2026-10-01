@@ -84,7 +84,8 @@ up(dialog,'catalogue_for',function(_,_,within)
         modifiers=planet==268 and {{id=0x1101e25c,name='Atmospheric Spores'}} or {{id=0xf6f1b0c7,name='Gunship Patrols'}},
         modifier_set=planet==268 and {[0x1101e25c]=true} or {[0xf6f1b0c7]=true},forced=planet==268 and {9} or {},
         constellation_groups=planet==268 and {[0]=offered(2,4,6),[2]=offered(2,4),[4]=offered(2,6),[9]=offered()}
-            or {[0]=offered(14,15),[4]=offered(14)}}
+            or {[0]=offered(14,15),[4]=offered(14)},
+        forecast=function(tag)return {faction=2,difficulty=10,tags={9,tag},zone={[5]=2},war={}}end}
 end,true)
 stingray={Gui={resolution=function()return 1200,820 end},Script={temp_byte_count=function()return 0 end,set_temp_byte_count=function()end}}
 local panel=up(dialog,'Panel');local now=0
@@ -171,7 +172,33 @@ take();session.finish('cancelled');frame()
 -- Survey (2) and Democracy (4) are checked: one group of constellations each.
 click('section:enemies');frame()
 assert(tabs()=='Geological Survey* | Spread Democracy' and last_model.group==2 and ids()=='constellation:2:2 constellation:2:4',tabs()..' '..ids())
-assert(last_model.items[1].name=='Constellation 2' and last_model.items[2].name=='Constellation 4','The game tag is not displayed')
+assert(last_model.items[1].name=='Constellation 2 *' and last_model.items[2].name=='Constellation 4 *'
+    and last_model.items[1].title=='Constellation 2','The game tag is not displayed; tags a map stamp can add are marked')
+do
+    -- Without Know Your Constellation a marked row's tooltip is its note alone.
+    local function logged(prefix)for _,line in ipairs(logs)do if line:sub(1,#prefix)==prefix then return line end end end
+    assert(logged('KYC_ROSTER off: not installed'),'The first frame logs the missing roster')
+    local tip=assert(last_model.tooltip(last_model.items[1]))
+    assert(tip.title=='Constellation 2' and tip.note and not tip.large,'A note-only tooltip')
+    -- With it, the mission's units through its exported roster, in its tag IDs.
+    local asked
+    EnemyIntelligence={revision='v4.0',status='ready',roster={api=1,build=25480438,
+        from_native=function(tag)return tag==1 and 31 or tag-1 end,
+        forecast=function(snapshot,zone)asked={snapshot=snapshot,zone=zone}
+            return {large={{name='Bile Titans',ticks=7}},small={'Warriors','Scavengers'}}end}}
+    tip=last_model.tooltip(last_model.items[2])
+    assert(tip.large[1].name=='Bile Titans' and tip.large[1].ticks==7 and tip.small[2]=='Scavengers' and tip.with=='Predator Strain')
+    assert(table.concat(asked.snapshot.tags,',')=='8,3' and asked.snapshot.faction==2 and asked.snapshot.difficulty==10 and asked.zone[5]==2)
+    assert(logged('KYC_ROSTER ready revision v4.0 build 25480438'))
+    -- Its build check failing hides the units; a roster that raises turns them off.
+    EnemyIntelligence.status='disabled: Unsupported game module'
+    assert(not last_model.tooltip(last_model.items[2]).large and logged('KYC_ROSTER off: revision v4.0 disabled: Unsupported game module'))
+    EnemyIntelligence.status='ready';EnemyIntelligence.roster.forecast=function()error('broken table')end
+    assert(not last_model.tooltip(last_model.items[1]).large and logged('KYC_ROSTER_FAILED'))
+    EnemyIntelligence.roster.forecast=function()return {large={},small={}}end
+    assert(not last_model.tooltip(last_model.items[2]).large,'Off for the rest of the session')
+    EnemyIntelligence=nil
+end
 assert(find('group:2').enabled and find('group:4').enabled and not find('previous_page') and not find('next_page'))
 assert(last_model.items[1].mode==nil and last_model.note==nil and last_model.forced=='Predator Strain',last_model.forced)
 click('constellation:2:4');frame();assert(last_model.items[2].mode=='accept' and last_model.items[1].mode==nil and last_model.ready)

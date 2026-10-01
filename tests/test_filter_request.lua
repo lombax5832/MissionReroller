@@ -71,6 +71,14 @@ m=f:model(terminids,fresh())
 assert(m.group==2 and ids(m)=='constellation:2:2 constellation:2:4' and m.items[1].name=='Constellation 2')
 assert(#m.groups==2 and m.groups[1].name=='Geological Survey' and m.groups[1].selected and not m.groups[2].selected)
 assert(m.forced=='Predator Strain, tag 11' and m.note==nil,m.forced)
+assert(m.items[2].tag==4 and m.items[2].title=='Constellation 4' and not m.items[2].stamped,'Rows carry their tag and title')
+do
+    -- A tag a map stamp can add is marked; the title stays plain for the tooltip.
+    local marked=R.new(options,C,labels,{[4]=true});marked.selected=f.selected;marked:navigate('section:enemies')
+    local rows=marked:model(terminids,fresh()).items
+    assert(rows[2].name=='Constellation 4 *' and rows[2].title=='Constellation 4' and rows[2].stamped)
+    assert(rows[1].name=='Constellation 2' and not rows[1].stamped)
+end
 edit(f,'constellation:2:4');assert(f.constellations[2][4]=='accept')
 edit(f,'constellation:2:4');assert(f.constellations[2][4]=='exclude')
 edit(f,'constellation:2:4');assert(f.constellations[2]==nil,'A group without rules goes away')

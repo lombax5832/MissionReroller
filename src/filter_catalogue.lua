@@ -128,6 +128,19 @@ function C.constellations(catalogue,tags,labels,planet,difficulty,options)
     for kind in pairs(catalogue.native)do if not named[kind]then offer(groups[0],kind)end end
     for _,group in pairs(groups)do table.sort(group.list,function(a,b)return a.id<b.id end)end
     catalogue.constellation_groups,catalogue.forced=groups,forced
+    -- The roster input of a mission here holding one more constellation
+    -- (src/unit_forecast.lua): the planet-wide tags the configuration keeps,
+    -- the tag, and the spawn weights, read on the first hover only.
+    local zone,war
+    function catalogue.forecast(tag)
+        if not zone then zone,war=tags.spawn(planet,effect)end
+        local list,seen={},{}
+        for _,t in ipairs(forced)do
+            if not seen[t] and not tags.disabled(t)then seen[t]=true;list[#list+1]=t end
+        end
+        if not seen[tag]then list[#list+1]=tag end
+        return {faction=catalogue.faction,difficulty=difficulty,tags=list,zone=zone,war=war}
+    end
 end
 -- time, when given, is the Day / Night filter's side and counts as a rule.
 function C.validate(catalogue,required,modifiers,constellations,time)

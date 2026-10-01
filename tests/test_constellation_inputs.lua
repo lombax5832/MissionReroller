@@ -24,10 +24,10 @@ for i=0,31 do poke(game+O.rva.enemy_tags+i*4,word(0x1000+i))end
 poke(game+O.rva.global_effects,word(globals))
 local values={}
 local config={hash=function(path)return table.concat(path,':')end,lookup=function(key)return values[key]end}
-local rows={}
+local rows,weights={},{}
 local effects={collect=function(planet,effect,class)
-    assert(class==0x28,'Enemy tags use effect class 0x28')
-    return rows[planet..':'..effect] or {}
+    assert(class==0x28 or class==0x48,'Enemy tags use effect class 0x28, spawn weights 0x48')
+    return (class==0x28 and rows or weights)[planet..':'..effect] or {}
 end}
 local function effect(kind,hash)return string.rep('\0',24)..word(kind)..word(hash)..string.rep('\0',20)end
 local inputs=make_inputs(read,u,pointer,game,board,effects,config)
@@ -80,7 +80,7 @@ rows['268:9']={effect(13,0x1000+11)}
 local function global(index,scope,value,filter,entries)
     local at=globals+index*O.global_effects.size
     poke(at+0x50,word(#entries));poke(at+0x54,string.char(scope));poke(at+0x58,word(value));poke(at+0x5c,word(filter))
-    for i,entry in ipairs(entries)do poke(at+(i-1)*16,string.char(entry[1])..string.rep('\0',3)..word(entry[2]))end
+    for i,entry in ipairs(entries)do poke(at+(i-1)*16,string.char(entry[1])..string.rep('\0',3)..word(entry[2])..single(entry[3] or 0))end
 end
 global(0,0,268,0,{{0x11,20},{0x10,21},{0x11,0}})
 global(1,0,100,0,{{0x11,22}})
@@ -94,6 +94,22 @@ assert(table.concat(inputs.campaign(268,4294967295),',')=='9,9,20,23,25,26,31','
 assert(table.concat(inputs.campaign(268,9),',')=='11,20,23,25,26,31','Operation effects use the effect binding')
 assert(table.concat(inputs.campaign(300,4294967295),',')=='','Planets beyond the campaign have no global effects')
 count=reads;inputs.campaign(268,9);assert(reads==count,'Campaign tags are cached')
+-- Spawn weights: category 72 rows of subtype 13 and mode 2, and type 15
+-- global entries, multiplied per family.
+local function weight(subtype,family,mode,factor)
+    return string.rep('\0',24)..word(subtype)..word(family)..string.rep('\0',4)..word(mode)..string.rep('\0',4)..single(factor)..string.rep('\0',4)
+end
+weights['268:4294967295']={weight(13,0xa1,2,2),weight(13,0xa1,2,1.5),weight(13,0xa2,1,4),weight(12,0xa3,2,4)}
+global(8,0,268,0,{{15,0xb1,0.5},{15,0xb1,0.5},{0x11,0}})
+global(9,0,100,0,{{15,0xb2,3}})
+local zone,war=inputs.spawn(268,4294967295)
+assert(zone[0xa1]==3 and zone[0xa2]==nil and zone[0xa3]==nil and next(zone,next(zone))==nil,'Zone weights')
+assert(war[0xb1]==0.25 and war[0xb2]==nil,'War weights of the planet only')
+assert(table.concat(inputs.campaign(268,4294967295),',')=='9,9,20,23,25,26,31','Spawn entries add no tags')
+count=reads;assert(inputs.spawn(268,4294967295)==zone and reads==count,'Spawn weights are cached')
+zone,war=inputs.spawn(300,4294967295);assert(next(zone)==nil and next(war)==nil)
+assert(not pcall(inputs.spawn,512,0))
+global(8,0,0,0,{});global(9,0,0,0,{})
 global(7,3,0,0,{{0x11,1}});poke(globals+7*O.global_effects.size+0x50,word(6))
 assert(not pcall(make_inputs(read,u,pointer,game,board,effects,config).campaign,268,4294967295),'Entry count is bounded')
 poke(globals+7*O.global_effects.size+0x50,word(1));poke(globals+7*O.global_effects.size+4,word(40))
@@ -105,4 +121,4 @@ assert(inputs.disabled(4) and not inputs.disabled(2) and not pcall(inputs.disabl
 -- Duplicate hashes would make campaign decoding ambiguous.
 poke(game+O.rva.enemy_tags+4,word(0x1000))
 assert(not pcall(make_inputs,read,u,pointer,game,board,effects,config))
-print('Constellation inputs: settings, cap, mission records, effect binding, campaign scopes, exclusions and caches passed')
+print('Constellation inputs: settings, cap, mission records, effect binding, campaign scopes, exclusions, spawn weights and caches passed')

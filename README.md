@@ -55,7 +55,14 @@ the same GUID, so your manager treats it as the same mod.
    - **Modifiers.** Click a row to cycle ANY, REQUIRED, EXCLUDED.
    - **Enemy forces.** One button per checked mission, or `ANY MISSION` when
      none is checked. Each constellation cycles ANY, ACCEPTED, EXCLUDED. The
-     list shows only what that mission can draw at the map difficulty.
+     list shows only what that mission can draw at the map difficulty, named
+     as Know Your Constellation names them. A `*` marks a constellation the
+     map can still add after the reroll; point at it to read why. With a
+     [Know Your Constellation](https://github.com/CowboyBingus/KnowYourConstellation)
+     version that shares its roster installed, pointing at any constellation
+     shows the enemies a mission would have with it and the planet's
+     always-present forces: large enemies with their spawn-rate meter and the
+     others most common first, from that mod's own forecast.
    - **Time of day.** Any time, Day or Night. With Day or Night, every
      mission of the match stays on that side for 2.5 hours after the reroll,
      clear of dusk and dawn. The line under the heading shows how long it
@@ -166,9 +173,11 @@ was allowed to write anything.
 - [Seed lifecycle](docs/SEED_LIFECYCLE.md) and
   [operation layout](docs/OPERATION_LAYOUT.md).
 - [Constellation research](docs/CONSTELLATION_RESEARCH.md) and the
-  [constellation filter test](docs/CONSTELLATION_FILTER_TEST.md).
+  [constellation filter test](docs/CONSTELLATION_FILTER_TEST.md);
+  [Know Your Constellation tooltip test](docs/KYC_TOOLTIP_TEST.md).
 - [Hosting a lobby](docs/LOBBY_HOST_TEST.md) and the
   [docked dialog](docs/DOCKED_DIALOG_TEST.md).
 
-The reference Know Your Constellation checkout is read by one test; none of
-its source or artwork is embedded or redistributed here.
+The unit tooltips call the roster that an installed Know Your Constellation
+exports; the reference Know Your Constellation checkout is read by one test.
+None of its source, data or artwork is embedded or redistributed here.

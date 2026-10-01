@@ -5,20 +5,25 @@ local ffi,bit=require('ffi'),require('bit')
 local single=ffi.new('float[1]')
 local function f(n)single[0]=n;return tonumber(single[0])end
 local R={}
-R.names={[1]='Horde Only (HordeOnly)',[2]='Bile Bugs (BugAcid)',[3]='Armored Bugs (BugArmored)',
-    [4]='Hunter Swarms (BugPredators)',[5]='Flyers (BugFlyers)',[6]='Light Bugs (BugFodder)',
-    [7]='Nursing Spewers (BugCrawlers)',[8]='Mixed Terminids (BugBalanced)',
-    [9]='Predator Strain (GM_BugSuperPredators)',[10]='Gloom Strain (GM_BugGloom)',
-    [11]='Rupture Strain (GM_BugBurrowers)',[12]='Dragonroaches (GM_BugDragon_Traveler)',
-    [13]='Shriekers (GM_BugShrieker_Traveler)',[14]='Assault Forces (BotAssault)',
-    [15]='Phalanx Forces (BotPhalanx)',[16]='Artillery Forces (BotArtillery)',[17]='Air Forces (BotAir)',
-    [18]='Armored Column (BotPanzer)',[19]='Mixed Automatons (BotBalanced)',
-    [20]='Jet Brigade (GM_BotAssault)',[21]='Cyborgs (GM_BotCyborgs)',
-    [22]='Gunships (GM_BotGunships_Traveler)',[23]='Incineration Corps (GM_IvoryLegion)',
-    [24]='Hive Lord (GM_BugHiveLord)',[25]='Stragglers (IlluminateStraggler)',
-    [26]='War Machine (GM_IlluminateWarmachine_Traveler)',[27]='Engineers (GM_IlluminateEngineers)',
-    [28]='Invasion (GM_IlluminateInvasion)',[29]='Harvest (GM_IlluminateHarvest)',
-    [30]='Body Horror (GM_IlluminateBodyHorror)',[31]='SEAF Support (GM_SEAF)'}
+-- Know Your Constellation's English titles, so both mods name a tag alike.
+R.names={[1]='Horde (HordeOnly)',[2]='Bile Bugs (BugAcid)',[3]='Armored Bugs (BugArmored)',
+    [4]='Hunter Swarms (BugPredators)',[5]='Flyer Composition (BugFlyers)',[6]='Light Bugs (BugFodder)',
+    [7]='Bug Nursery (BugCrawlers)',[8]='Balanced Terminids (BugBalanced)',
+    [9]='Predator Strain (GM_BugSuperPredators)',[10]='Spore Burst Strain (GM_BugGloom)',
+    [11]='Rupture Strain (GM_BugBurrowers)',[12]='Dragonroach Activity (GM_BugDragon_Traveler)',
+    [13]='Roving Shriekers (GM_BugShrieker_Traveler)',[14]='Assault Forces (BotAssault)',
+    [15]='Phalanx Forces (BotPhalanx)',[16]='Artillery Forces (BotArtillery)',[17]='Air Composition (BotAir)',
+    [18]='Armored Column (BotPanzer)',[19]='Balanced Automatons (BotBalanced)',
+    [20]='Jet Brigade (GM_BotAssault)',[21]='Cyborg Legion (GM_BotCyborgs)',
+    [22]='Gunship Patrols (GM_BotGunships_Traveler)',[23]='Incineration Corps (GM_IvoryLegion)',
+    [24]='Hive World (GM_BugHiveLord)',[25]='Illuminate Stragglers (IlluminateStraggler)',
+    [26]='Leviathan Blockade (GM_IlluminateWarmachine_Traveler)',[27]='Appropriators (GM_IlluminateEngineers)',
+    [28]='Invasion Fleet (GM_IlluminateInvasion)',[29]='Mindless Masses (GM_IlluminateHarvest)',
+    [30]='Vote Snatchers (GM_IlluminateBodyHorror)',[31]='SEAF Support (GM_SEAF)'}
+-- The tags a level stamp can add after generation (BugAcid, BugPredators,
+-- GM_BugSuperPredators; docs/CONSTELLATION_FILTER_TEST.md), so excluding them
+-- is a prediction.
+R.stamped={[2]=true,[4]=true,[9]=true}
 local function find(tags,tag)for i=1,#tags do if tags[i]==tag then return i end end end
 local function remove(tags,i)tags[i]=tags[#tags];tags[#tags]=nil end
 function R.add(tags,tag)

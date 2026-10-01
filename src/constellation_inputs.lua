@@ -14,7 +14,7 @@ return function(read,u,pointer,game,board,effects,config)
         local hash=u(hashes,i*4);assert(by_hash[hash]==nil,'Duplicate enemy tag hash');by_hash[hash]=i
     end
     local api={}
-    local cache={settings={},mission={},campaign={},disabled={},effect={}}
+    local cache={settings={},mission={},campaign={},disabled={},effect={},spawn={}}
     function api.settings(faction,difficulty)
         assert(faction>=2 and faction<=4,'Unsupported constellation faction')
         local key=faction..':'..difficulty;local result=cache.settings[key]
@@ -64,6 +64,30 @@ return function(read,u,pointer,game,board,effects,config)
         end
         cache.effect[key]=result;return result
     end
+    -- The global effects that apply to a planet (12e1210): each entry as
+    -- {kind, value, the float after it}.
+    local function globals_of(planet)
+        local entries={}
+        local planets=word(board+O.board.campaign+O.campaign.planet_count);assert(planets<=512,'Planet count exceeds capacity')
+        if planet>=planets then return entries end
+        local dynamic=read(board+O.board.campaign+O.campaign.planet_record+planet*O.campaign.planet_stride,O.campaign.planet_stride)
+        local faction,region=u(dynamic,0x24),u(dynamic,0x40)
+        local globals=read(assert(pointer(read(game+O.rva.global_effects,8)),'Missing global effects'),32*O.global_effects.size)
+        for i=0,31 do
+            local at=i*O.global_effects.size
+            local scope,value,filter=globals:byte(at+0x55),u(globals,at+0x58),u(globals,at+0x5c)
+            local applies=scope==3 or (scope==0 and value==planet) or (scope==1 and value==region)
+                or (scope==2 and value==faction)
+            if applies and (filter==0 or filter==faction)then
+                local n=u(globals,at+0x50);assert(n<=5,'Too many global effect entries')
+                for j=0,n-1 do
+                    local entry=at+j*16
+                    entries[#entries+1]={globals:byte(entry+1),u(globals,entry+4),float(globals,entry+8)}
+                end
+            end
+        end
+        return entries
+    end
     function api.campaign(planet,effect_id)
         assert(planet>=0 and planet<512 and planet==math.floor(planet),'Invalid constellation planet')
         local key=planet..':'..effect_id;local result=cache.campaign[key]
@@ -73,28 +97,28 @@ return function(read,u,pointer,game,board,effects,config)
             -- Unknown hashes are skipped natively rather than rejected.
             if u(row,24)==13 and by_hash[u(row,28)]then result[#result+1]=by_hash[u(row,28)]end
         end
-        local planets=word(board+O.board.campaign+O.campaign.planet_count);assert(planets<=512,'Planet count exceeds capacity')
-        if planet<planets then
-            local dynamic=read(board+O.board.campaign+O.campaign.planet_record+planet*O.campaign.planet_stride,O.campaign.planet_stride)
-            local faction,region=u(dynamic,0x24),u(dynamic,0x40)
-            local globals=read(assert(pointer(read(game+O.rva.global_effects,8)),'Missing global effects'),32*O.global_effects.size)
-            for i=0,31 do
-                local at=i*O.global_effects.size
-                local scope,value,filter=globals:byte(at+0x55),u(globals,at+0x58),u(globals,at+0x5c)
-                local applies=scope==3 or (scope==0 and value==planet) or (scope==1 and value==region)
-                    or (scope==2 and value==faction)
-                if applies and (filter==0 or filter==faction)then
-                    local n=u(globals,at+0x50);assert(n<=5,'Too many global effect entries')
-                    for j=0,n-1 do
-                        local entry=at+j*16
-                        if globals:byte(entry+1)==0x11 and u(globals,entry+4)~=0 and #result<32 then
-                            result[#result+1]=tag(u(globals,entry+4))
-                        end
-                    end
-                end
-            end
+        for _,entry in ipairs(globals_of(planet))do
+            if entry[1]==0x11 and entry[2]~=0 and #result<32 then result[#result+1]=tag(entry[2])end
         end
         cache.campaign[key]=result;return result
+    end
+    -- Spawn-weight multipliers per enemy family, as Know Your Constellation
+    -- reads them: category 72 campaign effects (family +28, factor +44) and
+    -- type 15 global effects (native 0x12e3c00). Returns zone, war.
+    function api.spawn(planet,effect_id)
+        assert(planet>=0 and planet<512 and planet==math.floor(planet),'Invalid constellation planet')
+        local key=planet..':'..effect_id;local result=cache.spawn[key]
+        if result then return result[1],result[2] end
+        local zone,war={},{}
+        for _,row in ipairs(effects.collect(planet,effect_id,0x48))do
+            if u(row,24)==13 and u(row,36)==2 then
+                local family=u(row,28);zone[family]=(zone[family] or 1)*float(row,44)
+            end
+        end
+        for _,entry in ipairs(globals_of(planet))do
+            if entry[1]==15 then war[entry[2]]=(war[entry[2]] or 1)*entry[3] end
+        end
+        cache.spawn[key]={zone,war};return zone,war
     end
     function api.disabled(index)
         local result=cache.disabled[index]

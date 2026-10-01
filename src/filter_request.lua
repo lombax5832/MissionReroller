@@ -1,16 +1,16 @@
 -- The player's Filters in the dialog, and the panel's view model built from
 -- them. Pure: the dialog runtime reads the game, the session and the mouse,
 -- and hands this module plain tables.
--- new(options,catalogue,labels): options are Search.options, catalogue is
--- src/filter_catalogue.lua (possible, validate), labels the constellation
--- names.
+-- new(options,catalogue,labels,stamped): options are Search.options,
+-- catalogue is src/filter_catalogue.lua (possible, validate), labels the
+-- constellation names, stamped the tags a map stamp can add.
 local R={}
 R.__index=R
 local PAGE=24
-function R.new(options,catalogue,labels)
+function R.new(options,catalogue,labels,stamped)
     -- One section is open at a time, or none. The enemy section shows the
     -- rules of one group: a checked mission, or 0 for any mission.
-    return setmetatable({options=options,catalogue=catalogue,labels=labels,
+    return setmetatable({options=options,catalogue=catalogue,labels=labels,stamped=stamped or {},
         selected={},modifiers={},constellations={},time=nil,section='missions',page=1,pages=1,group_choice=0},R)
 end
 -- Opening the dialog starts on the first page of the missions.
@@ -171,8 +171,11 @@ function R:model(catalogue,v)
         if offered then
             assert(#offered.list<=11,'Too many constellation options')
             for _,option in ipairs(offered.list)do
-                items[#items+1]={id='constellation:'..group..':'..option.id,name=(option.name:gsub(' %b()$','')),
-                    mode=(self.constellations[group] or {})[option.id]}
+                -- A tag the map can add after generation carries a marker; its
+                -- tooltip says why (src/unit_forecast.lua).
+                local title,stamped=(option.name:gsub(' %b()$','')),self.stamped[option.id] or false
+                items[#items+1]={id='constellation:'..group..':'..option.id,name=title..(stamped and ' *' or ''),
+                    title=title,tag=option.id,stamped=stamped,mode=(self.constellations[group] or {})[option.id]}
             end
         end
         for i,id in ipairs(groups)do

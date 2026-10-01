@@ -9,6 +9,9 @@ local SECTIONS={{id='missions',title='MISSIONS'},{id='modifiers',title='MODIFIER
 local FACTIONS={[2]={'TERMINIDS',255,179,0},[3]={'AUTOMATONS',255,90,79},[4]={'ILLUMINATE',197,139,255}}
 local STEPS={'1 CHECK PLANET','2 SEARCH SEEDS','3 REFRESH BOARD','4 OPEN OPERATION'}
 local WORDS={require='REQUIRED',accept='ACCEPTED',exclude='EXCLUDED',chosen='CHOSEN'}
+-- The enemy tooltip: width, gap to the panel, window margin, padding, and
+-- Know Your Constellation's meter of ten 8-unit ticks 3 units apart.
+local TIP={w=440,gap=12,margin=16,pad=16,ticks=10,tick=8,space=3}
 function P.layout(width,height,model)
     assert(width>=640 and height>=480,'Viewport too small')
     model=model or {}
@@ -104,7 +107,24 @@ function P.new(e)
         local function inside(t)return pointer.x>=t.x and pointer.x<t.x+t.w and pointer.y>=t.y and pointer.y<t.y+t.h end
         for _,t in ipairs(b.targets)do if t.enabled and inside(t)then hover=t.id end end
         for n,t in ipairs(b.rows)do if not t.enabled and inside(t)then hint=items[n].reason end end
-        local bits={tostring(hover),tostring(hint),model.status or '',model.tone or '',tostring(model.step),tostring(model.running),
+        -- The tooltip of the enemy row under the pointer, also during a
+        -- search (src/unit_forecast.lua). A failing one is left out.
+        local tip,tip_row,tip_key
+        if model.section=='enemies' and model.tooltip then
+            for n,t in ipairs(b.rows)do
+                if inside(t)then
+                    local ok,value=pcall(model.tooltip,items[n])
+                    if ok and type(value)=='table' then tip,tip_row=value,t end
+                end
+            end
+        end
+        if tip then
+            local parts={tostring(tip_row.id),tip.title or '',tip.with or '',tip.note or '',tip.footer or '',tip.credit or ''}
+            for _,unit in ipairs(tip.large or {})do parts[#parts+1]=unit.name..'='..unit.ticks end
+            for _,name in ipairs(tip.small or {})do parts[#parts+1]=name end
+            tip_key=table.concat(parts,'|')
+        end
+        local bits={tostring(hover),tostring(hint),tip_key or '',model.status or '',model.tone or '',tostring(model.step),tostring(model.running),
             tostring(model.locked),tostring(model.can_start),tostring(model.can_clear),tostring(model.faction),model.scope or '',
             tostring(model.difficulty),tostring(model.slots),tostring(model.checked),model.forced or '',model.note or '',model.time_note or ''}
         for _,section in ipairs(SECTIONS)do bits[#bits+1]=summaries[section.id] or ''end
@@ -167,7 +187,7 @@ function P.new(e)
             return short,size,w
         end
         -- x is the left edge, the right edge or the centre; cy the middle of the line.
-        local function text(id,value,x,cy,size,c,align,room)
+        local function text(id,value,x,cy,size,c,align,room,z)
             -- The design is set in capitals. The font atlas may lack glyphs outside ASCII.
             value=(tostring(value):upper():gsub('[^\32-\126]','?'))
             -- A text created empty in game stays blank after it is given a
@@ -177,7 +197,7 @@ function P.new(e)
             local w
             if room then value,size,w=fit(value,size,math.max(room,size))end
             if align then w=w or measure(value,size);x=x-(align=='right' and w or w/2)end
-            local pos=e.Vector3(x,cy-size*0.35,996)
+            local pos=e.Vector3(x,cy-size*0.35,z or 996)
             used['#'..id]=true
             if texts[id] then e.Gui.update_text(gui,texts[id],value,font,size,mat,pos,c)
             else texts[id]=assert(e.Gui.text(gui,value,font,size,mat,pos,c))end
@@ -185,6 +205,88 @@ function P.new(e)
         end
         local x,y,w,h=b.x,b.y,b.w,b.h
         local left,right,px=x+LEFT*s,x+(LEFT+INNER)*s,math.max(1,s)
+        -- Greedy lines of words joined by sep, each at most room wide; a line
+        -- that continues ends in the separator's mark. {text,count} each.
+        local function wrap(words,sep,size,room)
+            local lines,line,n={},nil,0
+            for _,word in ipairs(words)do
+                local longer=line and line..sep..word or word
+                if line and measure(longer:upper(),size*s)>room then
+                    lines[#lines+1]={line..(sep:match('^%S') or ''),n};line,n=word,1
+                else line,n=longer,n+1 end
+            end
+            if line then lines[#lines+1]={line,n}end
+            return lines
+        end
+        -- The enemy row's tooltip, left of the panel and level with the row,
+        -- kept inside the window: Know Your Constellation's units with its
+        -- spawn-rate meter, and the map-stamp note. Above that mod's forecast
+        -- box (layers 1011-1015); the game orders layers up to 1023 only.
+        local function tooltip(tip,row)
+            local margin,pad=TIP.margin*s,TIP.pad*s
+            local tw=math.min(TIP.w*s,x-TIP.gap*s-margin)
+            local room=tw-2*pad
+            local gold,body,soft,slate=color(255,213,0),color(240,243,245),color(179,198,205),color(42,53,69)
+            local function line(kind,a,b,c,units)return {kind,a,b,c,h=units*s}end
+            local head,tail={line('text',tip.title,18,gold,30)},{}
+            if tip.with then head[#head+1]=line('text','With '..tip.with,14,soft,22)end
+            if tip.large and #tip.large>0 then
+                head[#head+1]=line('caption','LARGE ENEMIES','SPAWN RATE',nil,26)
+                for _,unit in ipairs(tip.large)do head[#head+1]=line('meter',unit.name,unit.ticks,nil,24)end
+            end
+            local small={}
+            if tip.small and #tip.small>0 then
+                head[#head+1]=line('caption','SMALL AND MEDIUM ENEMIES','MOST COMMON FIRST',nil,26)
+                for _,l in ipairs(wrap(tip.small,', ',15,room))do
+                    local entry=line('text',l[1],15,body,21);entry.count=l[2];small[#small+1]=entry
+                end
+            end
+            if tip.footer then tail[#tail+1]=line('text',tip.footer,13,soft,22)end
+            if tip.note then
+                local words={};for word in tip.note:gmatch('%S+')do words[#words+1]=word end
+                for _,l in ipairs(wrap(words,' ',13,room))do tail[#tail+1]=line('text',l[1],13,color(255,179,0),19)end
+            end
+            if tip.credit then tail[#tail+1]=line('text',tip.credit,12,color(122,135,145),20)end
+            -- Too tall for the window: the last small enemies give way to
+            -- "and N more", as in Know Your Constellation's side box.
+            local fixed=2*pad
+            for _,list in ipairs({head,tail})do for _,l in ipairs(list)do fixed=fixed+l.h end end
+            local fits=math.max(0,math.floor((height-2*margin-fixed)/(21*s)))
+            if fits<#small then
+                local hidden=0
+                for i=math.max(1,fits),#small do hidden=hidden+small[i].count;small[i]=nil end
+                if fits>0 then small[fits]=line('text','and '..hidden..' more',15,soft,21)end
+            end
+            local lines={}
+            for _,list in ipairs({head,small,tail})do for _,l in ipairs(list)do lines[#lines+1]=l end end
+            local th=2*pad;for _,l in ipairs(lines)do th=th+l.h end
+            local top=math.min(height-margin,row.y+row.h)
+            local bottom=math.max(margin,top-th);top=bottom+th
+            local tx=x-TIP.gap*s-tw
+            rect('tip_body',tx,bottom,tw,th,1016,color(6,10,17,242))
+            rect('tip_bar',tx,bottom,3*s,th,1017,color(255,185,0))
+            rect('tip_top',tx,top-px,tw,px,1017,slate)
+            rect('tip_bottom',tx,bottom,tw,px,1017,slate)
+            rect('tip_right',tx+tw-px,bottom,px,th,1017,slate)
+            local cursor,lx,rx=top-pad,tx+pad,tx+tw-pad
+            local meter=(TIP.ticks*TIP.tick+(TIP.ticks-1)*TIP.space)*s
+            for i,l in ipairs(lines)do
+                local cy=cursor-l.h/2
+                if l[1]=='text' then text('tip'..i,l[2],lx,cy,l[3],l[4],nil,room,1018)
+                elseif l[1]=='caption' then
+                    local used=text('tip_side'..i,l[3],rx,cy,13,soft,'right',room/2,1018)
+                    text('tip'..i,l[2],lx,cy,13,soft,nil,room-used-8*s,1018)
+                    rect('tip_rule'..i,lx,cursor-l.h+2*s,room,px,1017,slate)
+                else
+                    text('tip'..i,l[2],lx,cy,16,body,nil,room-meter-10*s,1018)
+                    for k=1,TIP.ticks do
+                        rect('tick'..i..'_'..k,rx-meter+(k-1)*(TIP.tick+TIP.space)*s,cy-6*s,TIP.tick*s,12*s,1017,
+                            k<=l[3] and body or slate)
+                    end
+                end
+                cursor=cursor-l.h
+            end
+        end
         local function at(top)return y+(H-top)*s end
         local muted=color(143,155,165)
         if full then
@@ -274,6 +376,7 @@ function P.new(e)
                     text('label'..n,item.name,t.x+43*s,cy,19,off and dim or rule or white,nil,t.w-73*s-word)
                 end
             end
+            if tip then tooltip(tip,tip_row)end
             local foot=model.running and FOOT or FOOT+36
             rect('foot',x+px,y+px,w-5*s-px,(H-foot)*s-px,991,glass(9))
             rect('foot_edge',x+px,at(foot),w-5*s-px,px,992,glass(43))
