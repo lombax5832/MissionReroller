@@ -35,7 +35,7 @@ jobs:
           text = open('.github/workflows/release.yml', encoding='utf-8').read()
           mod_id = re.search(r"NEXUS_MOD_ID: '(\d+)'", text).group(1)
           version = os.environ['TAG'].removeprefix('v')
-          notes = release_notes.notes(version)
+          notes = release_notes.notes(version, plain_text=True)
           if not notes:
               sys.exit(f'CHANGELOG.md has no section for v{version}')
           print(notes)
