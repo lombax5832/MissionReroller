@@ -29,7 +29,8 @@ were removed; the repository history keeps them.
 
 | Script | Purpose |
 | --- | --- |
-| `check_offsets.py` | Checks `src/offsets.lua` against a game dump, suggests new RVAs for stale entries from a reference dump, finds anchors (`--find-anchors`), and compares the hashes with the installed game. Runbook: `docs/UPDATING.md`. |
+| `check_offsets.py` | Checks `src/offsets.lua` against a game dump. With `--reference <old dump>` it carries the table to a new build: moved code, globals and fields get `FIX` lines (`--write` applies them), changed code lists the struct displacements that changed and the Lua lines using them. `--find-anchors` suggests anchors for unverified entries. Compares the hashes with the installed game. Runbook: `docs/UPDATING.md`; rehearsal test: `tests/test_check_offsets.py`. |
+| `code_match.py` | Capstone decoding of the dumps for `check_offsets.py`: code equal up to call targets and RIP displacements, function bounds from `.pdata`, RIP and value users, register origins. Needs the workspace `tools/seed-emulator-deps` and numpy. |
 | `offsets.py` | Reads `src/offsets.lua` for the Python tools (`O.rva`, `O.field`, `O.research`) through `offsets_json.lua` and `HD2_LUAJIT`. |
 
 ## Analysis tools

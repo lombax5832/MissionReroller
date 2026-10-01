@@ -142,8 +142,9 @@ MissionRerollerExperiment.read_only=false
 assert(not pcall(real_snapshot,true),'Preview mode must never be enabled for a writing adapter')
 MissionRerollerExperiment.read_only=true
 local prepare=up(tick,'prepare')
--- The adapter checks every code entry and global anchor of src/offsets.lua
--- on the first frame: bytes, or SHA-256 for the generator functions.
+-- The adapter checks every code entry and anchor instruction of
+-- src/offsets.lua on the first frame: bytes, or SHA-256 for the generator
+-- functions.
 local verify_offsets=up(up(prepare,'initialize'),'verify_offsets')
 local verify_code=up(verify_offsets,'verify_code')
 local offsets=up(verify_code,'offsets')
@@ -162,6 +163,12 @@ up(verify_code,'read',function(address,size)
     for _,entry in pairs(offsets.globals)do
         if entry.anchor and address==base(entry)+entry.anchor.rva then return raw(entry.anchor.bytes)end
     end
+    for _,fields in pairs(offsets.structs)do
+        for _,entry in pairs(fields)do
+            local anchor=entry.anchor
+            if type(anchor)=='table' and address==base(anchor)+anchor.rva then return raw(anchor.bytes)end
+        end
+    end
     error('Unexpected signature address')
 end,true)
 up(verify_code,'sha256',function(bytes)return bad_signature and 'mismatch' or bytes end,true)
@@ -171,6 +178,9 @@ local code_entries,anchors=verify_offsets()
 local expected_code,expected_anchors=0,0
 for _ in pairs(offsets.code)do expected_code=expected_code+1 end
 for _,entry in pairs(offsets.globals)do if entry.anchor then expected_anchors=expected_anchors+1 end end
+for _,fields in pairs(offsets.structs)do
+    for _,entry in pairs(fields)do if type(entry.anchor)=='table' then expected_anchors=expected_anchors+1 end end
+end
 assert(code_entries==expected_code and anchors==expected_anchors and anchors>0)
 up(prepare,'initialize',function()end,true)
 up(prepare,'api',{pointer=function()error('Unexpected pointer read during initialization')end},true)

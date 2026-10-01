@@ -166,17 +166,26 @@ local function verify_code(names)
         end
     end
 end
--- Every code entry, and the instruction that anchors each global.
+-- Every code entry, and the instruction that anchors each global and each
+-- struct field anchored to an instruction rather than a code entry.
 local function verify_offsets()
     local names=sorted_names(offsets.code)
     verify_code(names)
     local anchored=0
+    local function verify_anchor(module,anchor,name)
+        local bytes=anchor.bytes
+        assert(hex(read(bases[module]+anchor.rva,#bytes/2))==bytes,'offset anchor '..name..' mismatch')
+        anchored=anchored+1
+    end
     for _,name in ipairs(sorted_names(offsets.globals))do
         local entry=offsets.globals[name]
-        if entry.anchor then
-            local bytes=entry.anchor.bytes
-            assert(hex(read(bases[entry.module]+entry.anchor.rva,#bytes/2))==bytes,'offset anchor '..name..' mismatch')
-            anchored=anchored+1
+        if entry.anchor then verify_anchor(entry.module,entry.anchor,name)end
+    end
+    for _,struct in ipairs(sorted_names(offsets.structs))do
+        local fields=offsets.structs[struct]
+        for _,field in ipairs(sorted_names(fields))do
+            local anchor=fields[field].anchor
+            if type(anchor)=='table' then verify_anchor(anchor.module or 'game',anchor,struct..'.'..field)end
         end
     end
     return #names,anchored
