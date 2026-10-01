@@ -1,8 +1,8 @@
-"""Print the docs/HISTORY.md entries for one version, for the GitHub release
+"""Print the CHANGELOG.md section for one version, for the GitHub release
 and the Nexus Mods changelog. Fails when the tag is not a version or
-docs/HISTORY.md has no entry for it.
+CHANGELOG.md has no section for it.
 
-    python -B scripts/release_notes.py v0.24.0
+    python -B scripts/release_notes.py v0.27.0
 """
 from pathlib import Path
 import re
@@ -10,32 +10,34 @@ import sys
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
-HEADING = re.compile(r'^\*\*.*?\bv(\d+\.\d+\.\d+)\b')
-STATUS = re.compile(r'^\*\*(?:Not yet validated in game|Validated in game|Next in-game test):\s*')
+CHANGELOG = ROOT / 'CHANGELOG.md'
+SECTION = re.compile(r'^## v(\d+\.\d+\.\d+)\b')
 
 
 def entries(version, text):
-    """Every entry whose bold heading names this version, status prefix removed."""
-    blocks, current = [], None
+    """The body of the `## v<version> <title>` section, heading removed."""
+    lines, current = [], False
     for line in text.splitlines():
-        heading = HEADING.match(line)
-        if heading:
-            current = [] if heading.group(1) == version else None
-            if current is not None:
-                blocks.append(current)
-                line = STATUS.sub('**', line)
-        if current is not None:
-            current.append(line)
-    return '\n\n'.join('\n'.join(block).strip() for block in blocks)
+        if line.startswith('## '):
+            section = SECTION.match(line)
+            current = bool(section) and section.group(1) == version
+            continue
+        if current:
+            lines.append(line)
+    return '\n'.join(lines).strip()
+
+
+def notes(version):
+    return entries(version, CHANGELOG.read_text(encoding='utf-8'))
 
 
 def main(tag):
     import build
     version = build.release_version(tag)
-    notes = entries(version, (ROOT / 'docs' / 'HISTORY.md').read_text(encoding='utf-8'))
-    if not notes:
-        sys.exit(f'docs/HISTORY.md has no entry for v{version}')
-    print(notes)
+    text = notes(version)
+    if not text:
+        sys.exit(f'CHANGELOG.md has no section for v{version}')
+    print(text)
 
 
 if __name__ == '__main__':
