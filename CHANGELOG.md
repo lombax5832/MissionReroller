@@ -1,8 +1,9 @@
 # Mission Reroller changelog
 
 What changed for players in each published version, newest first. The
-release workflow posts a version's section, without its heading, as the
-GitHub release notes and the Nexus Mods changelog. How each change was
+release workflow posts a version's bullets, without the heading, as the
+GitHub release notes and, as one plain-text line each, the Nexus Mods
+changelog. How each change was
 made and tested is in the development log, [docs/HISTORY.md](docs/HISTORY.md).
 
 ## v0.27.0 Day or night

@@ -218,12 +218,15 @@ from the `CHANGELOG.md` section for that version through
    `CHANGELOG.md`, with `- ` bullets that say what a player sees or does
    differently: new options, changed behaviour, fixed problems. Leave out
    how it works, tests, log lines, file names, addresses and refactors; a
-   release with nothing visible says so in one line. The heading is not
-   published. When earlier versions were never tagged, the section covers
+   release with nothing visible says so in one bullet. Nexus Mods renders
+   no Markdown, so it gets each bullet as one line of plain text with the
+   `- ` dropped: no bold, code or links, and every line under the heading
+   is a bullet or its wrapped continuation. The heading is not published. When earlier versions were never tagged, the section covers
    their player-visible changes too.
    `tests/test_release_notes.py`, in the release gate, rejects code spans,
-   links, file names, addresses and log tags. Done when
-   `python -B scripts/release_notes.py v<ver>` prints the section.
+   emphasis, links, file names, addresses and log tags. Done when
+   `python -B scripts/release_notes.py v<ver> --plain` prints one line per
+   change.
 2. **Check the tagged build** from the main checkout:
    `$env:RELEASE_TAG='v<ver>'; python -B scripts/build.py; python -B tests/test_package.py; Remove-Item Env:RELEASE_TAG`.
    Done when it writes `releases/Mission-Reroller-v<ver>.zip` and prints
