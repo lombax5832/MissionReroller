@@ -2,15 +2,15 @@
 
     python -B tests/test_check_offsets.py
 
-Needs the workspace dumps (../dumps/build-<build> and the older build at
-../dumps/ itself), Capstone (workspace tools/seed-emulator-deps) and numpy,
-so it is not part of the release gate; it prints "skipped" without them.
-It checks that:
+Needs the workspace dumps (../dumps/build-<build> and another build: the
+newest other ../dumps/build-*, else the 25327279 dump at ../dumps/ itself),
+Capstone (workspace tools/seed-emulator-deps) and numpy, so it is not part
+of the release gate; it prints "skipped" without them. It checks that:
 
 1. src/offsets.lua matches the dump of its own build.
-2. Carrying the table to the older build with --reference --write leaves
-   every anchored entry matching that build, with the values the older
-   build is known to use.
+2. Carrying the table to the other build with --reference --write leaves
+   every anchored entry matching that build, with the values that build is
+   known to use (for 25327279).
 3. A changed struct displacement inside a generator function is reported
    as changed code with the number that changed, and a moved field behind
    an instruction anchor gets its new value.
@@ -29,8 +29,20 @@ import offsets
 
 WORKSPACE = next((p for p in ROOT.parents if (p / 'dumps').is_dir()), None)
 IMAGES = ('game.dll.unpacked.bin', 'helldivers2.exe.unpacked.bin')
-# The older build's values of entries that moved (dumps/README.txt: 25327279).
-OLDER = {'environment_tags': 0x21df8b8, 'invasion_modifiers': 0x32ef71c, 'template_environments': 0x177e4e0}
+# Known values of entries that moved, per build (the dump at ../dumps/ is 25327279, dumps/README.txt).
+KNOWN = {25327279: {'environment_tags': 0x21df8b8, 'invasion_modifiers': 0x32ef71c, 'template_environments': 0x177e4e0}}
+
+
+def other_build(current):
+    """(folder, build) of the dump to carry the table to."""
+    dumps = WORKSPACE / 'dumps'
+    builds = sorted((int(p.name[6:]), p) for p in dumps.glob('build-*') if p.name[6:].isdigit()
+                    and p != current and all((p / n).exists() for n in IMAGES))
+    if builds:
+        return builds[-1][1], builds[-1][0]
+    if all((dumps / n).exists() for n in IMAGES):
+        return dumps, 25327279
+    return None, None
 
 
 def run(*args):
@@ -49,7 +61,7 @@ def available():
         return 'skipped: no dumps folder'
     data = offsets.raw()
     current = WORKSPACE / 'dumps' / f'build-{data["build"]}'
-    if not all((current / name).exists() for name in IMAGES) or not all((WORKSPACE / 'dumps' / n).exists() for n in IMAGES):
+    if not all((current / name).exists() for name in IMAGES) or other_build(current)[0] is None:
         return 'skipped: dumps missing'
     return None
 
@@ -61,14 +73,14 @@ def main():
         return
     data = offsets.raw()
     current = WORKSPACE / 'dumps' / f'build-{data["build"]}'
-    older = WORKSPACE / 'dumps'
+    older, older_build = other_build(current)
     with tempfile.TemporaryDirectory() as temp:
         temp = Path(temp)
         # 1. The table matches its own build.
         code, out = run(current)
         assert code == 0 and 'all anchored entries match' in out, out
 
-        # 2. Carried to the older build, everything anchored matches it.
+        # 2. Carried to the other build, everything anchored matches it.
         table = temp / 'offsets.lua'
         shutil.copy(offsets.SOURCE, table)
         code, out = run(older, '--reference', current, '--table', table, '--write')
@@ -76,7 +88,7 @@ def main():
         code, out = run(older, '--table', table)
         assert code == 0 and 'all anchored entries match' in out, out
         carried = offsets.raw(table)
-        for name, rva in OLDER.items():
+        for name, rva in KNOWN.get(older_build, {}).items():
             entry = carried['code'].get(name) or carried['globals'][name]
             assert entry['rva'] == rva, f'{name}: {entry["rva"]:#x}, expected {rva:#x}'
 

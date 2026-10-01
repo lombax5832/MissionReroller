@@ -39,12 +39,15 @@ The release entry runs in the game's LuaJIT VM with FFI:
   `tests/test_package.py` lists the APIs the release must never contain.
 - **Every offset lives in `src/offsets.lua`.** RVAs, globals, code
   signatures and struct fields of 0x100 or more go there, each with a `from`
-  note and an anchor or `unverified=true`. Code reads them as numbers
-  through `O`: `local O=...` in a module, `host.O` in a runtime (`O.rva.board`,
-  `O.board.seed`); Python tools through `scripts/offsets.py`. The adapter
-  checks every code entry and anchor on the first frame, and
-  `tests/test_offsets.py` fails on an offset literal anywhere else in `src/`.
-  Adding an offset or moving to a new game build: `docs/UPDATING.md`.
+  note and an anchor: the instruction or code entry that proves the value,
+  so `scripts/check_offsets.py` can find it again in the next build. Code
+  reads them as numbers through `O`: `local O=...` in a module, `host.O` in
+  a runtime (`O.rva.board`, `O.board.seed`); Python tools through
+  `scripts/offsets.py`. The adapter checks every code entry and anchor on the
+  first frame, and `tests/test_offsets.py` fails on an offset literal
+  anywhere else in `src/`. Read `docs/UPDATING.md` before any of: a game
+  update (`STOPPED: … hash mismatch`), adding an offset, or changing
+  `check_offsets.py` / `code_match.py`.
 - **Stop cleanly.** On anything unexpected, log `STOPPED: <reason>`, release
   the mouse gate and write nothing further; the README troubleshooting table
   relies on it.
@@ -77,7 +80,8 @@ src/mods/ipodalexei/         mission_reroller.lua, the inert core the entry embe
 scripts/build.py             release: NAME, DEFAULT_VERSION, manifest text; MODULE/GUID from build_core
 scripts/build_*.py           other configurations of the release source, listed in scripts/README.md
 scripts/check_live_*.py      live-memory checks through Memory Explorer
-scripts/check_offsets.py     src/offsets.lua against a game dump
+scripts/check_offsets.py     checks src/offsets.lua against a dump, carries it to a new build
+scripts/code_match.py        Capstone code matching between two builds, for check_offsets.py
 tests/                       Python drivers and LuaJIT tests
 CHANGELOG.md                 player-facing notes per published version
 docs/HISTORY.md              development log, newest first
@@ -172,6 +176,10 @@ python -B tests/test_package.py     # package checks, then tests/test_dialog.py
   checkout before a release.
 - `test_identity_probe.py`, `test_live_search.py` and `test_search_probe.py`
   replay captures from `artifacts/`, which exists only in the main checkout.
+- `tests/test_check_offsets.py` rehearses a game update on the dumps in
+  `../dumps/`. It needs Capstone (`../tools/seed-emulator-deps`) and numpy,
+  which CI lacks, so it is outside the gate: run it after changing
+  `src/offsets.lua` anchors, `check_offsets.py` or `code_match.py`.
 
 Done when the build succeeds, the tests pass, and in-game
 `BingusSharedLoader.log` shows
