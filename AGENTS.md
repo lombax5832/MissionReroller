@@ -257,6 +257,11 @@ When the run fails, read `gh run view <id> --log-failed` and match the step:
   `gh workflow run nexus-changelog.yml -f tag=v<ver>`; it reads the section
   and `NEXUS_MOD_ID` from `main`. The changelog endpoint takes the unique
   mod ID in `NEXUS_MOD_ID`, not 16762 (`Mod not found: 16762`).
+  Every post adds its lines to that version's changelog and never replaces
+  them, so post a version once. To correct a posted changelog, edit it on
+  the mod's edit page, Documentation tab, instead of posting again.
+- **Changelog order.** Nexus sorts the changelog by version text, newest
+  first, so versions carry no `V` prefix (the workflow sends `0.28.0`).
 
 The workflow pins the loader, KnowYourConstellation and LuaJIT commits;
 bump them there when a newer loader should ship.
