@@ -5,6 +5,11 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
+**Not yet validated in game: v0.30.0 planets under attack.** The release
+package of the invaded-planet change below, validated in game from a branch
+build on 2026-10-02. That build also carried every v0.29.0 change. The
+tagged build itself is still to be checked in game.
+
 **Validated in game: invaded planets.** On a planet under attack,
 every search showed "Retrying changed planet data" until the capture
 timed out (`LUA_CAPTURE_RETRY planet=173 … Unsupported invasion operation

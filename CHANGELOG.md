@@ -6,6 +6,13 @@ GitHub release notes and, as one plain-text line each, the Nexus Mods
 changelog. How each change was
 made and tested is in the development log, [docs/HISTORY.md](docs/HISTORY.md).
 
+## v0.30.0 Planets under attack
+
+- Planets under attack (invasions) can now be rerolled. Searching on one
+  used to show Retrying changed planet data and end in a capture timeout.
+- Special operations on a planet under attack now match the game's board.
+- Defended planets are still not supported.
+
 ## v0.29.0 Exclude missions
 
 - Missions can now be excluded. Click a mission row to cycle Any, Required,
