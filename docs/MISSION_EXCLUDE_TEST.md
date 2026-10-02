@@ -12,10 +12,10 @@ modifier row. An excluded mission family takes no slot; the matched operation
 must contain no mission of that family, whatever its constellations.
 
 - `src/filter_request.lua` keeps `excluded` beside `selected` and sends it as
-  `request.excluded`. A click on an unchecked row requires the mission when
-  it can, else excludes it when it can. A click on a required row excludes
-  it, or clears it when exclusion is impossible. A click on an excluded row
-  clears it. The summary lists exclusions as `not <mission>`.
+  `request.excluded`. A click on an unchecked row requires the mission; a
+  row that cannot join the required ones is disabled, as before, and
+  ignores clicks. A click on a required row excludes it, or clears it when
+  exclusion is impossible. A click on an excluded row clears it. The summary lists exclusions as `not <mission>`.
 - `src/filter_catalogue.lua` validation refuses an excluded mission the
   catalogue does not offer, one that is also required, and a value other
   than `true`. Each exclusion counts as a rule, so exclusions alone are a

@@ -41,12 +41,16 @@ assert(m.summaries.missions=='Any' and m.summaries.modifiers=='Any' and m.summar
 assert(not pcall(f.validate,f,terminids),'An empty request is refused by validation')
 
 -- Missions cycle required, excluded, any. A mission that cannot join the
--- required ones stays unchecked, but can still be excluded.
+-- required ones is disabled and ignores clicks, as before exclusions.
 edit(f,2);m=f:model(terminids,fresh())
 assert(m.items[1].mode=='require' and m.items[2].enabled and not m.items[2].mode)
-assert(m.items[3].enabled and m.items[3].reason and not m.items[3].mode,'A conflict says why it cannot be required')
-edit(f,9);assert(not f.selected[9] and f.excluded[9],'A conflicting mission goes straight to excluded')
+assert(m.items[3].enabled==false and m.items[3].reason and not m.items[3].mode,'A conflict is disabled and says why')
+edit(f,9);assert(not f.selected[9] and not f.excluded[9],'A disabled conflict ignores clicks')
+-- Exclusion goes through required: Nursery first, then Survey beside it.
+edit(f,2,2);assert(not next(f.selected) and not next(f.excluded),'Survey clears through excluded')
+edit(f,9,9,2);assert(f.excluded[9] and f.selected[2] and not f.selected[9])
 m=f:model(terminids,fresh())
+assert(m.items[3].enabled,'An excluded row stays clickable')
 assert(m.items[3].mode=='exclude' and m.rules==2 and m.checked==1 and f:rule_count()==2)
 assert(m.summaries.missions=='Geological Survey, not Nuke Nursery' and m.status=='Ready to search')
 f:validate(terminids)
@@ -136,7 +140,7 @@ assert(next(request.excluded)==nil)
 request.required[9]=true;request.constellations.groups[2][4]='exclude'
 assert(not f.selected[9] and f.constellations[2][4]=='accept')
 do
-    local x=R.new(options,C,labels);x:toggle(2,terminids);x:toggle(9,terminids)
+    local x=R.new(options,C,labels);x:toggle(9,terminids);x:toggle(9,terminids);x:toggle(2,terminids)
     local copied=x:to_request(nil,10);copied.excluded[2]=true
     assert(copied.excluded[9] and copied.required[2] and not x.excluded[2],'Excluded missions are copied')
 end
@@ -155,7 +159,7 @@ edit(f,'constellation:0:6');edit(f,2)
 assert(next(f:to_request(nil,10).constellations.groups)==nil,'Checking a mission discards the any-mission rules')
 
 -- A catalogue of another faction prunes what it does not offer.
-edit(f,9);assert(f.excluded[9])
+edit(f,2,2,9,9,2);assert(f.excluded[9] and f.selected[2])
 edit(f,4,'constellation:2:2');assert(f:navigate('group:4'));f:model(terminids,fresh());edit(f,'constellation:4:6')
 assert(f:prune(automatons,true)==true)
 assert(not f.selected[2] and f.selected[4] and not f.excluded[9] and f.modifiers[spores]==nil and f.constellations[2]==nil and next(f.constellations[4] or {})==nil)

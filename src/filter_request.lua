@@ -105,8 +105,9 @@ function R:can_exclude(id,catalogue,filter)
 end
 -- Edits the request: clear, a mission id, 'modifier:<id>',
 -- 'constellation:<group>:<id>' or 'time:any|day|night'. A mission cycles
--- any, required, excluded; a step the catalogue cannot combine with the
--- request is skipped. Returns whether the action was an edit.
+-- any, required, excluded. One the catalogue cannot require with the rest
+-- stays unchecked; a required one that cannot be excluded goes back to any.
+-- Returns whether the action was an edit.
 function R:toggle(action,catalogue)
     if action=='clear' then self.selected={};self.excluded={};self.modifiers={};self.constellations={};self.time=nil
     elseif action=='time:any' then self.time=nil
@@ -118,7 +119,8 @@ function R:toggle(action,catalogue)
             -- Unchecking drops the mission's constellations before the next step is tried.
             local was=selected[action];selected[action]=nil;prune_groups(self)
             local filter=self:tag_filter()
-            if not was and self:can_require(action,catalogue,filter)then selected[action]=true
+            if not was then
+                if self:can_require(action,catalogue,filter)then selected[action]=true end
             elseif self:can_exclude(action,catalogue,filter)then excluded[action]=true end
         end
         prune_groups(self)
@@ -176,12 +178,10 @@ function R:model(catalogue,v)
         for i=(self.page-1)*PAGE+1,math.min(#available,self.page*PAGE)do
             local option=available[i]
             local mode=selected[option.id] and 'require' or excluded[option.id] and 'exclude' or nil
-            -- A mission that cannot be required may still be excluded.
+            -- A mission that cannot join the required ones is disabled; it
+            -- is excluded only by clicking it again once required.
             local enabled,reason=true,nil
-            if not mode then
-                enabled,reason=self:can_require(option.id,catalogue,filter)
-                if not enabled then enabled=self:can_exclude(option.id,catalogue,filter) and true or false end
-            end
+            if not mode then enabled,reason=self:can_require(option.id,catalogue,filter)end
             items[#items+1]={id=option.id,name=option.name,mode=mode,enabled=enabled,reason=reason}
         end
     elseif display and section=='modifiers' then

@@ -115,8 +115,11 @@ assert(find('start').enabled==false and find('clear').enabled==false and find('c
 assert(not find('up') and not find('down') and not find('cancel'),'Difficulty follows the map')
 click('start');assert(not requested(),'Empty filters must not start')
 click(2);frame()
-assert(last_model.items[3].enabled and last_model.items[3].reason and last_model.items[1].mode=='require','A conflict can still be excluded')
-click(9);frame();assert(not last_selected[9] and last_model.items[3].mode=='exclude','A conflicting mission goes straight to excluded')
+assert(last_model.items[3].enabled==false and last_model.items[3].reason and last_model.items[1].mode=='require','Conflicts disabled')
+click(9);frame();assert(not last_selected[9] and not last_model.items[3].mode,'A disabled conflict ignores clicks')
+-- Exclusion goes through required: Survey clears, Nursery is excluded, Survey required beside it.
+click(2);click(2);click(9);click(9);click(2);frame()
+assert(last_selected[2] and not last_selected[9] and last_model.items[3].mode=='exclude' and last_model.items[3].enabled)
 assert(last_model.summaries.missions=='Geological Survey, not Nuke Nursery' and last_model.rules==2 and last_model.checked==1)
 assert(shown('GEOLOGICAL SURVEY, NOT NUKE NURSERY') and shown('1 OF 3 SLOTS') and last_model.can_start)
 click('start')

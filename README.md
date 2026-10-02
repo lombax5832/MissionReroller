@@ -52,11 +52,10 @@ the same GUID, so your manager treats it as the same mod.
    - **Missions.** Click a row to cycle ANY, REQUIRED, EXCLUDED. Require up
      to the number of slots an operation has; all required missions must fit
      in one operation. An excluded mission takes no slot, and the matched
-     operation contains none of it. A mission that cannot be required next
-     to the others goes straight to EXCLUDED; point at it to read why it
-     cannot be required. A mission every operation here contains cannot be
-     excluded, so its click skips EXCLUDED, and a mission that can be
-     neither is dimmed.
+     operation contains none of it. A mission that cannot be added next to
+     the required ones is dimmed; point at it to read why. A mission every
+     operation here contains cannot be excluded, so its click skips
+     EXCLUDED.
    - **Modifiers.** Click a row to cycle ANY, REQUIRED, EXCLUDED.
    - **Enemy forces.** One button per checked mission, or `ANY MISSION` when
      none is checked. Each constellation cycles ANY, ACCEPTED, EXCLUDED. The
