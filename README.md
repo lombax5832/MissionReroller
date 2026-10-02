@@ -1,8 +1,8 @@
 # Mission Reroller
 
 A Helldivers 2 mod that rerolls the operations on a planet's war table until
-one matches what you want to play: the mission types it must contain, the
-operation modifiers it must or must not have, the enemy forces each
+one matches what you want to play: the mission types it must or must not
+contain, the operation modifiers it must or must not have, the enemy forces each
 mission must or must not carry, and whether it lands in the day or the night. It runs inside the game's Lua VM as an addon
 for [Bingus Shared Loader](https://github.com/CowboyBingus/BingusSharedLoader).
 
@@ -49,9 +49,13 @@ the same GUID, so your manager treats it as the same mod.
    While that row has no key, F7 stays the shortcut.
 3. Choose what the operation must contain. The four sections open one at a
    time:
-   - **Missions.** Check up to the number of slots an operation has. All
-     checked missions must fit in one operation, so a mission that cannot be
-     added is dimmed; point at it to read why.
+   - **Missions.** Click a row to cycle ANY, REQUIRED, EXCLUDED. Require up
+     to the number of slots an operation has; all required missions must fit
+     in one operation. An excluded mission takes no slot, and the matched
+     operation contains none of it. A mission that cannot be added next to
+     the required ones is dimmed; point at it to read why. A mission every
+     operation here contains cannot be excluded, so its click skips
+     EXCLUDED.
    - **Modifiers.** Click a row to cycle ANY, REQUIRED, EXCLUDED.
    - **Enemy forces.** One button per checked mission, or `ANY MISSION` when
      none is checked. Each constellation cycles ANY, ACCEPTED, EXCLUDED. The

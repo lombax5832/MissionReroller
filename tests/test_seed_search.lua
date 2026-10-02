@@ -44,6 +44,17 @@ assert(rejected({},{[0]={[2]=true}}) and rejected({},{[13]={[2]='accept'}}) and 
 search=new(function(seed)return {seed==2 and tagged(6,4) or tagged(2,4)}end,catalogue,
     {seed=1,limit=3,difficulty=10,required={[1]=true},constellations={groups={[1]={[2]='exclude',[4]='exclude'}}}})
 assert(search:step()=='searching' and search:step()=='matched' and search.seed==2,'An exclusion alone is a filter')
+-- Excluded missions: a filter on their own, copied, and never also required.
+local excluded={[3]=true}
+search=new(function(seed)return {operation(seed==4 and {0,22} or {0,7})}end,catalogue,
+    {seed=3,limit=3,difficulty=10,required={},excluded=excluded})
+excluded[3]=nil;excluded[1]=true
+assert(search:step()=='searching' and search:step()=='matched' and search.seed==4,'Excluded missions are copied and applied')
+search=new(function()return {operation({0,7}),operation({22})}end,catalogue,{seed=1,limit=1,difficulty=10,required={[2]=true},excluded={[3]=true}})
+assert(search:step()=='matched' and search.operation.missions[1].native_type==22,'An operation without the excluded family matches')
+assert(not pcall(new,function()end,catalogue,{seed=1,limit=1,difficulty=10,required={[1]=true},excluded={[1]=true}}),'Required and excluded')
+assert(not pcall(new,function()end,catalogue,{seed=1,limit=1,difficulty=10,required={},excluded={[999]=true}}),'Unknown family')
+assert(not pcall(new,function()end,catalogue,{seed=1,limit=1,difficulty=10,required={},excluded={[1]='exclude'}}),'Excluded holds true')
 local function rows(...)
     local out={}
     for i,row in ipairs({...})do out[i]={row=row,difficulty=10,valid=true,missions={{native_type=59}}}end

@@ -285,6 +285,26 @@ assert(#drawn('rect',1016)==0 and r.find('OPTION 1'),'A failing tooltip leaves t
 m.section='modifiers';m.items=list(3,'modifier:');panel:show({},{},face,{x=row.x+4,y=row.y+4},m)
 assert(#drawn('rect',1016)==0,'Only enemy rows have tooltips')
 panel:clear()
+-- Missions: a required row is ticked yellow, an excluded one struck red.
+do
+    local function label(value)
+        local o=assert(r.find(value),value);return o.color[2]..','..o.color[3]..','..o.color[4]
+    end
+    r=engine('full');panel=P.new(r.e)
+    m=model('missions',{{id=2,name='Geological Survey',mode='require'},{id=9,name='Nuke Nursery',mode='exclude'},{id=4,name='Spread Democracy'}},
+        {checked=1,summaries={missions='Geological Survey, not Nuke Nursery',modifiers='Any',enemies='Any'}})
+    panel:show({},{[2]=true},face,nowhere,m)
+    assert(label('GEOLOGICAL SURVEY')=='255,232,10' and label('NUKE NURSERY')=='255,107,90' and label('SPREAD DEMOCRACY')=='237,241,245')
+    assert(r.find('GEOLOGICAL SURVEY, NOT NUKE NURSERY') and r.find('CLICK TO CYCLE: ANY, REQUIRED, EXCLUDED') and r.find('1 OF 3 SLOTS'))
+    local dashes=0
+    for _,o in ipairs(drawn('rect',995))do
+        if o.color[2]==255 and o.color[3]==107 then dashes=dashes+1;assert(o.size[2]<o.size[1],'The excluded mark is a dash')end
+    end
+    assert(dashes==1,'One excluded row')
+    m.items[2].mode=nil;r.updates=0;panel:show({},{[2]=true},face,nowhere,m)
+    assert(r.updates>0 and label('NUKE NURSERY')=='237,241,245','Clearing the exclusion redraws the row')
+    panel:clear()
+end
 -- Triangles and metrics are optional, and a failure turns them off.
 for _,features in ipairs({'none','failing','broken metrics'})do
     r=engine(features);panel=P.new(r.e)

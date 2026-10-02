@@ -143,7 +143,9 @@ function C.constellations(catalogue,tags,labels,planet,difficulty,options)
     end
 end
 -- time, when given, is the Day / Night filter's side and counts as a rule.
-function C.validate(catalogue,required,modifiers,constellations,time)
+-- excluded holds the mission families no mission of the operation may be;
+-- each counts as a rule and takes no slot.
+function C.validate(catalogue,required,modifiers,constellations,time,excluded)
     local n,required_modifiers,total=0,0,0
     if time~=nil then assert(time=='day' or time=='night','Invalid time of day');total=1 end
     for id,value in pairs(required)do
@@ -151,6 +153,11 @@ function C.validate(catalogue,required,modifiers,constellations,time)
         n=n+1;total=total+1
     end
     assert(n<=catalogue.slots,'Too many required missions for this difficulty')
+    for id,value in pairs(excluded or {})do
+        assert(value==true and catalogue.mission_set[id],'Excluded mission is unavailable on this planet/difficulty')
+        assert(not required[id],'A mission cannot be both required and excluded')
+        total=total+1
+    end
     for id,mode in pairs(modifiers or {})do
         assert(catalogue.modifier_set[id],'Modifier is unavailable on this planet/difficulty')
         assert(mode=='require' or mode=='exclude','Invalid modifier rule')
@@ -168,11 +175,18 @@ function C.validate(catalogue,required,modifiers,constellations,time)
         if next(tags)then total=total+1 end
     end
     assert(total>0,'Choose at least one mission, modifier rule, constellation or time of day')
-    local possible,reason=C.possible(catalogue,required,modifiers,constellations);assert(possible,reason)
+    local possible,reason=C.possible(catalogue,required,modifiers,constellations,excluded);assert(possible,reason)
 end
-function C.possible(catalogue,required,modifiers,constellations)
+function C.possible(catalogue,required,modifiers,constellations,excluded)
     local n=0;for _ in pairs(required)do n=n+1 end
     if n>catalogue.slots then return false,'No mission slots remain; uncheck a mission first' end
+    -- Every operation holds at least one mission, so excluding every
+    -- mission offered here leaves nothing to match.
+    if excluded and next(excluded)then
+        local left=false
+        for _,option in ipairs(catalogue.missions or {})do if not excluded[option.id]then left=true;break end end
+        if not left then return false,'Every mission here is excluded' end
+    end
     -- A mission always draws one of its constellations, so excluding all
     -- of them leaves nothing, unless a drawn one can be removed afterwards.
     for group,tags in pairs(constellations and constellations.groups or {})do
@@ -183,7 +197,7 @@ function C.possible(catalogue,required,modifiers,constellations)
             return false,'Every constellation '..(group==0 and 'here' or 'of this mission')..' is excluded'
         end
     end
-    if catalogue.compatibility then return catalogue.compatibility.possible(catalogue.profiles,required,modifiers)end
+    if catalogue.compatibility then return catalogue.compatibility.possible(catalogue.profiles,required,modifiers,excluded)end
     return true
 end
 return C

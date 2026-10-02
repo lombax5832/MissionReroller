@@ -40,11 +40,48 @@ assert(m.ready and not m.can_start and not m.can_clear and not m.locked and not 
 assert(m.summaries.missions=='Any' and m.summaries.modifiers=='Any' and m.summaries.enemies=='Any')
 assert(not pcall(f.validate,f,terminids),'An empty request is refused by validation')
 
--- Missions: a conflict stays unchecked and is shown disabled.
+-- Missions cycle required, excluded, any. A mission that cannot join the
+-- required ones is disabled and ignores clicks, as before exclusions.
 edit(f,2);m=f:model(terminids,fresh())
-assert(m.items[1].enabled and m.items[2].enabled and m.items[3].enabled==false and m.items[3].reason)
-edit(f,9);assert(not f.selected[9],'A conflicting mission stays unchecked')
-edit(f,2);assert(not f.selected[2],'A second click unchecks')
+assert(m.items[1].mode=='require' and m.items[2].enabled and not m.items[2].mode)
+assert(m.items[3].enabled==false and m.items[3].reason and not m.items[3].mode,'A conflict is disabled and says why')
+edit(f,9);assert(not f.selected[9] and not f.excluded[9],'A disabled conflict ignores clicks')
+-- Exclusion goes through required: Nursery first, then Survey beside it.
+edit(f,2,2);assert(not next(f.selected) and not next(f.excluded),'Survey clears through excluded')
+edit(f,9,9,2);assert(f.excluded[9] and f.selected[2] and not f.selected[9])
+m=f:model(terminids,fresh())
+assert(m.items[3].enabled,'An excluded row stays clickable')
+assert(m.items[3].mode=='exclude' and m.rules==2 and m.checked==1 and f:rule_count()==2)
+assert(m.summaries.missions=='Geological Survey, not Nuke Nursery' and m.status=='Ready to search')
+f:validate(terminids)
+edit(f,9);assert(not f.excluded[9],'An excluded mission goes back to any')
+edit(f,2);assert(not f.selected[2] and f.excluded[2],'A second click excludes')
+m=f:model(terminids,fresh());assert(m.items[1].mode=='exclude' and m.can_start,'An exclusion alone is a filter')
+edit(f,2);assert(not f.selected[2] and not f.excluded[2],'A third click clears')
+-- Democracy (4) is in every reachable operation, so it cannot be excluded:
+-- the second click clears it instead.
+edit(f,4,4);assert(not f.selected[4] and not f.excluded[4],'A mission every operation holds cannot be excluded')
+do
+    -- Excluding a mission the request requires, or one every operation
+    -- holds, or one not offered here, is refused by validation.
+    local function refused(required,excluded,why)
+        local ok,err=pcall(C.validate,terminids,required,{},nil,nil,excluded)
+        assert(not ok and tostring(err):find(why,1,true),tostring(err))
+    end
+    refused({[2]=true},{[2]=true},'A mission cannot be both required and excluded')
+    refused({},{[4]=true},'Incompatible with selected missions or modifier rules')
+    refused({},{[1]=true},'Excluded mission is unavailable on this planet/difficulty')
+    refused({},{[2]='exclude'},'Excluded mission is unavailable on this planet/difficulty')
+    refused({[9]=true},{[2]=true,[4]=true},'Incompatible')
+    C.validate(terminids,{},{},nil,nil,{[9]=true})
+    C.validate(terminids,{[4]=true},{},nil,nil,{[2]=true})
+    -- Without compatibility data, excluding every mission offered is still refused.
+    local possible,why=C.possible(automatons,{},{},nil,{[4]=true})
+    assert(not possible and why=='Every mission here is excluded')
+    assert(not pcall(C.validate,automatons,{},{},nil,nil,{[4]=true}))
+    local alone=R.new(options,C,labels);alone:toggle(4,automatons);alone:toggle(4,automatons)
+    assert(not alone.selected[4] and not alone.excluded[4],'The only mission here cannot be excluded')
+end
 edit(f,2,4);m=f:model(terminids,fresh())
 assert(m.status=='Ready to search' and m.can_start and m.can_clear and m.rules==2 and m.checked==2)
 assert(m.detail=='Rerolls every unstarted operation of the campaign')
@@ -99,26 +136,36 @@ local request=f:to_request({region=1,extra=true},9)
 assert(request.difficulty==9 and request.scope.region==1 and request.scope.extra==nil)
 assert(request.required[2] and request.required[4] and request.modifiers[spores]=='require')
 assert(request.constellations.groups[2][4]=='accept' and request.constellations.groups[4][2]=='accept')
+assert(next(request.excluded)==nil)
 request.required[9]=true;request.constellations.groups[2][4]='exclude'
 assert(not f.selected[9] and f.constellations[2][4]=='accept')
+do
+    local x=R.new(options,C,labels);x:toggle(9,terminids);x:toggle(9,terminids);x:toggle(2,terminids)
+    local copied=x:to_request(nil,10);copied.excluded[2]=true
+    assert(copied.excluded[9] and copied.required[2] and not x.excluded[2],'Excluded missions are copied')
+end
 assert(f:to_request(nil,10).scope==nil)
 
 -- Unchecking a mission drops its constellations; checking it again starts clean.
 edit(f,4);assert(f.constellations[4]==nil)
 m=f:model(terminids,fresh());assert(m.group==2 and #m.groups==1,'A group that went away is not selected again')
 edit(f,4);assert(f.constellations[4]==nil)
--- Without checked missions the single group 0 applies.
-edit(f,2,4);m=f:model(terminids,fresh())
+-- Without checked missions the single group 0 applies. Survey clears through
+-- excluded; Democracy, in every operation, clears at once.
+edit(f,2,2,4);m=f:model(terminids,fresh())
+assert(not next(f.selected) and not next(f.excluded))
 assert(m.group==0 and m.groups[1].name=='Any mission' and m.note=='Check a mission to set its own enemies')
 edit(f,'constellation:0:6');edit(f,2)
 assert(next(f:to_request(nil,10).constellations.groups)==nil,'Checking a mission discards the any-mission rules')
 
 -- A catalogue of another faction prunes what it does not offer.
+edit(f,2,2,9,9,2);assert(f.excluded[9] and f.selected[2])
 edit(f,4,'constellation:2:2');assert(f:navigate('group:4'));f:model(terminids,fresh());edit(f,'constellation:4:6')
 assert(f:prune(automatons,true)==true)
-assert(not f.selected[2] and f.selected[4] and f.modifiers[spores]==nil and f.constellations[2]==nil and next(f.constellations[4] or {})==nil)
+assert(not f.selected[2] and f.selected[4] and not f.excluded[9] and f.modifiers[spores]==nil and f.constellations[2]==nil and next(f.constellations[4] or {})==nil)
 assert(f:prune(automatons,false)==false,'Nothing left to prune')
-f:toggle('clear',automatons);assert(not next(f.selected) and not next(f.modifiers) and not next(f.constellations))
+f.excluded[9]=true
+f:toggle('clear',automatons);assert(not next(f.selected) and not next(f.excluded) and not next(f.modifiers) and not next(f.constellations))
 
 -- Pages of 24 missions; a refresh of the same view keeps the page.
 assert(f:navigate('section:missions'));m=f:model(many,fresh())

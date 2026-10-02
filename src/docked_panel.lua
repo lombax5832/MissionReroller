@@ -336,8 +336,7 @@ function P.new(e)
                     or (b.pager[1] and 'PAGE '..tostring(model.page)..'/'..tostring(model.pages)..'   ' or '')
                         ..(model.checked or 0)..' OF '..tostring(model.slots)..' SLOTS'
                 local used_width=text('meta_right',note,limit,at(b.meta),15,muted,'right',300*s)
-                text('meta',hint or empty or (section=='modifiers' and 'CLICK TO CYCLE: ANY, REQUIRED, EXCLUDED'
-                    or 'ALL CHECKED MISSIONS MUST BE IN ONE OPERATION'),left+2*s,at(b.meta),15,hint and white or muted,nil,limit-left-used_width-18*s)
+                text('meta',hint or empty or 'CLICK TO CYCLE: ANY, REQUIRED, EXCLUDED',left+2*s,at(b.meta),15,hint and white or muted,nil,limit-left-used_width-18*s)
             elseif section=='enemies' then
                 for n,t in ipairs(b.groups)do
                     local chosen=groups[n].selected
@@ -356,12 +355,15 @@ function P.new(e)
             for n,t in ipairs(b.rows)do
                 local item,over,off,cy=items[n],hover==t.id,not t.enabled,t.y+t.h/2
                 if section=='missions' then
-                    local picked=selected[item.id]
-                    rect('row'..n,t.x,t.y,t.w,t.h,992,picked and wash(YELLOW,over and 56 or 28) or glass(off and 5 or over and 41 or 13))
-                    rect('box'..n,t.x+9*s,cy-8*s,16*s,16*s,993,picked and yellow or off and dim or outline)
+                    -- A required mission is ticked yellow, an excluded one struck red.
+                    local picked,out=selected[item.id],item.mode=='exclude'
+                    rect('row'..n,t.x,t.y,t.w,t.h,992,picked and wash(YELLOW,over and 56 or 28)
+                        or out and wash(RED,over and 52 or 26) or glass(off and 5 or over and 41 or 13))
+                    rect('box'..n,t.x+9*s,cy-8*s,16*s,16*s,993,picked and yellow or out and red or off and dim or outline)
                     rect('gap'..n,t.x+11*s,cy-6*s,12*s,12*s,994,dark)
-                    rect('mark'..n,t.x+13*s,cy-4*s,8*s,8*s,995,picked and yellow or none)
-                    text('label'..n,item.name,t.x+34*s,cy,15,picked and yellow or off and dim or white,nil,t.w-43*s)
+                    if out then rect('mark'..n,t.x+13*s,cy-1.5*s,8*s,3*s,995,red)
+                    else rect('mark'..n,t.x+13*s,cy-4*s,8*s,8*s,995,picked and yellow or none)end
+                    text('label'..n,item.name,t.x+34*s,cy,15,picked and yellow or out and red or off and dim or white,nil,t.w-43*s)
                 else
                     local on,out=item.mode=='require' or item.mode=='accept' or item.mode=='chosen',item.mode=='exclude'
                     local rule=on and yellow or out and red

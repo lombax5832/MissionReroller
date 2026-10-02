@@ -34,9 +34,10 @@ local function search_clock()
     end
     return precise and precise() or api.time()
 end
-local function request_key(difficulty,required,modifiers,constellations,scope,time)
+local function request_key(difficulty,required,modifiers,constellations,scope,time,excluded)
     local parts={'d'..difficulty,'r'..(scope and scope.region or 'all'),'t'..(time or 'any')}
     for id in pairs(required)do parts[#parts+1]='m'..id end
+    for id in pairs(excluded)do parts[#parts+1]='x'..id end
     for id,mode in pairs(modifiers)do parts[#parts+1]=string.format('o%u:%s',id,mode)end
     for group,tags in pairs(constellations and constellations.groups or {})do
         for tag,mode in pairs(tags)do parts[#parts+1]='c'..group..':'..tag..':'..mode end
@@ -47,6 +48,7 @@ on_prediction_ready=function(s,definitions,now)
     assert(definitions,'Missing captured definitions')
     local request=reroll_session.view().request or {difficulty=10,required={[1]=true,[2]=true,[3]=true}}
     local required={};for id,value in pairs(request.required)do required[id]=value end
+    local excluded={};for id,value in pairs(request.excluded or {})do excluded[id]=value end
     local modifiers={};for id,value in pairs(request.modifiers or {})do modifiers[id]=value end
     local limit=request.limit or default_limit
     local scope=Search.scope(request.scope)
@@ -91,7 +93,7 @@ on_prediction_ready=function(s,definitions,now)
         -- An operation another mod edited (s.external) holds missions no seed
         -- gives; it is never offered as the match.
         local existing=Search.find({operations=ExternalEdits.without(s.decoded.operations,s.external)},
-            request.difficulty,required,modifiers,constellations,scope,daynight and daynight.accepts)
+            request.difficulty,required,modifiers,constellations,scope,daynight and daynight.accepts,excluded)
         if existing then reroll_session.progress(0);on_existing_match(s,existing,now);return end
     end
     -- A city has one operation per difficulty. While it is in progress no
@@ -107,7 +109,7 @@ on_prediction_ready=function(s,definitions,now)
         local result=Planet.capture(frozen_read,u,api.pointer,game)(s,definitions)
         assert(ExternalEdits.composition_passes(result,s.external) and result.independent_bases,'Frozen baseline prediction mismatch')
     end
-    local key=request_key(request.difficulty,required,modifiers,constellations,scope,request.time)
+    local key=request_key(request.difficulty,required,modifiers,constellations,scope,request.time,excluded)
     local first=(s.seed+1)%4294967296
     local resumed=resume and resume.key==key and resume.planet==s.planet and resume.baseline==s.seed
     if resumed then first=resume.next end
@@ -124,11 +126,12 @@ on_prediction_ready=function(s,definitions,now)
         end
         -- Search the requested difficulty; confirm a match on the whole board.
         return function(seed)return evaluate(seed,request.difficulty)end,function(seed)return evaluate(seed)end
-    end,{seed=first,limit=limit,difficulty=request.difficulty,required=required,modifiers=modifiers,
+    end,{seed=first,limit=limit,difficulty=request.difficulty,required=required,excluded=excluded,modifiers=modifiers,
         constellations=constellations,scope=scope,daynight=daynight and daynight.accepts,
         quantum=4096,clock=search_clock,slice=0.016,batch=256,revalidate=1})
     current_search.baseline=s
     current_search.required=required
+    current_search.excluded=excluded
     current_search.modifiers=modifiers
     current_search.constellations=constellations
     current_search.scope=scope
@@ -166,6 +169,10 @@ on_prediction_ready=function(s,definitions,now)
     local names={};for id,opt in ipairs(Search.options)do if required[id]then names[#names+1]=opt.name end end
     local modifier_rules={};for id,mode in pairs(modifiers)do modifier_rules[#modifier_rules+1]=string.format('%u:%s',id,mode)end
     table.sort(modifier_rules);emit('LUA_SEARCH_MODIFIERS '..table.concat(modifier_rules,','))
+    if next(excluded)then
+        local list={};for id,opt in ipairs(Search.options)do if excluded[id]then list[#list+1]=opt.name end end
+        emit('LUA_SEARCH_EXCLUDED_MISSIONS '..table.concat(list,' + '))
+    end
     if constellations then
         local tag_rules={}
         for group,tags in pairs(constellations.groups)do
