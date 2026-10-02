@@ -50,7 +50,7 @@ assert(view.request==request and view.progress==2731 and view.result==job,'An en
 for name,expected in pairs({search_exhausted={'No match; search again to continue','warn'},search_cancelled={'Search cancelled','idle'},
     cancelled={'Search cancelled','idle'},publication_blocked={'Map changed; reopen the planet and retry','warn'},
     publication_cancelled={'publication_cancelled','idle'},capture_timeout={'capture_timeout','bad'},search_failed={'search_failed','bad'},
-    publication_failed={'publication_failed','bad'},identity_test_mismatch={'identity_test_mismatch','bad'}})do
+    publication_failed={'publication_failed','bad'},identity_test_mismatch={'Operations differ from the prediction; see the log','bad'}})do
     local s=new(true);s.advance('waiting_for_stable_inputs');s.finish(name)
     view=s.view();assert(view.caption==expected[1] and view.tone==expected[2],name)
 end

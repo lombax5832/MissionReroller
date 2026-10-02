@@ -149,6 +149,22 @@ for index,case in ipairs(fixture.cases)do
     local result,fingerprint=Planet.capture(read,u,pointer,game)(snapshot,definitions)
     assert(result.passed and result.independent_bases and result.bases==#decoded.operations,table.concat(result.errors,'; '))
     assert(#fingerprint>0,'The capture returns the bytes it read')
+    if index==1 then
+        -- Another mod gives one operation a new seed (external_edits.lua):
+        -- only that row fails, and excusing it passes the board.
+        local edited=decoded.operations[1];local at=edited.row*92
+        local seed=(edited.seed+1)%4294967296
+        local changed={operations={}}
+        for i,op in ipairs(decoded.operations)do changed.operations[i]=op end
+        local copy={};for k,v in pairs(edited)do copy[k]=v end;copy.seed=seed;changed.operations[1]=copy
+        local tampered={board=board,planet=planet,seed=case.seed,decoded=changed,
+            operations=bytes:sub(1,at+12)..word(seed)..bytes:sub(at+17)}
+        local E=dofile(root..'/external_edits.lua')
+        local failed=Planet.capture(read,u,pointer,game)(tampered,definitions)
+        local rows=0;for row in pairs(failed.failed_rows)do assert(row==edited.row);rows=rows+1 end
+        assert(not failed.passed and rows==1 and failed.general==0,table.concat(failed.errors,'; '))
+        assert(E.composition_passes(failed,{[edited.row]=true}) and not E.composition_passes(failed,nil))
+    end
     local model=Planet.bind(read,u,pointer,game,board,planet)
     local predict=model.predictor(definitions)
     local complete=predict(case.seed)

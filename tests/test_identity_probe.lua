@@ -42,6 +42,10 @@ changed=true;assert(capture_probe:capture(snapshot).fingerprint~=captured.finger
 captured.operations=replace(operations,12,word(124))
 local mismatch=capture_probe:compare(captured)
 assert(not mismatch.passed and #mismatch.errors==1 and mismatch.errors[1]:find('124',1,true))
+local difference=mismatch.differences[1]
+assert(#mismatch.differences==1 and difference.row==0 and difference.kind=='value' and difference.observed.seed==124
+    and difference.predicted.seed==123 and #mismatch.matched_rows==0,'Differences are structured for external_edits.lua')
+assert(capture_probe:compare({input=captured.input,seed=9,operations=operations}).matched_rows[1]==0)
 captured.operations=operations:sub(1,-2);assert(not pcall(function()capture_probe:compare(captured)end))
 captured.operations=replace(operations,92,row)
 assert(not capture_probe:compare(captured).passed,'Extra live operation must fail')
@@ -264,6 +268,73 @@ assert(table.concat(logs):find('LUA_SEED_PREDICTION_PASS',1,true) and table.conc
 composition.passed=true;composition.errors={};level_ok=false
 down=false;frame();down=true;frame();for _=1,5 do frame()end
 assert(MissionRerollerExperiment.status=='level_test_mismatch','Composition pass must not hide a separate level failure')
+-- Another mod (Refresh Operations' F6) gave row 28 a new seed after
+-- generation. Row 29 still matches, so the row is an edit: it is left out of
+-- the level and composition checks and the run goes on.
+do
+    local compare,compare_levels=fake_probe.compare,fake_probe.compare_levels
+    local matched_rows={};for row=0,29 do if row~=28 then matched_rows[#matched_rows+1]=row end end
+    local edited={row=28,kind='value',observed={id=23,seed=3061063729,difficulty=10},predicted={id=23,seed=1048270963,difficulty=10}}
+    fake_probe.compare=function()
+        calls=calls+1
+        return {passed=false,matched=#matched_rows,observed=30,predicted=30,matched_rows=matched_rows,differences={edited},
+            errors={'row=28 observed=23/3061063729/d10 predicted=23/1048270963/d10'}}
+    end
+    local skipped
+    fake_probe.compare_levels=function(_,_,skip)skipped=skip;return compare_levels()end
+    level_ok=true
+    composition={passed=false,operations=30,templates=30,modifiers=30,checked=72,independent_bases=true,bases=30,
+        errors={'row=28 base fields mismatch','row=28 slot=0 predicted=1/2/level3 actual=4/5/level6'},failed_rows={[28]=true},general=0}
+    local from=#logs
+    down=false;frame();down=true;frame();for _=1,5 do frame()end
+    assert(MissionRerollerExperiment.status=='composition_test_passed',MissionRerollerExperiment.status)
+    assert(skipped and skipped[28] and snapshot.external==skipped,'Edited rows reach the level check and the search')
+    local text=table.concat(logs,'',from+1)
+    assert(text:find('LUA_IDENTITY_EDITED planet=268',1,true) and text:find('LUA_COMPOSITION_PASS',1,true)
+        and text:find('edited_rows=1',1,true),text)
+    assert(text:find('LUA_IDENTITY_EXTERNAL_EDIT row=28 observed=23/3061063729/d10 predicted=23/1048270963/d10 evidence=later_rows',1,true),text)
+    assert(not text:find('LUA_COMPOSITION_DETAIL row=28',1,true) and not text:find('LUA_IDENTITY_DETAIL',1,true),text)
+    -- Without a later matching row, or a baseline, nothing proves the edit.
+    table.remove(matched_rows)
+    from=#logs
+    down=false;frame();down=true;frame();for _=1,5 do frame()end
+    assert(MissionRerollerExperiment.status=='identity_test_mismatch',MissionRerollerExperiment.status)
+    assert(snapshot.external==nil,'A rejected run passes no edited rows on')
+    assert(tostring(up(tick,'reroll_session').view().report):find('Another mod may have changed these operations',1,true),
+        'The dialog names the likely cause')
+    text=table.concat(logs,'',from+1)
+    assert(text:find('LUA_IDENTITY_MISMATCH',1,true) and text:find('LUA_IDENTITY_DETAIL row=28',1,true)
+        and text:find('LUA_IDENTITY_NOT_EXTERNAL row=28 no matching row after it',1,true),text)
+    fake_probe.compare,fake_probe.compare_levels=compare,compare_levels
+    composition.passed=true;composition.errors={};composition.failed_rows=nil
+end
+-- The baseline poll reads the viewed planet and seed first, and takes a full
+-- snapshot only for a planet and seed it has not stored.
+do
+    local observe=up(tick,'observe_baseline')
+    local baselines=up(observe,'baselines')
+    local pointer,read=up(observe,'pointer'),up(observe,'read')
+    local snapshot_fn=up(observe,'snapshot')
+    local seed,taken=9,0
+    up(observe,'pointer',function()return 1000 end,true)
+    up(observe,'read',function(address,size)
+        if address==1000+O.board.selection then return word(0)..word(268)end
+        if address==1000+O.board.seed then return word(seed)end
+        error('Unexpected baseline read')
+    end,true)
+    up(observe,'snapshot',function()taken=taken+1;return {planet=268,seed=seed,operations=snapshot.operations}end,true)
+    assert(baselines[268] and baselines[268].seed==9,'A passing comparison stores its board')
+    local t=1e6
+    observe(t);assert(taken==0,'A stored planet and seed take no snapshot')
+    seed=10;observe(t+0.5);assert(taken==0,'At most one poll a second')
+    local from=#logs
+    observe(t+1.5);assert(taken==1 and baselines[268].seed==10)
+    assert(table.concat(logs,'',from+1):find('BASELINE_RECORDED planet=268 seed=10',1,true))
+    observe(t+3);assert(taken==1,'Each seed is recorded once')
+    up(observe,'read',function()error('synthetic read failure')end,true)
+    seed=11;observe(t+5) -- a failed read never stops the mod
+    up(observe,'pointer',pointer,true);up(observe,'read',read,true);up(observe,'snapshot',snapshot_fn,true)
+end
 -- Capture reads yield once the frame's slice is used, so one poll spans
 -- several frames instead of stalling one. Reads outside a poll never yield.
 local sliced=up(prepare,'sliced_read')

@@ -8,6 +8,7 @@ local initialize,config=host.initialize,host.config
 local make_rng,make_probe,predict_identity=lib.make_rng,lib.make_probe,lib.predict_identity
 local make_special_inputs,make_level_inputs,make_level_verification=lib.make_special_inputs,lib.make_level_inputs,lib.make_level_verification
 local choose_level,Planet,ModInventory=lib.choose_level,lib.Planet,lib.ModInventory
+local ExternalEdits,O,pointer=lib.ExternalEdits,host.O,host.pointer
 local dialog_tick,dialog_release,observe_constellations=hooks.dialog_tick,hooks.dialog_release,hooks.observe_constellations
 local on_prediction_ready,advance_prediction_search=hooks.on_prediction_ready,hooks.advance_prediction_search
 local advance_live_publication,search_clock=hooks.advance_live_publication,hooks.search_clock
@@ -18,6 +19,9 @@ local stopped,key_down,armed=false,true,nil
 local mods_logged=false
 local probe,last_poll,previous,stable=nil,-math.huge,nil,0
 local capture_failures,last_capture_error=0,nil
+-- The first board seen per planet and campaign seed, the proof that a row
+-- changed later without a reroll (external_edits.lua).
+local baselines,last_baseline={},-math.huge
 -- A poll captures the board twice, about 50 ms of reads each offline and more
 -- in game. It runs as a coroutine whose reads yield once the frame's slice is
 -- used, the slice of the seed search, so it no longer stalls one frame.
@@ -52,6 +56,21 @@ local function capture(s)
     if capture_failures==1 then emit('LUA_CAPTURE_RETRY '..last_capture_error)end
     return nil
 end
+-- Records the viewed planet's board once per campaign seed, before another
+-- mod has a chance to edit it. Diagnostics: a failed read never stops the mod.
+local function observe_baseline(now)
+    if now-last_baseline<1 or reroll_session.view().running then return end
+    last_baseline=now
+    pcall(function()
+        local b=pointer(game+O.rva.board)
+        local planet=u(read(b+O.board.selection,8),4)
+        if planet>=512 or ExternalEdits.known(baselines,planet,u(read(b+O.board.seed,4),0)) then return end
+        local s=snapshot(true)
+        if s and ExternalEdits.observe(baselines,s.planet,s.seed,s.operations,u) then
+            emit(string.format('BASELINE_RECORDED planet=%d seed=%u',s.planet,s.seed))
+        end
+    end)
+end
 local function tick()
     if not probe then prepare()end
     local now=api.time()
@@ -80,7 +99,11 @@ local function tick()
     local searching=advance_prediction_search and advance_prediction_search('tick',now)
     local publishing=advance_live_publication and advance_live_publication('tick',now)
     -- With no stage left to run, the run ends where it stands.
-    if not armed then poll=nil;if not searching and not publishing then reroll_session.settle()end;return end
+    if not armed then
+        poll=nil
+        if not searching and not publishing then reroll_session.settle();observe_baseline(now)end
+        return
+    end
     if now-armed>30 then
         armed=nil;poll=nil;reroll_session.finish('capture_timeout');emit('LUA_IDENTITY_BLOCKED stable map inputs unavailable; press shortcut to retry')
         if last_capture_error then emit('LUA_CAPTURE_DETAIL failures='..capture_failures..' last='..last_capture_error)end
@@ -116,35 +139,67 @@ local function tick()
     if capture_failures>0 then emit('LUA_CAPTURE_RECOVERED rejected_captures='..capture_failures)end
     local start=api.time()
     local result=probe:compare(captured)
-    if result.passed then reroll_session.advance('identity_test_passed')else reroll_session.finish('identity_test_mismatch')end
+    -- Rows another mod rewrote since generation are left out of every check
+    -- on the live board; the search's baseline and existing-match check read
+    -- them from s.external.
+    local edits,why
+    if result.passed then pcall(ExternalEdits.observe,baselines,s.planet,s.seed,s.operations,u)
+    else edits,why=ExternalEdits.classify(result,baselines,s.planet,s.seed)end
+    local skip=edits and edits.rows
+    s.external=skip
+    local passed=result.passed or edits~=nil
+    if passed then reroll_session.advance('identity_test_passed')else reroll_session.finish('identity_test_mismatch')end
     M.last_result=result
     emit(string.format('LUA_IDENTITY_%s planet=%d seed=%u pool=%d special_events=%d matched=%d live=%d predicted=%d elapsed_ms=%.3f read_only='..tostring(M.read_only)..' scope=IDs/seeds/difficulty',
-        result.passed and 'PASS' or 'MISMATCH',s.planet,s.seed,captured.input.pool_count,#(captured.input.specials or {}),result.matched,result.observed,result.predicted,(api.time()-start)*1000))
-    for i=1,math.min(#result.errors,8)do emit('LUA_IDENTITY_DETAIL '..result.errors[i])end
-    if result.passed and captured.level_graphs then
-        local levels=probe:compare_levels(captured);M.level_result=levels
+        result.passed and 'PASS' or edits and 'EDITED' or 'MISMATCH',s.planet,s.seed,captured.input.pool_count,#(captured.input.specials or {}),result.matched,result.observed,result.predicted,(api.time()-start)*1000))
+    if edits then
+        for _,d in ipairs(result.differences)do
+            local o,p=d.observed,d.predicted
+            emit(string.format('LUA_IDENTITY_EXTERNAL_EDIT row=%d observed=%d/%u/d%d predicted=%d/%u/d%d evidence=%s',
+                d.row,o.id,o.seed,o.difficulty,p.id,p.seed,p.difficulty,skip[d.row].evidence))
+        end
+    else
+        for i=1,math.min(#result.errors,8)do emit('LUA_IDENTITY_DETAIL '..result.errors[i])end
+        if not result.passed then
+            emit('LUA_IDENTITY_NOT_EXTERNAL '..tostring(why))
+            -- Rows that only changed values look like another mod's edit made
+            -- before the planet was first viewed, which leaves no proof.
+            local edited=#(result.differences or {})>0
+            for _,d in ipairs(result.differences or {})do if d.kind~='value' then edited=false end end
+            if edited then reroll_session.report('Another mod may have changed these operations before the planet was viewed; see the log')end
+        end
+    end
+    if passed and captured.level_graphs then
+        local levels=probe:compare_levels(captured,skip);M.level_result=levels
         if levels.passed then reroll_session.advance('identity_and_level_tests_passed')else reroll_session.finish('level_test_mismatch')end
         emit(string.format('LUA_LEVEL_%s checked=%d category_draws=%d observed_seed_assisted=true scope=level-selection',
             levels.passed and 'PASS' or 'MISMATCH',levels.checked,levels.category_draws))
         for i=1,math.min(#levels.errors,8)do emit('LUA_LEVEL_DETAIL '..levels.errors[i])end
     end
-    if result.passed and captured.composition then
+    local composition_passed
+    if passed and captured.composition then
         local composition=captured.composition;M.composition_result=composition
-        if not composition.passed then reroll_session.finish('composition_test_mismatch')
+        composition_passed=ExternalEdits.composition_passes(composition,skip)
+        if not composition_passed then reroll_session.finish('composition_test_mismatch')
         elseif not M.level_result or M.level_result.passed then reroll_session.advance('composition_test_passed') end
         emit(string.format('LUA_COMPOSITION_%s planet=%d operations=%d templates=%d modifiers=%d missions=%d observed_mission_seeds=false scope=operation-base-inputs',
-            composition.passed and 'PASS' or 'MISMATCH',s.planet,composition.operations,composition.templates,composition.modifiers,composition.checked))
-        for i=1,math.min(#composition.errors,8)do emit('LUA_COMPOSITION_DETAIL '..composition.errors[i])end
+            composition_passed and 'PASS' or 'MISMATCH',s.planet,composition.operations,composition.templates,composition.modifiers,composition.checked)
+            ..(edits and ' edited_rows='..edits.count or ''))
+        local shown=0
+        for i=1,#composition.errors do
+            local row=tonumber(composition.errors[i]:match('^row=(%d+) '))
+            if shown<8 and not (skip and row and skip[row]) then shown=shown+1;emit('LUA_COMPOSITION_DETAIL '..composition.errors[i])end
+        end
         if composition.independent_bases then
             emit(string.format('LUA_SEED_PREDICTION_%s planet=%d seed=%u bases=%d operations=%d missions=%d observed_operation_bases=false preserved_active=true read_only='..tostring(M.read_only),
-                composition.passed and 'PASS' or 'MISMATCH',s.planet,s.seed,composition.bases,composition.operations,composition.checked))
+                composition_passed and 'PASS' or 'MISMATCH',s.planet,s.seed,composition.bases,composition.operations,composition.checked))
         end
     end
-    if on_prediction_ready and result.passed and M.level_result and M.level_result.passed
-        and M.composition_result and M.composition_result.passed and M.composition_result.independent_bases then
+    if on_prediction_ready and passed and M.level_result and M.level_result.passed
+        and composition_passed and M.composition_result.independent_bases then
         on_prediction_ready(s,captured.definitions,now)
     else
-        if on_prediction_ready and result.passed then emit('LUA_SEARCH_NOT_STARTED level='..tostring(M.level_result and M.level_result.passed)..' composition='..tostring(M.composition_result and M.composition_result.passed)..' independent_bases='..tostring(M.composition_result and M.composition_result.independent_bases))end
+        if on_prediction_ready and passed then emit('LUA_SEARCH_NOT_STARTED level='..tostring(M.level_result and M.level_result.passed)..' composition='..tostring(composition_passed)..' independent_bases='..tostring(M.composition_result and M.composition_result.independent_bases))end
         emit('Read-only comparison; no publication. Constellations and unsupported campaign branches remain unverified. Press shortcut to test another planet.')
         reroll_session.settle()
     end

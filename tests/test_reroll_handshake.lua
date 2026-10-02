@@ -137,6 +137,35 @@ assert(not router.opened,'Success closes the dialog')
 assert(M.status=='publication_test_passed' and up(dialog,'report')=='Matching operation selected' and up(dialog,'report_tone')=='good')
 assert(table.concat(logs):find('EXISTING_MATCH row=3 seed=500',1,true))
 
+-- 3b. Another mod gave row 3 a new seed (Refresh Operations' F6): its
+-- missions match, but no seed gives them, so it is never the match. The
+-- search runs, and its frozen baseline excuses the edited row.
+do
+    local compare,capture=probe.compare,up(ready,'Planet').capture
+    probe.compare=function()
+        return {passed=false,matched=29,observed=30,predicted=30,matched_rows={5},errors={'row=3 observed=5/78/d10 predicted=5/77/d10'},
+            differences={{row=3,kind='value',observed={id=5,seed=78,difficulty=10},predicted={id=5,seed=77,difficulty=10}}}}
+    end
+    composition={passed=false,operations=1,templates=1,modifiers=1,checked=1,errors={'row=3 base fields mismatch'},
+        failed_rows={[3]=true},general=0,independent_bases=true,bases=0}
+    local baselines=0
+    up(ready,'Planet').capture=function(take)return function()
+        take(65536,1);baselines=baselines+1
+        return {passed=false,checked=1,failed_rows={[3]=true},general=0,independent_bases=true}
+    end end
+    local from=#logs
+    open();mark=start()
+    session.view().request.limit=256
+    result=until_idle()
+    assert(M.status=='search_exhausted' and router.opened,M.status)
+    assert(s.external and s.external[3] and baselines>0,'The search revalidates with the edited row excused')
+    local text=table.concat(logs,'',from+1)
+    assert(not text:find('EXISTING_MATCH',1,true) and text:find('LUA_IDENTITY_EXTERNAL_EDIT row=3',1,true),text)
+    probe.compare,up(ready,'Planet').capture=compare,capture
+    composition={passed=true,operations=1,templates=1,modifiers=1,checked=1,errors={},independent_bases=true,bases=1}
+    s.external=nil
+end
+
 -- 4. Cancel during the capture: the dialog asks, the pipeline answers.
 open();planet_ops[1].missions[1].native_type=0
 mark=start()

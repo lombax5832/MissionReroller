@@ -92,7 +92,8 @@ def source(search=False,publish=False,dialog=False,version=None):
                        ('make_base_inputs', 'operation_base_inputs.lua'),
                        ('sha256', 'bytes_sha256.lua'), ('ModInventory', 'mod_inventory.lua'),
                        ('make_reroll_session', 'reroll_session.lua'), ('make_map_screen', 'map_screen.lua'),
-                       ('make_planet_sky', 'planet_sky.lua'), ('make_day_night', 'day_night.lua')]:
+                       ('make_planet_sky', 'planet_sky.lua'), ('make_day_night', 'day_night.lua'),
+                       ('ExternalEdits', 'external_edits.lua')]:
         library(name,file)
     derived('predict_identity','make_identity(make_rng)')
     derived('DayNight','make_day_night(make_planet_sky(make_rng))')
