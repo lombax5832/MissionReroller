@@ -10,6 +10,11 @@ return function(evaluate,catalogue,options)
     for id,value in pairs(options.required)do
         assert(catalogue.options[id] and value==true,'Invalid mission filter');required[id]=true;n=n+1
     end
+    -- Excluded families take no slot; none may also be required.
+    local excluded,x={},0
+    for id,value in pairs(options.excluded or {})do
+        assert(catalogue.options[id] and value==true and not required[id],'Invalid excluded mission');excluded[id]=true;x=x+1
+    end
     local modifiers,m={},0
     for id,mode in pairs(options.modifiers or {})do
         assert(integer(id,0,4294967295) and (mode=='require' or mode=='exclude'),'Invalid modifier rule')
@@ -28,7 +33,7 @@ return function(evaluate,catalogue,options)
     end
     local daynight=options.daynight
     assert(daynight==nil or type(daynight)=='function','Invalid day/night check')
-    assert(n<=3 and (n+m+c>0 or daynight),'Select missions, modifier rules or constellations')
+    assert(n<=3 and (n+x+m+c>0 or daynight),'Select missions, modifier rules or constellations')
     local scope=catalogue.scope and catalogue.scope(options.scope)
     assert(scope or options.scope==nil,'City scope unavailable')
     local difficulty,limit=options.difficulty,options.limit
@@ -44,7 +49,7 @@ return function(evaluate,catalogue,options)
         if not ok then self.status='failed';self.error=tostring(operations);return self.status end
         local valid={}
         for _,op in ipairs(operations)do if op.valid then valid[#valid+1]=op end end
-        local match=catalogue.find({operations=valid},difficulty,required,modifiers,constellations,scope,daynight)
+        local match=catalogue.find({operations=valid},difficulty,required,modifiers,constellations,scope,daynight,x>0 and excluded or nil)
         if match then self.status='matched';self.seed=seed;self.operation=match;self.operations=operations
         elseif self.attempts>=limit then self.status='exhausted' end
         return self.status

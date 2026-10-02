@@ -151,7 +151,7 @@ do
     end
     validate_search_request=function(s,request)
         FilterCatalogue.validate(catalogue_for(s,request.difficulty,Search.scope(request.scope)),request.required,request.modifiers,
-            request.constellations,request.time)
+            request.constellations,request.time,request.excluded)
     end
     -- Day and night on the viewed planet while a time of day is chosen
     -- (src/day_night.lua), refreshed once a second: the buffer note, or why

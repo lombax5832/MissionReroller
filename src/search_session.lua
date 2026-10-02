@@ -139,14 +139,19 @@ function S.scope(value)
     return {region=region}
 end
 -- daynight, when given, must also accept the operation (src/day_night.lua).
-function S.find(snapshot,difficulty,required,modifiers,constellations,scope,daynight)
+-- excluded families must not appear in the operation at all, whatever their
+-- constellations.
+function S.find(snapshot,difficulty,required,modifiers,constellations,scope,daynight,excluded)
     local groups=constellations and constellations.groups or {}
     for _,op in ipairs(snapshot.operations) do
         if op.difficulty==difficulty and S.in_scope(op.row,scope) then
             local found={};local yes=operation_satisfies(groups[0],op)
             for _,m in ipairs(op.missions) do
                 for i,opt in ipairs(S.options) do
-                    for _,id in ipairs(opt.ids) do if m.native_type==id and satisfies(groups[i],m) then found[i]=true end end
+                    for _,id in ipairs(opt.ids) do if m.native_type==id then
+                        if excluded and excluded[i] then yes=false end
+                        if satisfies(groups[i],m) then found[i]=true end
+                    end end
                 end
             end
             for i in pairs(required) do if not found[i] then yes=false end end

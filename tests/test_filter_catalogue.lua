@@ -26,6 +26,15 @@ assert(S.find({operations={op}},10,{[1]=true},{[spores]='require',[gunships]='ex
 assert(not S.find({operations={op}},10,{[1]=true},{[spores]='exclude'}))
 assert(not S.find({operations={op}},10,{[1]=true},{[gunships]='require'}))
 assert(not S.find({operations={{difficulty=10,missions={}}}},10,{}, {[gunships]='exclude'}),'Unknown modifier data cannot satisfy exclusions')
+-- An excluded family rejects the operation wherever it appears, whatever
+-- the constellations of its mission.
+local pair={difficulty=10,valid=true,missions={{native_type=59,tags={[2]=true}},{native_type=22,tags={[4]=true}}},modifiers={}}
+assert(not S.find({operations={pair}},10,{[1]=true},nil,nil,nil,nil,{[2]=true}),'Geological Survey is excluded')
+assert(not S.find({operations={pair}},10,{},nil,{groups={[0]={[2]='accept'}}},nil,nil,{[2]=true}))
+assert(not S.find({operations={pair}},10,{[1]=true},nil,{groups={[1]={[2]='accept'}}},nil,nil,{[2]=true}))
+assert(S.find({operations={pair}},10,{[1]=true},nil,nil,nil,nil,{[3]=true})==pair,'An absent family is no obstacle')
+assert(S.find({operations={op,pair}},10,{},nil,nil,nil,nil,{[2]=true})==op,'The next operation without it matches')
+assert(S.find({operations={pair}},10,{},nil,nil,nil,nil,{})==pair)
 local rules={[spores]='require'}
 local search=make_search(function()return {op}end,S,{seed=1,limit=2,difficulty=10,required={},modifiers=rules})
 rules[spores]='exclude';assert(search:step()=='matched','Modifier-only filter copied into search')

@@ -97,7 +97,7 @@ end
 on_search_match=function(job,now)
     if publication_used and not M.dialog_enabled then reroll_session.finish('publication_blocked');emit('PUBLICATION_BLOCKED one publication per test session; restart to test again');return end
     local s=job.baseline;local match=job.operation
-    candidate={seed=job.seed,planet=s.planet,row=match.row,difficulty=match.difficulty,operation_seed=match.seed,operations=job.operations,required=job.required or {[1]=true,[2]=true,[3]=true},modifiers=job.modifiers,
+    candidate={seed=job.seed,planet=s.planet,row=match.row,difficulty=match.difficulty,operation_seed=match.seed,operations=job.operations,required=job.required or {[1]=true,[2]=true,[3]=true},excluded=job.excluded,modifiers=job.modifiers,
         constellations=job.constellations,scope=job.scope,daynight=job.daynight}
     transaction=make_publication({
         preflight=function(before,e)
@@ -116,7 +116,7 @@ on_search_match=function(job,now)
             assert(ok,'Map click signature changed: '..tostring(err))
             -- A day/night match must hold for the whole buffer from the write.
             local daynight=e.daynight and function(op)return e.daynight.confirm(op,DayNight.war_time(read,before.board))end
-            assert(Search.find({operations=e.operations},e.difficulty,e.required,e.modifiers,e.constellations,e.scope,daynight),'Predicted filter no longer matches')
+            assert(Search.find({operations=e.operations},e.difficulty,e.required,e.modifiers,e.constellations,e.scope,daynight,e.excluded),'Predicted filter no longer matches')
             before.owner_guard=ownership(before.board)
             local final=assert(snapshot(true),'Publication context unavailable')
             assert(final.fingerprint==before.fingerprint,'Context changed before publication')

@@ -183,6 +183,26 @@ assert(text:find('DAYNIGHT_MATCH side=night row=3 seed=600 war_time=',1,true) an
 assert(confirmed[1]==550 and confirmed[2]==600 and refreshed>0,'Checked just before the write')
 assert(session.view().request.time=='night' and not tostring(M.status):find('search_',1,true),M.status)
 
+-- 6. An excluded mission alone. The board and every predicted seed hold
+-- Launch ICBM, so excluding it passes over the existing operation and
+-- exhausts the search; both checks must see the exclusion.
+catalogue.missions={{id=1,name='Launch ICBM'},{id=2,name='Survey'}};catalogue.mission_set={[1]=true,[2]=true}
+catalogue.profiles={{masks={[compatibility.mask({[1]=true})]=true,[compatibility.mask({[2]=true})]=true},modifiers={}}}
+open();filters.time=nil;filters.selected={};filters.excluded={[1]=true}
+mark=#logs
+action='start';frame()
+assert(session.view().request.excluded[1] and next(session.view().request.required)==nil,'The exclusion reaches the request')
+session.view().request.limit=64
+result=until_idle()
+text=table.concat(logs,'',mark+1)
+assert(M.status=='search_exhausted' and result.status=='No match in 64 seeds; search again to continue',M.status..' '..tostring(result.status))
+assert(not text:find('EXISTING_MATCH',1,true),'The operation holding the excluded mission is not taken')
+assert(text:find('LUA_SEARCH_EXCLUDED_MISSIONS Launch ICBM',1,true),text)
+-- Requiring a mission it excludes cannot start: the panel disables the start.
+filters.selected={[1]=true}
+action='start';frame()
+assert(not session.view().running and not session.take_request() and not last().can_start and last().tone=='bad',last().status)
+
 local text=table.concat(logs)
 assert(not text:find('SESSION_',1,true),'Every phase change follows the session rules: '..tostring(text:match('SESSION_[^%c]*')))
 print('Reroll handshake: request, capture, search, exhausted, existing match, composition without independent bases, cancel and a night-only search passed')

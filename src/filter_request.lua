@@ -11,7 +11,13 @@ function R.new(options,catalogue,labels,stamped)
     -- One section is open at a time, or none. The enemy section shows the
     -- rules of one group: a checked mission, or 0 for any mission.
     return setmetatable({options=options,catalogue=catalogue,labels=labels,stamped=stamped or {},
-        selected={},modifiers={},constellations={},time=nil,section='missions',page=1,pages=1,group_choice=0},R)
+        selected={},excluded={},modifiers={},constellations={},time=nil,section='missions',page=1,pages=1,group_choice=0},R)
+end
+-- A copy of a set, with id set to value when given.
+local function copy(set,id,value)
+    local out={};for k,v in pairs(set)do out[k]=v end
+    if id~=nil then out[id]=value end
+    return out
 end
 -- Opening the dialog starts on the first page of the missions.
 function R:open()self.section,self.page='missions',1 end
@@ -36,10 +42,12 @@ function R:tag_filter()
     end
     return {groups=groups}
 end
--- Checked missions, modifier rules, constellation rules and the time of day.
+-- Checked and excluded missions, modifier rules, constellation rules and the
+-- time of day.
 function R:rule_count()
     local n=self.time and 1 or 0
     for _,id in ipairs(self:groups())do if id~=0 then n=n+1 end end
+    for _ in pairs(self.excluded)do n=n+1 end
     for _ in pairs(self.modifiers)do n=n+1 end
     for _,tags in pairs(self:tag_filter().groups)do for _ in pairs(tags)do n=n+1 end end
     return n
@@ -47,18 +55,16 @@ end
 -- Whether the request can be met; true without a catalogue.
 function R:possible(catalogue)
     if not catalogue then return true end
-    return self.catalogue.possible(catalogue,self.selected,self.modifiers,self:tag_filter())
+    return self.catalogue.possible(catalogue,self.selected,self.modifiers,self:tag_filter(),self.excluded)
 end
 -- Raises with the reason the request cannot be searched.
 function R:validate(catalogue)
-    self.catalogue.validate(catalogue,self.selected,self.modifiers,self:tag_filter(),self.time)
+    self.catalogue.validate(catalogue,self.selected,self.modifiers,self:tag_filter(),self.time,self.excluded)
 end
 -- The request reroll_session.start takes, as a copy.
 function R:to_request(scope,difficulty)
-    local required,rules={},{}
-    for id,v in pairs(self.selected)do required[id]=v end
-    for id,v in pairs(self.modifiers)do rules[id]=v end
-    return {difficulty=difficulty,required=required,modifiers=rules,constellations=self:tag_filter(),
+    return {difficulty=difficulty,required=copy(self.selected),excluded=copy(self.excluded),
+        modifiers=copy(self.modifiers),constellations=self:tag_filter(),
         scope=scope and {region=scope.region} or nil,time=self.time}
 end
 -- Drops the rules a fresh catalogue no longer offers. A catalogue of another
@@ -68,6 +74,7 @@ function R:prune(catalogue,new_view)
     if new_view then self.page=1 end
     local removed=false
     for id in pairs(self.selected)do if not catalogue.mission_set[id]then self.selected[id]=nil;removed=true end end
+    for id in pairs(self.excluded)do if not catalogue.mission_set[id]then self.excluded[id]=nil;removed=true end end
     for id in pairs(self.modifiers)do if not catalogue.modifier_set[id]then self.modifiers[id]=nil;removed=true end end
     for group,tags in pairs(self.constellations)do
         local offered=(catalogue.constellation_groups or {})[group]
@@ -88,20 +95,31 @@ function R:navigate(action)
     else return false end
     return true
 end
+-- Whether a mission that is neither required nor excluded could be required,
+-- with the reason when not; and whether it could be excluded.
+function R:can_require(id,catalogue,filter)
+    return self.catalogue.possible(catalogue,copy(self.selected,id,true),self.modifiers,filter,self.excluded)
+end
+function R:can_exclude(id,catalogue,filter)
+    return self.catalogue.possible(catalogue,self.selected,self.modifiers,filter,copy(self.excluded,id,true))
+end
 -- Edits the request: clear, a mission id, 'modifier:<id>',
--- 'constellation:<group>:<id>' or 'time:any|day|night'. A mission the
--- catalogue cannot combine with the request stays unchecked. Returns whether
--- the action was an edit.
+-- 'constellation:<group>:<id>' or 'time:any|day|night'. A mission cycles
+-- any, required, excluded; a step the catalogue cannot combine with the
+-- request is skipped. Returns whether the action was an edit.
 function R:toggle(action,catalogue)
-    if action=='clear' then self.selected={};self.modifiers={};self.constellations={};self.time=nil
+    if action=='clear' then self.selected={};self.excluded={};self.modifiers={};self.constellations={};self.time=nil
     elseif action=='time:any' then self.time=nil
     elseif action=='time:day' or action=='time:night' then self.time=action:sub(6)
     elseif type(action)=='number' then
-        local selected=self.selected
-        if selected[action]then selected[action]=nil
+        local selected,excluded=self.selected,self.excluded
+        if excluded[action]then excluded[action]=nil
         else
-            local proposed={};for id,v in pairs(selected)do proposed[id]=v end;proposed[action]=true
-            if self.catalogue.possible(catalogue,proposed,self.modifiers,self:tag_filter())then selected[action]=true end
+            -- Unchecking drops the mission's constellations before the next step is tried.
+            local was=selected[action];selected[action]=nil;prune_groups(self)
+            local filter=self:tag_filter()
+            if not was and self:can_require(action,catalogue,filter)then selected[action]=true
+            elseif self:can_exclude(action,catalogue,filter)then excluded[action]=true end
         end
         prune_groups(self)
     elseif type(action)=='string' and action:match('^modifier:')then
@@ -133,7 +151,7 @@ local function count(n)return n==0 and 'Any' or n..(n==1 and ' rule' or ' rules'
 -- viewed planet's day and night with a time of day chosen, {note} or
 -- {pending=reason} or {blocked=reason} (src/day_night.lua).
 function R:model(catalogue,v)
-    local options,selected,modifiers,section=self.options,self.selected,self.modifiers,self.section
+    local options,selected,excluded,modifiers,section=self.options,self.selected,self.excluded,self.modifiers,self.section
     local display=v.shown and catalogue
     local groups=self:groups()
     local group=groups[1]
@@ -142,6 +160,8 @@ function R:model(catalogue,v)
     local filter=self:tag_filter()
     local names,modifier_rules,tag_rules={},0,0
     for _,id in ipairs(groups)do if id~=0 then names[#names+1]=options[id].name end end
+    local checked=#names
+    for id,option in ipairs(options)do if excluded[id]then names[#names+1]='not '..option.name end end
     for _ in pairs(modifiers)do modifier_rules=modifier_rules+1 end
     for _,tags in pairs(filter.groups)do for _ in pairs(tags)do tag_rules=tag_rules+1 end end
     local rules=#names+modifier_rules+tag_rules+(self.time and 1 or 0)
@@ -155,12 +175,14 @@ function R:model(catalogue,v)
         pages=math.max(1,math.ceil(#available/PAGE));self.page=math.min(self.page,pages)
         for i=(self.page-1)*PAGE+1,math.min(#available,self.page*PAGE)do
             local option=available[i]
+            local mode=selected[option.id] and 'require' or excluded[option.id] and 'exclude' or nil
+            -- A mission that cannot be required may still be excluded.
             local enabled,reason=true,nil
-            if not selected[option.id]then
-                local proposed={};for id,x in pairs(selected)do proposed[id]=x end;proposed[option.id]=true
-                enabled,reason=self.catalogue.possible(catalogue,proposed,modifiers,filter)
+            if not mode then
+                enabled,reason=self:can_require(option.id,catalogue,filter)
+                if not enabled then enabled=self:can_exclude(option.id,catalogue,filter) and true or false end
             end
-            items[#items+1]={id=option.id,name=option.name,enabled=enabled,reason=reason}
+            items[#items+1]={id=option.id,name=option.name,mode=mode,enabled=enabled,reason=reason}
         end
     elseif display and section=='modifiers' then
         for _,option in ipairs(catalogue.modifiers or {})do
@@ -215,7 +237,7 @@ function R:model(catalogue,v)
             or ready and rules>0 and tone=='idle' and 'Rerolls every unstarted operation of the campaign' or '',
         faction=display and catalogue.faction or nil,scope=v.scope and 'city' or 'planet',
         section=section,items=items,page=self.page,pages=pages,groups=tabs,group=group,
-        slots=display and catalogue.slots or nil,checked=#names,rules=rules,
+        slots=display and catalogue.slots or nil,checked=checked,rules=rules,
         summaries={missions=#names>0 and table.concat(names,', ') or 'Any',modifiers=count(modifier_rules),enemies=count(tag_rules),
             time=self.time=='day' and 'Day' or self.time=='night' and 'Night' or 'Any'},
         time_note=v.sky and v.sky.note or nil,

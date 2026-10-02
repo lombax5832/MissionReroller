@@ -12,6 +12,12 @@ assert(C.possible(profiles,{[1]=true,[3]=true,[4]=true},{}))
 assert(not C.possible(profiles,{[1]=true},{[77]='exclude'}))
 assert(C.possible(profiles,{[1]=true},{[77]='require'}))
 assert(not C.possible({{masks={[C.bit(1)]=true},modifiers={}},{masks={[C.bit(2)]=true},modifiers={}}},{[1]=true,[2]=true},{}),'Cannot combine different templates')
+-- Category 1 picks family 1 or 2, so excluding one leaves the other; the
+-- forced categories 2 and 3 cannot be avoided.
+assert(C.possible(profiles,{[1]=true},{},{[2]=true}) and C.possible(profiles,{},{},{[1]=true}))
+assert(not C.possible(profiles,{},{},{[1]=true,[2]=true}),'Every outcome has family 1 or 2')
+assert(not C.possible(profiles,{},{},{[3]=true}) and not C.possible(profiles,{[1]=true},{},{[4]=true}))
+assert(C.disjoint(C.bit(1),C.bit(74)) and not C.disjoint(C.mask({[1]=true,[74]=true}),C.bit(74)))
 -- Masks hold any family, not only the first thirty-two.
 local wide=C.mask({[1]=true,[31]=true,[74]=true,[120]=true})
 assert(C.covers(wide,C.bit(74)) and C.covers(wide,C.mask({[1]=true,[120]=true})) and not C.covers(wide,C.bit(73)))

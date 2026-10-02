@@ -32,6 +32,12 @@ function C.covers(available,required)
     for i=1,WORDS do if bit.band(x[i],y[i])~=y[i] then return false end end
     return true
 end
+-- Whether two masks share no family.
+function C.disjoint(a,b)
+    local x,y=words(a),words(b)
+    for i=1,WORDS do if bit.band(x[i],y[i])~=0 then return false end end
+    return true
+end
 function C.mask(required)local mask=C.none;for id in pairs(required)do mask=C.union(mask,C.bit(id))end;return mask end
 function C.family(kind,options)
     local mask=C.none
@@ -109,8 +115,10 @@ function C.modifiers(pool,budget)
     end
     walk(pool,budget,{});return results
 end
-function C.possible(profiles,required,rules)
-    local mask=C.mask(required)
+-- excluded families must be absent from the operation, so a mask that
+-- covers the required ones also has to avoid every excluded one.
+function C.possible(profiles,required,rules,excluded)
+    local mask,avoid=C.mask(required),C.mask(excluded or {})
     for _,profile in ipairs(profiles)do
         local valid=true;local present={}
         for _,id in ipairs(profile.modifiers)do present[id]=true end
@@ -118,7 +126,7 @@ function C.possible(profiles,required,rules)
             if (mode=='require' and not present[id])or(mode=='exclude' and present[id])then valid=false;break end
         end
         if valid then for available in pairs(profile.masks)do
-            if C.covers(available,mask)then return true end
+            if C.covers(available,mask) and C.disjoint(available,avoid)then return true end
         end end
     end
     return false,'Incompatible with selected missions or modifier rules'
