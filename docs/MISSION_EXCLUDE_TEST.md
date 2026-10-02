@@ -2,8 +2,12 @@
 
 ## Status
 
-**Not yet validated in game.** Built and tested offline on branch
-`worktree-exclude-missions`; the release gate passes.
+**Validated in game on 2026-10-01** by the user, who confirmed exclusions
+work with conflicting missions disabled (commit 3d115d5). The log kept
+from the last session (`Mission Reroller 0.28.0 docked dialog`, loader
+line `mods/ipodalexei/mission_reroller_experiment: loaded`) holds only
+required-mission searches, so no `LUA_SEARCH_EXCLUDED_MISSIONS` line was
+captured; the exclusion run's log was overwritten by a later launch.
 
 ## What changed
 
