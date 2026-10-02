@@ -5,6 +5,7 @@
 local M,emit,read,u,snapshot,config=host.M,host.emit,host.read,host.u,host.snapshot,host.config
 local reroll_session,O,map=host.reroll_session,host.O,host.map
 local Search,Planet,make_search_job,DayNight=lib.Search,lib.Planet,lib.make_search_job,lib.DayNight
+local ExternalEdits=lib.ExternalEdits
 local bind_constellations,on_existing_match,on_search_match=hooks.bind_constellations,hooks.on_existing_match,hooks.on_search_match
 local api,game,ffi,kernel
 host.when_initialized(function(n)api,game,ffi,kernel=n.api,n.game,n.ffi,n.kernel end)
@@ -89,7 +90,10 @@ on_prediction_ready=function(s,definitions,now)
             end)
             if not ok then reroll_session.finish('search_failed');emit('FILTER_BLOCKED '..tostring(err));return end
         end
-        local existing=Search.find(s.decoded,request.difficulty,required,modifiers,constellations,scope,daynight and daynight.accepts,excluded)
+        -- An operation another mod edited (s.external) holds missions no seed
+        -- gives; it is never offered as the match.
+        local existing=Search.find({operations=ExternalEdits.without(s.decoded.operations,s.external)},
+            request.difficulty,required,modifiers,constellations,scope,daynight and daynight.accepts,excluded)
         if existing then reroll_session.progress(0);on_existing_match(s,existing,now);return end
     end
     -- A city has one operation per difficulty. While it is in progress no
@@ -103,7 +107,7 @@ on_prediction_ready=function(s,definitions,now)
         local key=frozen_read(s.board+O.board.campaign+0x1c+s.planet*O.campaign.definition_stride,4)
         assert(frozen_read(definitions,4)==key,'Planet definitions changed')
         local result=Planet.capture(frozen_read,u,api.pointer,game)(s,definitions)
-        assert(result.passed and result.independent_bases,'Frozen baseline prediction mismatch')
+        assert(ExternalEdits.composition_passes(result,s.external) and result.independent_bases,'Frozen baseline prediction mismatch')
     end
     local key=request_key(request.difficulty,required,modifiers,constellations,scope,request.time,excluded)
     local first=(s.seed+1)%4294967296

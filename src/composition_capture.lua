@@ -41,38 +41,46 @@ return function(bind,make_levels,predict,make_bases)
             end
             local predicted=predict(operations,snapshot.planet,inputs,function(op)return level(definitions,op)end,active)
             local errors,checked,templates,modifiers,bases={},0,0,0,0
+            -- failed_rows and general (errors of no row) let a caller excuse
+            -- rows another mod edited (external_edits.lua).
+            local failed_rows,general={},0
+            local function fail(row,text)
+                errors[#errors+1]=text
+                if row then failed_rows[row]=true else general=general+1 end
+            end
             local by_row={};for _,op in ipairs(snapshot.decoded.operations)do by_row[op.row]=op end
-            if #predicted~=#snapshot.decoded.operations then errors[#errors+1]='operation count mismatch'end
+            if #predicted~=#snapshot.decoded.operations then fail(nil,'operation count mismatch')end
             for i,op in ipairs(predicted)do
                 local observed=by_row[op.row];local at=op.row*92
                 local prefix='row='..op.row..' '
-                if not observed then errors[#errors+1]=prefix..'predicted row absent'
-                elseif not op.valid then errors[#errors+1]=prefix..'predicted invalid'
+                if not observed then fail(op.row,prefix..'predicted row absent')
+                elseif not op.valid then fail(op.row,prefix..'predicted invalid')
                 else
                     if make_bases then
                         if op.id==observed.operation_id and op.seed==observed.seed and op.difficulty==observed.difficulty
                             and op.category==u(snapshot.operations,at+28) and op.faction==u(snapshot.operations,at+36)
                             and op.explicit_hash==u(snapshot.operations,at+8) then bases=bases+1
-                        else errors[#errors+1]=prefix..'base fields mismatch'end
+                        else fail(op.row,prefix..'base fields mismatch')end
                     end
-                    if op.template_index~=u(snapshot.operations,at+56) then errors[#errors+1]=prefix..'template mismatch'
+                    if op.template_index~=u(snapshot.operations,at+56) then fail(op.row,prefix..'template mismatch')
                     else templates=templates+1 end
                     local same=#op.modifiers==snapshot.operations:byte(at+69)
                     for j,id in ipairs(op.modifiers)do if id~=u(snapshot.operations,at+56+j*4)then same=false end end
-                    if same then modifiers=modifiers+1 else errors[#errors+1]=prefix..'modifier mismatch'end
-                    if #op.missions~=#observed.missions then errors[#errors+1]=prefix..'mission count mismatch'
+                    if same then modifiers=modifiers+1 else fail(op.row,prefix..'modifier mismatch')end
+                    if #op.missions~=#observed.missions then fail(op.row,prefix..'mission count mismatch')
                     else
                         for slot,mission in ipairs(op.missions)do
                             local actual=observed.missions[slot]
                             if mission.seed==actual.seed and mission.native_type==actual.native_type and mission.level_index==actual.level_index then checked=checked+1
-                            else errors[#errors+1]=string.format('%sslot=%d predicted=%d/%u/level%d actual=%d/%u/level%d',
-                                prefix,slot-1,mission.native_type,mission.seed,mission.level_index,actual.native_type,actual.seed,actual.level_index)end
+                            else fail(op.row,string.format('%sslot=%d predicted=%d/%u/level%d actual=%d/%u/level%d',
+                                prefix,slot-1,mission.native_type,mission.seed,mission.level_index,actual.native_type,actual.seed,actual.level_index))end
                         end
                     end
                 end
             end
             return {passed=#errors==0 and checked>0,checked=checked,templates=templates,modifiers=modifiers,
-                operations=#predicted,errors=errors,independent_bases=make_bases~=nil,bases=bases},table.concat(parts)
+                operations=#predicted,errors=errors,failed_rows=failed_rows,general=general,
+                independent_bases=make_bases~=nil,bases=bases},table.concat(parts)
         end
     end
 end

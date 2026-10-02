@@ -53,13 +53,22 @@ return function(read,u,predict,special_inputs,levels_factory,verify_levels,compo
         end
         return captured
     end
-    function probe:compare_levels(capture)
+    -- skip: rows another mod edited (external_edits.lua), left unchecked.
+    function probe:compare_levels(capture,skip)
         assert(verify_levels and capture.level_graphs,'Level verification not configured')
-        return verify_levels(capture.level_operations,capture.level_graphs)
+        local operations=capture.level_operations
+        if skip then
+            operations={}
+            for _,op in ipairs(capture.level_operations)do if not skip[op.row] then operations[#operations+1]=op end end
+        end
+        return verify_levels(operations,capture.level_graphs)
     end
+    -- differences lists each failing row as {row,kind,observed,predicted};
+    -- kind is value, unexpected live row or predicted row absent.
     function probe:compare(capture)
         local predicted=predict(capture.input,capture.seed)
         local matched,observed_count,predicted_count,errors=0,0,0,{}
+        local differences,matched_rows={},{}
         assert(#capture.operations==110*92,'Invalid operation buffer')
         for row=0,109 do
             local offset=row*92
@@ -71,12 +80,19 @@ return function(read,u,predict,special_inputs,levels_factory,verify_levels,compo
                 local id=capture.operations:byte(offset+25)
                 local seed=u(capture.operations,offset+12)
                 local difficulty=capture.operations:byte(offset+33)
-                if id==p.id and seed==p.seed and difficulty==p.difficulty then matched=matched+1
-                else errors[#errors+1]=string.format('row=%d observed=%d/%u/d%d predicted=%d/%u/d%d',row,id,seed,difficulty,p.id,p.seed,p.difficulty)end
-            elseif valid or p then errors[#errors+1]='row='..row..(valid and ' unexpected live row' or ' predicted row absent')end
+                if id==p.id and seed==p.seed and difficulty==p.difficulty then matched=matched+1;matched_rows[#matched_rows+1]=row
+                else
+                    errors[#errors+1]=string.format('row=%d observed=%d/%u/d%d predicted=%d/%u/d%d',row,id,seed,difficulty,p.id,p.seed,p.difficulty)
+                    differences[#differences+1]={row=row,kind='value',observed={id=id,seed=seed,difficulty=difficulty},predicted=p}
+                end
+            elseif valid or p then
+                local kind=valid and 'unexpected live row' or 'predicted row absent'
+                errors[#errors+1]='row='..row..' '..kind
+                differences[#differences+1]={row=row,kind=kind,predicted=p}
+            end
         end
         return {matched=matched,observed=observed_count,predicted=predicted_count,errors=errors,
-            passed=#errors==0 and observed_count>0}
+            differences=differences,matched_rows=matched_rows,passed=#errors==0 and observed_count>0}
     end
     return probe
 end
