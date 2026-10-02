@@ -72,10 +72,14 @@ The accepted rows travel on the snapshot as `s.external`:
 - the existing-match check never offers them: their missions came from the
   other mod, not from a seed.
 
+## In game
+
+A reroll replaces an edited row with the one the new seed gives: on
+2026-10-01 the run after F6 on row 28 logged
+`PREDICTION_CHECK descriptors_match=true` (see `docs/HISTORY.md`).
+
 ## Unknown
 
-- What the game does with an edited row on a reroll. The design expects the
-  row to be regenerated; the check after the write covers the other case.
 - The dialog's catalogue (`src/filter_catalogue.lua`) still counts every
   displayed operation, edited ones included, as proof that its mix of
   missions and modifiers is allowed. If F6 can make a mix no seed gives, a
