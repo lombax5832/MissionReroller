@@ -54,7 +54,7 @@ code={
         bytes='44896308c7430cffffffffe8e859e4ff'},
     -- The generator the Lua port reproduces (docs/LUA_PREDICTION_TEST.md).
     generate_operations={module='game',rva=0x11e3c10,size=1104,sha256='e600b7f917c0dae668397ec326b9ec53df4705e0c1135d5880be8fcaa91d65bd',from='11e3c10, generator'},
-    generate_operation_rows={module='game',rva=0x11e4060,size=1136,sha256='5cc7271a512f5caf431abcc5b3e0fcbeb99c325eeae368b03f3ec52427e1661f',from='11e4060, generator'},
+    generate_operation_rows={module='game',rva=0x11e4060,size=1136,sha256='5cc7271a512f5caf431abcc5b3e0fcbeb99c325eeae368b03f3ec52427e1661f',from='11e4060, the invasion operations, src/operation_base_inputs.lua'},
     special_events={module='game',rva=0x11e44d0,size=960,sha256='761e9b878f605a026082169dd67c4a2f5cae070d03a840ac2027499531689801',from='11e44d0, special campaign events, src/special_operation_inputs.lua'},
     exclusion_mask={module='game',rva=0x11e4b50,size=248,sha256='0847b63474ce07ef97714cd0acf6d71d76e9a1a4ec1acee82d0d25789bee0dc3',from='11e4b50, the exclusion mask'},
     reseed_board={module='game',rva=0x12d5550,size=288,sha256='b4c826d4744fdbbc161f2da037c544451c77caea400dfe5b87c77233f060289a',from='12d5550, the board wrapper around 11e5670'},
@@ -68,7 +68,7 @@ code={
     configuration_tables={module='game',rva=0x12e7990,size=243,sha256='1f2ccbbfa61bc50a3e2ec72bfcc2000a992f09f2495f60be2f173568064de7f4',from='12e7990, src/configuration_lookup.lua'},
     campaign_effects={module='game',rva=0x12df110,size=952,sha256='77111a8319abae6556e658acadbb13660f1582be47b3d2fc5d315ac8232c50a0',from='12df110, src/campaign_effects.lua'},
     template_environments={module='game',rva=0x177e5b0,size=831,sha256='66c3b348db09003218b6cec50fd322fb1de77c4512a464fb135e7556470e28f8',from='177e5b0, src/template_environments.lua'},
-    composition_174ab50={module='game',rva=0x174ab50,size=335,sha256='0bd16770e68656de8fb7e84f9d62a64cda0e8ffa0d81c25c539ef4e79d743ab9',from='174ab50, checked by the identity probe since v0.8; role not recorded'},
+    composition_174ab50={module='game',rva=0x174ab50,size=335,sha256='0bd16770e68656de8fb7e84f9d62a64cda0e8ffa0d81c25c539ef4e79d743ab9',from='174ab50, resolves a special definition category of 14, src/operation_base_inputs.lua'},
     composition_174b110={module='game',rva=0x174b110,size=464,sha256='4b395978f97967bfc97024b41ab6b63246c120019aa369f91d358321b543a7a4',from='174b110, checked by the identity probe since v0.8; role not recorded'},
     difficulty_cap={module='game',rva=0x11ebb40,size=152,sha256='5feaccab97b046561f786f2e60533112168f152ebcd19f38ad1e190c9a08e6a9',from='11ebb40, the difficulty cap from configuration'},
     -- Game functions the Lua ports or mirrors, so that a change to one is reported.
@@ -131,6 +131,7 @@ globals={
     state_modifiers={module='game',rva=0x32e55e0,anchor={rva=0x6a96e,bytes='48891d6bac2703'},from='world modifiers per planet state, 1267460; struct state_modifiers'},
     operation_modifiers={module='game',rva=0x32e94d0,anchor={rva=0x11e38f5,bytes='488d35d45b1002'},from='thirteen operation modifiers of 0x50 bytes, 11e3250'},
     categories={module='game',rva=0x32e98e0,anchor={rva=0x11e6052,bytes='4c8d3587381002'},from='operation categories of 0xa8 bytes: +8 mission count flag, +9 special'},
+    invasion_levels={module='game',rva=0x32ef750,anchor={rva=0x11e40fa,bytes='4c8d354fb61002'},from='rows of 0x48 bytes per invasion level, +0 the operation category, 11e4060'},
     invasion_modifiers={module='game',rva=0x32ef77c,anchor={rva=0x12676f9,bytes='488d057c800802'},from='the world modifier per invasion level, 0x48 bytes apart, 1267460'},
     templates={module='game',rva=0x32fef10,anchor={rva=0x11e328e,bytes='488d357bbc1102'},from='25 operation templates, 11e3250; struct template'},
     mission_types={module='game',rva=0x3773420,anchor={rva=0x11e51f5,bytes='488d1524e25802'},from='162 mission type records, 177deb0; struct mission_type'},
@@ -204,6 +205,9 @@ structs={
         event_count={0x77a58,anchor='campaign_effects'},
         invasions={0x77a60,anchor='composition_174ab50'},
         invasion_count={0x78c60,anchor='composition_174ab50'},
+        -- Records of 16 bytes naming the invasion that generates a planet's operations, 11e4060.
+        invasion_events={0x72850,sum='campaign.planet_record+0x2c830'},
+        invasion_event_count={0x72c50,anchor={rva=0x12d6af0,bytes='4439ae502c0700'}},
         planet_effect_lists={0x78c68,anchor='campaign_effects'},
         planet_effect_list_count={0x78d14,anchor='campaign_effects'},
     },

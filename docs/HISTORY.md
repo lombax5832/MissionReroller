@@ -5,6 +5,30 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
+**Validated in game: invaded planets.** On a planet under attack,
+every search showed "Retrying changed planet data" until the capture
+timed out (`LUA_CAPTURE_RETRY planet=173 … Unsupported invasion operation
+bases`, 61 failures). The port rejected invasions on purpose since v0.8.0;
+this was the first invasion the mod met in game.
+- **Invasion operations.** `11e4060`, which `src/offsets.lua` called
+  `generate_operation_rows`, is the invasion pass: the normal pass skips an
+  invaded planet and this one draws the same rows from the same RNG, with
+  the category from the invasion level (new global `invasion_levels`) and
+  the invasion's faction. New fields `campaign.invasion_events` and
+  `invasion_event_count` name the planet's invasion.
+- **Special category.** `174ab50`, checked since v0.8 with no recorded role,
+  resolves a special definition's category 14: 8 when the planet's first
+  invasion is at level 1, else 9 (or 12). The port assumed 9.
+- **Evidence.** A Memory Explorer capture of planet 173 replays exactly: 40
+  operations and 96 missions, and the dialog options at every difficulty.
+  Analysis and test plan in [INVASION_TEST.md](INVASION_TEST.md). Defence
+  events remain unsupported.
+- **In game, 2026-10-02.** Searches on invaded planets 173 and 245 passed
+  (`LUA_SEED_PREDICTION_PASS planet=173 … bases=40 operations=40
+  missions=96`, `PREDICTION_CHECK descriptors_match=true`,
+  `PUBLICATION_STATE_VERIFIED seed=102427967 row=39`), and normal planets
+  201 and 270 still published.
+
 **Not yet validated in game: v0.29.0 exclude missions.** The release
 package of two changes each validated in game from a branch build on
 2026-10-01: excluded missions (below) and operations edited by another mod

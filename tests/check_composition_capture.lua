@@ -83,7 +83,8 @@ for case_index,case in ipairs(fixture.cases)do
         local function word(n)return string.char(n%256,math.floor(n/256)%256,math.floor(n/65536)%256,math.floor(n/16777216)%256)end
         reject({[campaign+O.campaign.planet_enabled+planet*O.campaign.planet_stride]='\0'},'Planet generation disabled')
         reject({[campaign+O.campaign.base_count]=word(0)},'Unsupported normal campaign event count')
-        reject({[campaign+O.campaign.invasion_count]=word(1),[campaign+O.campaign.invasions+4]=word(planet)},'Unsupported invasion operation bases')
+        reject({[campaign+O.campaign.invasion_count]=word(1),[campaign+O.campaign.invasions+4]=word(planet)},'Unsupported invasion event count')
+        reject({[campaign+O.campaign.invasion_event_count]=word(1),[campaign+O.campaign.invasion_events+4]=word(planet)},'Unsupported invasion event count')
         for i=0,u(read(campaign+O.campaign.base_count,4),0)-1 do
             local at=campaign+O.campaign.bases+i*20
             if u(read(at+8,4),0)==planet then reject({[at+12]=word(2)},'Unsupported defense operation bases');break end
