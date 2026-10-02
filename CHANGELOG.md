@@ -6,6 +6,21 @@ GitHub release notes and, as one plain-text line each, the Nexus Mods
 changelog. How each change was
 made and tested is in the development log, [docs/HISTORY.md](docs/HISTORY.md).
 
+## v0.29.0 Exclude missions
+
+- Missions can now be excluded. Click a mission row to cycle Any, Required,
+  Excluded; the matched operation will contain no excluded mission.
+- Excluded missions take no slot, and excluding missions alone is enough to
+  start a search.
+- A mission that cannot be added next to the missions you require stays
+  dimmed, as before; point at it to read why.
+- A mission that every operation on the planet contains cannot be excluded,
+  so its row goes from Required straight back to Any.
+- Works alongside mods that refresh an operation's missions without a
+  reroll, such as Refresh Operations + Missions. Rerolling no longer stops
+  with a mismatch after such a refresh, and the refreshed operation is
+  replaced by the reroll like any other.
+
 ## v0.28.0 Know Your Constellation names and unit tooltips
 
 - Enemy forces use the same names as Know Your Constellation, for example

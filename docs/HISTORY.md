@@ -5,6 +5,36 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
+**Not yet validated in game: v0.29.0 exclude missions.** The release
+package of two changes each validated in game from a branch build on
+2026-10-01: excluded missions (below) and operations edited by another mod
+(the entry after it). The offset anchors since v0.28.0 change no behaviour.
+The tagged build itself is still to be checked in game.
+
+**Validated in game: excluded missions.** A mission row cycles ANY,
+REQUIRED, EXCLUDED, like a modifier row. An excluded family takes no slot,
+and the matched operation holds no mission of it, whatever its
+constellations.
+- **Disabled conflicts.** A first version let a mission that cannot join
+  the required ones go straight to EXCLUDED. The user found that less clear
+  than the old dimmed row, so such a row is disabled again and a mission is
+  excluded only by clicking it once more after requiring it. A required
+  mission every reachable operation holds goes back to ANY instead.
+- **Validation.** `src/filter_catalogue.lua` refuses an excluded mission
+  the catalogue does not offer, one also required, and excluding every
+  mission offered. `src/mission_compatibility.lua` accepts a request only
+  when a reachable mission mask covers the required families and is
+  disjoint from the excluded ones.
+- **Matching.** `S.find` takes the excluded set as its last argument; the
+  seed search, the existing-board check (after the external-edit filter),
+  the complete-board confirmation and the pre-publication recheck pass it,
+  and it is part of the resume key. A search with exclusions logs
+  `LUA_SEARCH_EXCLUDED_MISSIONS <names>`.
+- **In game, 2026-10-01.** The user confirmed it works with conflicting
+  missions disabled. The log kept from that day holds only
+  required-mission searches, so no exclusion line was captured. Test plan
+  in [MISSION_EXCLUDE_TEST.md](MISSION_EXCLUDE_TEST.md).
+
 **Validated in game: operations edited by another mod.** A player
 using Refresh Operations + Missions got `IDENTITY_TEST_MISMATCH`. The user
 reproduced it on 2026-10-01: F7 passed, F6 refreshed the selected
