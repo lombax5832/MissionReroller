@@ -43,7 +43,7 @@ local phases={
     search_cancelled={kind='outcome',caption='Search cancelled',tone='idle'},
     cancelled={kind='outcome',caption='Search cancelled',tone='idle'},
     capture_timeout={kind='outcome'},
-    identity_test_mismatch={kind='outcome'},
+    identity_test_mismatch={kind='outcome',caption='Operations differ from the prediction; see the log'},
     level_test_mismatch={kind='outcome'},
     composition_test_mismatch={kind='outcome'},
     -- Ends of a run this module imposes: a rejected call, or fail().

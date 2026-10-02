@@ -5,6 +5,49 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
+**Validated in game: operations edited by another mod.** A player
+using Refresh Operations + Missions got `IDENTITY_TEST_MISMATCH`. The user
+reproduced it on 2026-10-01: F7 passed, F6 refreshed the selected
+operation's missions, and F7 then failed on that row alone
+(`LUA_IDENTITY_DETAIL row=28 observed=23/3061063729/d10
+predicted=23/1048270963/d10`, campaign seed unchanged, row 29 still
+matching). F6 writes a new operation seed without a reroll.
+- **Edits are proven per row** (`src/external_edits.lua`): by a baseline,
+  the first board seen per planet and campaign seed, recorded once a second
+  on the galactic map and after each passing comparison; or, for a changed
+  operation seed alone, by a matching row after it. A missing or extra row,
+  a changed difficulty or an edited operation in progress still stops the
+  run. Checking only on planet selection was considered and rejected: F6
+  can run after any earlier check, and v4 refreshes without the planet open.
+- **The edited rows are left out** of the level and composition checks, the
+  search's frozen baseline and the existing-match check. The check after the
+  seed is written still compares the whole board and restores the old seed
+  on a difference.
+- `identity_test_mismatch` now has a caption, and a mismatch that looks like
+  an unproven edit says another mod may have changed the operations.
+- Design in [EXTERNAL_EDITS.md](EXTERNAL_EDITS.md), in-game test in
+  [EXTERNAL_EDITS_TEST.md](EXTERNAL_EDITS_TEST.md).
+- **In game, 2026-10-01.** The user's log, with Refresh Operations
+  installed: after ordinary rerolls on planet 201, F6 refreshed
+  row 28 and F7 rerolled. The baseline proved the edit, the search ran and
+  the regenerated board matched the prediction, so a reroll replaces an
+  edited row:
+
+  ```
+  BASELINE_RECORDED planet=201 seed=3844731423
+  LUA_IDENTITY_EDITED planet=201 seed=3844731423 pool=31 special_events=0 matched=29 live=30 predicted=30 ...
+  LUA_IDENTITY_EXTERNAL_EDIT row=28 observed=26/810457775/d10 predicted=26/2434653823/d10 evidence=baseline
+  LUA_COMPOSITION_PASS planet=201 operations=30 templates=30 modifiers=30 missions=69 ... edited_rows=1
+  LUA_SEARCH_MATCH seed=3844732274 row=28 attempts=851 ...
+  PUBLISH_BEGIN previous_seed=3844731423 candidate_seed=3844732274 primary_planet=201 viewed_planet=201
+  PREDICTION_CHECK descriptors_match=true reason=nil
+  PUBLICATION_STATE_VERIFIED seed=3844732274 row=28 map_ui_row_confirmed=true mission_unselected=true
+  ```
+
+  Not yet run: F6 on several operations and an edited operation that
+  already matches (cases 2 and 3 of the test), and Refresh Operations'
+  plain refresh.
+
 **Validated in game: v0.28.0 Know Your Constellation names and unit
 tooltips.** Enemy forces now use Know Your Constellation v4.0's names, and
 the three tags a map stamp can add (Bile Bugs, Hunter Swarms, Predator
