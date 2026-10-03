@@ -46,4 +46,5 @@ What changed, and what to check in game before the change ships:
 
 ## Result
 
-Not yet run.
+2026-10-03, reported by the user: confirmed working in game. No log lines
+were quoted, and the steps were not reported separately.
