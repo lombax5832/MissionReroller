@@ -36,9 +36,11 @@ end,pointer=function(bytes,offset)
     if value[0]<0x10000 then return nil end
     return ffi.cast('uint8_t *',value[0])
 end}
+-- protect: the protection VirtualQuery reports for an address, else 4.
+local protect={}
 local kernel={VirtualQuery=function(a,m)
     m=ffi.cast('MRE_MEMORY_BASIC_INFORMATION *',m) -- The adapter passes a void pointer.
-    m[0].BaseAddress=a;m[0].RegionSize=4096;m[0].State=0x1000;m[0].Protect=4
+    m[0].BaseAddress=a;m[0].RegionSize=4096;m[0].State=0x1000;m[0].Protect=protect[address(a)] or 4
     m[0].Type=address(a)==base+O.rva.rng_state and 0x1000000 or 0x20000
     return ffi.sizeof(m[0])
 end}
@@ -80,6 +82,15 @@ scene({a},a,b,{});fails('Not local selection owner',ownership,at)
 scene({a},b,b,{});fails('Source is not local owner',ownership,at)
 scene({none},none,none,{});fails('invalid source owner',snapshot,true);fails('invalid source owner',ownership,at)
 scene({},a,a,{});fails('owner count outside supervised bounds',snapshot,true)
+-- Wine (Proton) can report the module's RNG data page as copy-on-write; it
+-- is only read. Other protections fail, naming the page and its values,
+-- and a private page reported as copy-on-write still fails.
+scene({a},a,a,{})
+protect[base+O.rva.rng_state]=8;assert(snapshot(true),'A copy-on-write module data page passes')
+protect[base+O.rva.rng_state]=0x40;fails('rng_state state=0x1000 protect=0x40 type=0x1000000',snapshot,true)
+protect[base+O.rva.rng_state]=nil
+protect[board+O.board.seed]=8;fails('board.seed state=0x1000 protect=0x8 type=0x20000',snapshot,true)
+protect[board+O.board.seed]=nil;assert(snapshot(true))
 if not lobby then
     scene({a,b},a,a,{})
     fails('owner count outside supervised bounds',snapshot,true)

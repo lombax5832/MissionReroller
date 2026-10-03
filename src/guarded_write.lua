@@ -26,7 +26,7 @@ return function(host)
         return write_memory(kernel.GetCurrentProcess(),address,bytes,#bytes,count)~=0 and count[0]==#bytes
     end
     return function(address,bytes,what,verify)
-        page(address,#bytes,0x20000)
+        page(address,#bytes,0x20000,what)
         assert(native(address,bytes),what..' write failed')
         if verify~=false then assert(read(address,#bytes)==bytes,what..' write did not persist')end
     end

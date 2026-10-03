@@ -122,7 +122,10 @@ end
 local map_screen=make_map_screen({read=function(a,n)return read(a,n)end,pointer=function(a)return pointer(a)end,u=u,
     pointer_at=function(bytes,offset)return api.pointer(bytes,offset)end,
     game=function()return game end,ffi=function()return ffi end})
-local function page(a,n,kind)
+-- Checks that n bytes at a lie in one committed read/write region of type
+-- kind (0x20000 private, 0x1000000 module image). what names the target in
+-- the error, which also gives the values VirtualQuery returned.
+local function page(a,n,kind,what)
     local m=ffi.new('MRE_MEMORY_BASIC_INFORMATION[1]')
     -- C declarations are shared by every addon in the VM and the first one
     -- wins: Mod Bindings Menu declares VirtualQuery with its own struct
@@ -130,8 +133,14 @@ local function page(a,n,kind)
     assert(kernel.VirtualQuery(a,ffi.cast('void *',m),ffi.sizeof(m[0]))==ffi.sizeof(m[0]),'VirtualQuery failed')
     local begin=tonumber(ffi.cast('uintptr_t',a))
     local limit=tonumber(ffi.cast('uintptr_t',m[0].BaseAddress))+tonumber(m[0].RegionSize)
-    assert(begin+n<=limit and m[0].State==0x1000 and m[0].Protect==4 and m[0].Type==kind,
-           'unexpected target page')
+    -- Module data is only read, never written. Wine (Proton) can report a
+    -- written data page of a module as copy-on-write (PAGE_WRITECOPY, 8)
+    -- where Windows reports PAGE_READWRITE; both are data, not code.
+    local protect=m[0].Protect
+    local writable=protect==4 or kind==0x1000000 and protect==8
+    assert(begin+n<=limit and m[0].State==0x1000 and writable and m[0].Type==kind,
+           string.format('unexpected target page: %s state=0x%x protect=0x%x type=0x%x want=0x%x span=%s',
+               what or 'target',tonumber(m[0].State),tonumber(protect),tonumber(m[0].Type),kind,tostring(begin+n<=limit)))
 end
 -- The players of the session: one alone, up to four in a lobby. Only the
 -- dialog build accepts a lobby; the earlier builds were tested alone.
@@ -258,10 +267,10 @@ local function snapshot(viewed_planet)
     end
     for _,id in ipairs(sources)do if not ids[id] then union=union+1 end end
     assert(union<=5,'owner union overflow')
-    page(game+O.rva.rng_state,8,0x1000000) -- Only the native helper may update this module data.
-    page(b+O.board.seed,4,0x20000)
-    page(b+O.board.owners,union*16,0x20000)
-    page(b+O.board.owner_count,4,0x20000)
+    page(game+O.rva.rng_state,8,0x1000000,'rng_state') -- Only the native helper may update this module data.
+    page(b+O.board.seed,4,0x20000,'board.seed')
+    page(b+O.board.owners,union*16,0x20000,'board.owners')
+    page(b+O.board.owner_count,4,0x20000,'board.owner_count')
     local canonical=read(b+O.board.seed,96)
     if canonical:sub(1,4)~=read(b+O.board.published_seed,4) then return nil,'waiting for seed publication' end
     local mc=u(read(b+O.board.mission_count,4),0); assert(mc<=330,'mission count overflow')
