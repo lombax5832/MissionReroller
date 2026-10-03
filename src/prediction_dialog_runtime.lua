@@ -40,6 +40,8 @@ do
     local DEFAULT_KEY=0x76
     local screens_logged
     local tag_error,objective_error
+    -- The last snapshot failure logged, so a lasting one is logged once.
+    local snapshot_error
     -- A city or megafactory appears on the map as its operation. The one
     -- under the cursor when the dialog opens, or else the selected one,
     -- limits the dialog and the search to that city.
@@ -101,7 +103,7 @@ do
         local app=pointer(exe+O.rva.application)
         assert(u(read(app+O.application.window_count,4),0)==1,'Expected one game window')
         local window=pointer(pointer(app+O.application.windows))
-        page(window+0x80,10,0x20000)
+        page(window+0x80,10,0x20000,'window')
         local flag=read(window+0x89,1):byte();assert(flag==0 or flag==1,'Invalid focus flag')
         return tostring(window)
     end
@@ -135,7 +137,15 @@ do
         local viewed,d=map.viewed()
         if viewed>=512 or d<1 or d>10 then return nil,'Choose a planet and map difficulty' end
         local view=viewed..':'..d
-        local s,why=snapshot(true)
+        -- The dialog only reads here: a failed check of the planet data shows
+        -- in the dialog and is logged, and nothing can be started from it.
+        -- Searching and publishing repeat the checks and stop on a failure.
+        local ok,s,why=pcall(snapshot,true)
+        if not ok then
+            if tostring(s)~=snapshot_error then snapshot_error=tostring(s);emit('SNAPSHOT_BLOCKED '..snapshot_error)end
+            return nil,'Planet data unavailable',view
+        end
+        snapshot_error=nil
         if not s then return nil,why,view end
         if viewed~=s.planet then
             return nil,'Waiting for the viewed planet',view

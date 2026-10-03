@@ -333,9 +333,10 @@ up(dialog,'dialog_release')('test cleanup');assert(not held and released==opened
 -- Real context logic: viewed-planet requests, retained presentation through
 -- temporary cache/backend gaps, and no stale start or cross-planet display.
 local function word(n)return string.char(n%256,math.floor(n/256)%256,math.floor(n/65536)%256,math.floor(n/16777216)%256)end
-local ship=268;local viewed=269;local ui_planet=269;local unavailable=false;local guest=false
+local ship=268;local viewed=269;local ui_planet=269;local unavailable=false;local guest=false;local broken=false
 up(real_context,'snapshot',function(preview)
-    assert(preview);if guest then return nil,'Only the host can reroll operations' end
+    assert(preview);if broken then error('unexpected target page: rng_state state=0x1000 protect=0x40 type=0x1000000 want=0x1000000 span=true',0)end
+    if guest then return nil,'Only the host can reroll operations' end
     if unavailable then return nil,'waiting for pending backend requests' end
     return {planet=viewed,selection=word(ship)..word(viewed),fingerprint=ship..':'..viewed,sc=3}
 end,true)
@@ -415,6 +416,20 @@ assert(last_model.locked and #last_model.items==0 and not last_model.can_start a
 assert(find('start').enabled==false and find('close').enabled and shown('ONLY THE HOST CAN REROLL OPERATIONS'))
 click('start');frame();assert(not requested() and not last_model.running,'A guest cannot queue a search')
 guest=false;frame();assert(last_model.ready and #last_model.items==1 and last_model.can_start and not requested())
+-- A failed check of the planet data (Proton reported a page the snapshot
+-- refuses) is logged once and shown; the dialog stays open, the mod keeps
+-- running, nothing starts, and it recovers when the data passes again.
+local logged=#logs
+broken=true;for _=1,5 do frame()end
+assert(held and #logs==logged+1 and logs[#logs]:find('SNAPSHOT_BLOCKED unexpected target page: rng_state',1,true),logs[#logs])
+click('start');frame();assert(not requested(),'Data that failed its checks never starts a search')
+session.finish('cancelled');frame()
+ui_planet=270;frame()
+assert(last_model.status=='Planet data unavailable' and #last_model.items==0 and not last_model.can_start,last_model.status)
+ui_planet=269;broken=false;frame();frame()
+assert(held and last_model.ready and #last_model.items==1 and last_model.can_start and not requested())
+broken=true;frame();assert(#logs==logged+2,'The same failure is logged again after a recovery')
+broken=false;frame()
 ui_planet=100;frame();assert(#last_model.items==0 and not last_model.ready,'Mismatched map view must not display stale options')
 assert(last_model.locked and last_model.faction==nil and not last_model.can_start and find('start').enabled==false and find('close').enabled)
 ui_planet=600;frame()
