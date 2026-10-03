@@ -5,7 +5,7 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
-**Validated in game: bundled Know Your Constellation roster.**
+**Validated in game: v0.32.0 bundled Know Your Constellation roster.**
 Know Your Constellation v4.0 shipped without the `EnemyIntelligence.roster`
 export the v0.28.0 tooltips read, so players saw no units. With
 CowboyBingus's permission the release now carries that mod's v4.0

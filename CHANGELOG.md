@@ -6,6 +6,15 @@ GitHub release notes and, as one plain-text line each, the Nexus Mods
 changelog. How each change was
 made and tested is in the development log, [docs/HISTORY.md](docs/HISTORY.md).
 
+## v0.32.0 Enemy units without Know Your Constellation
+
+- Pointing at an enemy force now shows the units a mission with it can
+  spawn, with a spawn-rate meter for each large enemy, even without Know
+  Your Constellation installed. The unit data is Know Your Constellation's
+  own, included with CowboyBingus's permission.
+- With a Know Your Constellation installed that shares its roster, that
+  copy is still used first.
+
 ## v0.31.0 Side objectives
 
 - New Side objectives section: require or exclude side objectives such as
