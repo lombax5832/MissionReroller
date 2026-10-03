@@ -2,8 +2,9 @@
 
 ## Status
 
-**Not yet validated in game.** Needs a player on Proton (Linux or Steam
-Deck) and one run on Windows to show nothing changed there.
+**Validated in game on 2026-10-03.** The user confirmed the fix worked
+with the development build; no log lines were quoted, so which page failed
+and which value Proton reported are still unrecorded. Released as v0.32.1.
 
 ## The report
 

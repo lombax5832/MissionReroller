@@ -5,7 +5,7 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
-**Not yet validated in game: v0.32.1 page checks under Proton.** A
+**Validated in game: v0.32.1 page checks under Proton.** A
 Proton player's v0.31.0 log stopped on `unexpected target page` right after
 `MODAL_OPEN`: the dialog's snapshot failed one of its four page checks, the
 error was not caught, and the mod stopped for the session, so the panel
@@ -18,7 +18,8 @@ the mod only reads it, and private pages, every write target among them,
 still need `PAGE_READWRITE`. The dialog's `context()` catches a failed
 snapshot, logs `SNAPSHOT_BLOCKED <error>` once per distinct error and shows
 `PLANET DATA UNAVAILABLE`; the search and publication still stop on a
-failure. Test plan: [PROTON_PAGE_TEST.md](PROTON_PAGE_TEST.md).
+failure. Test plan: [PROTON_PAGE_TEST.md](PROTON_PAGE_TEST.md). The user
+confirmed the fix working in game on 2026-10-03; no log lines were quoted.
 
 **Validated in game: v0.32.0 bundled Know Your Constellation roster.**
 Know Your Constellation v4.0 shipped without the `EnemyIntelligence.roster`
