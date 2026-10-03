@@ -203,8 +203,7 @@ to do, and which log lines prove it worked or failed.
 1. Work on a branch in a worktree; merge into `main` as
    `Merge the <change> into main`.
 2. Release commit `Release <ver>: <what changed>`: bump `DEFAULT_VERSION`
-   in `scripts/build.py` (local builds use it), update the version strings in `README.md`, add a
-   `docs/HISTORY.md` entry at the top marked **Not yet validated in game**
+   in `scripts/build.py` (local builds use it), add a `docs/HISTORY.md` entry at the top marked **Not yet validated in game**
    and a `CHANGELOG.md` section (see **Publishing a tag**).
 3. After the user's in-game test, commit `Record the v<ver> in-game result`,
    changing the entry to **Validated in game** with the date and the log lines

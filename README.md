@@ -7,8 +7,9 @@ mission must or must not carry, the side objectives each mission must or must
 not have, and whether it lands in the day or the night. It runs inside the game's Lua VM as an addon
 for [Bingus Shared Loader](https://github.com/CowboyBingus/BingusSharedLoader).
 
-Current release: **v0.20.3**, `releases/Mission-Reroller-v0.20.3.zip`
-([GitHub release](https://github.com/lombax5832/MissionReroller/releases/tag/v0.20.3)).
+Download the latest release from
+[GitHub](https://github.com/lombax5832/MissionReroller/releases/latest) or
+[Nexus Mods](https://www.nexusmods.com/helldivers2/mods/16762).
 
 ## Requirements
 
@@ -24,7 +25,7 @@ Current release: **v0.20.3**, `releases/Mission-Reroller-v0.20.3.zip`
 
 ## Install
 
-1. Import the loader ZIP and `Mission-Reroller-v0.20.3.zip` into your mod
+1. Import the loader ZIP and the `Mission-Reroller-v<version>.zip` into your mod
    manager and enable both.
 2. Keep the loader last in the load order, then Purge and Deploy.
 3. Launch the game. `BingusSharedLoader.log` in
@@ -165,7 +166,7 @@ The mod's log is `MissionRerollerExperiment.log` in
 | `offset signature <name> mismatch` or `offset anchor <name> mismatch` | The game files are the supported build, but the code the mod relies on differs in memory, usually because another mod changed it. Send the line with a list of your mods. |
 
 When reporting a problem, include both logs. Near the top, the mod's log
-names its version (`Mission Reroller 0.32.0 docked dialog`) and, from the
+names its version (`Mission Reroller <version> docked dialog`) and, from the
 first frame, every Lua mod the loaders started: a `MODS` count, then one
 `MOD <name> version=<version> status=<status>` line each. A version reads
 `unknown` when that mod does not publish one.
