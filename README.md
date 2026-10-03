@@ -73,9 +73,11 @@ the same GUID, so your manager treats it as the same mod.
      SEAF Artillery, cycles ANY, REQUIRED, EXCLUDED. The mission must have
      every required one and none of the excluded ones; with `ANY MISSION`,
      each required one must be on some mission of the operation and no
-     mission may have an excluded one. The list also holds the tactical
-     objectives (Terminate Illegal Broadcast, Upload Escape Pod Data and
-     the like) and shows only what that mission can draw on this planet at
+     mission may have an excluded one. Side objectives are listed under
+     SIDE and the tactical objectives (Terminate Illegal Broadcast, Upload
+     Escape Pod Data and the like) under TACTICAL; a few are side on some
+     missions and tactical on others, and `ANY MISSION` lists those under
+     SIDE. The list shows only what that mission can draw on this planet at
      the map difficulty. The line under the buttons shows how many side and
      tactical objectives the mission has; a row that no longer fits, or that
      would leave nothing to draw, is dimmed, and pointing at it says why.

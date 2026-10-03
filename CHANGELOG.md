@@ -13,7 +13,8 @@ made and tested is in the development log, [docs/HISTORY.md](docs/HISTORY.md).
   checked mission or for the whole operation. A mission must have every
   required one and none of the excluded ones.
 - Tactical objectives such as Terminate Illegal Broadcast and Upload Escape
-  Pod Data are in the same list.
+  Pod Data are in the same section, listed under their own Tactical heading
+  below the side objectives.
 - The list shows only what each mission can draw on the viewed planet at the
   map difficulty, with its number of side and tactical objectives. A row
   that no longer fits is dimmed; point at it to read why.

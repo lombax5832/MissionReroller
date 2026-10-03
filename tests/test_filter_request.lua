@@ -265,6 +265,9 @@ do
     -- Checking a mission moves the rules to its own group.
     act(2);m=o:model(c,fresh())
     assert(o.objectives[0]==nil and m.group==2 and m.objective_slots=='1 SIDE + 1 TACTICAL' and m.objective_note==nil)
+    c.objective_groups[2].list[3].role=2
+    m=o:model(c,fresh())
+    assert(m.items[1].role=='side' and m.items[3].role=='tactical','Rows carry their role for the panel')
     act('objective:2:'..lidar)
     -- One side slot: Artillery can no longer be required, only excluded.
     m=o:model(c,fresh())

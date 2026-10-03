@@ -257,7 +257,8 @@ function R:model(catalogue,v)
                         reason=why
                     end
                 end
-                items[#items+1]={id='objective:'..group..':'..option.id,name=option.name,mode=mode,enabled=enabled,reason=reason}
+                items[#items+1]={id='objective:'..group..':'..option.id,name=option.name,mode=mode,enabled=enabled,reason=reason,
+                    role=option.role==2 and 'tactical' or 'side'}
             end
             -- The side and tactical slots of the group's mission types.
             if group~=0 then
