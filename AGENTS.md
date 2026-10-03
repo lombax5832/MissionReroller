@@ -161,10 +161,15 @@ parts enabled; `test_identity_probe.py`, `test_search_probe.py` and
 
 ```powershell
 $env:BINGUS_LOADER_ROOT = "$PWD\..\..\..\..\BingusSharedLoader"  # in a worktree only
-python -B scripts/build.py          # releases/Mission-Reroller-v<DEFAULT_VERSION>.zip
+python -B scripts/build.py          # releases/Mission-Reroller-Dev-v<DEFAULT_VERSION>.zip
 python -B tests/test_package.py     # package checks, then tests/test_dialog.py
 ```
 
+- A build without `RELEASE_TAG` is a development package: name
+  `Mission Reroller Dev` and its own `DEVELOPMENT_GUID`, so the mod manager
+  lists it beside the published mod. It shares the release's module, global
+  and log; enable only one of them before deploying. Only a tagged build
+  carries `RELEASE_GUID`.
 - `test_package.py` is the release gate. For other modules, find the driving
   test with `grep <module>.lua tests/*.py` and run that Python file; each Lua
   test's first lines give its arguments (usually the `src` folder, a module

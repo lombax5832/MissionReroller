@@ -57,6 +57,15 @@ def test_release_version():
         raise AssertionError(tag)
 
 
+def test_build_identity():
+    # A tag publishes under the GUID every released ZIP has carried; a local
+    # build shows up as a separate mod in the mod manager.
+    assert build.GUID == (build.build_core.RELEASE_GUID if build.TAGGED else build.DEVELOPMENT_GUID)
+    assert build.NAME == (build.RELEASE_NAME if build.TAGGED else build.DEVELOPMENT_NAME)
+    assert build.DEVELOPMENT_GUID not in (build.build_core.RELEASE_GUID, build.build_core.GUID)
+    assert build.DEVELOPMENT_NAME != build.RELEASE_NAME
+
+
 def test_dialog():
     subprocess.run([sys.executable, '-B', str(ROOT / 'tests/test_dialog.py')], check=True)
 

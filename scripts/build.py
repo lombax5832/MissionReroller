@@ -1,7 +1,10 @@
 """Package the Mission Reroller release: the docked dialog, seed search and publication.
 
 The version is the RELEASE_TAG environment variable (v1.2.3) when the release
-workflow builds a tag, and DEFAULT_VERSION otherwise.
+workflow builds a tag, and DEFAULT_VERSION otherwise. A build without a tag is a
+development package: its own GUID and name, so a mod manager lists it apart
+from the published mod. The module, global and log stay the release's, so only
+one of the two runs in game.
 """
 import json
 import os
@@ -15,8 +18,10 @@ import build_core
 import build_identity_probe as probe
 
 MODULE = build_core.RELEASE_MODULE
-GUID = build_core.RELEASE_GUID
-NAME = 'Mission Reroller'
+RELEASE_NAME = 'Mission Reroller'
+# The GUID and name of untagged (local) builds.
+DEVELOPMENT_GUID = '97a929ab-793e-49e8-b186-f39daa8984e8'
+DEVELOPMENT_NAME = 'Mission Reroller Dev'
 DEFAULT_VERSION = '0.32.0'
 # What mod managers show for the mod and its one option.
 DESCRIPTION = ('Rerolls the operations on a planet\'s war table until one has the missions, modifiers, '
@@ -37,7 +42,10 @@ def release_version(tag):
     return match.group(1)
 
 
+TAGGED = bool(os.environ.get('RELEASE_TAG'))
 VERSION = release_version(os.environ.get('RELEASE_TAG'))
+GUID = build_core.RELEASE_GUID if TAGGED else DEVELOPMENT_GUID
+NAME = RELEASE_NAME if TAGGED else DEVELOPMENT_NAME
 
 
 def source():
