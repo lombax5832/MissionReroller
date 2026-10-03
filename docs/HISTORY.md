@@ -5,7 +5,7 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
-**Not yet validated in game: v0.31.0 side objectives.** A SIDE
+**Validated in game: v0.31.0 side objectives.** A SIDE
 OBJECTIVES section requires or excludes side and tactical objectives per
 checked mission, or for the operation with `ANY MISSION`. Grilled with the
 user on 2026-10-02: briefing objectives only (no sub-steps), all required
@@ -38,6 +38,17 @@ than shown.
   modifiers_agree=... agree=...`; a search logs `LUA_SEARCH_OBJECTIVES` and,
   on a match, `LUA_SEARCH_MATCH_OBJECTIVES`. Test plan in
   [SIDE_OBJECTIVE_FILTER_TEST.md](SIDE_OBJECTIVE_FILTER_TEST.md).
+- **In game, 2026-10-02.** Eleven `SIDE_OBJECTIVE_CHECK` lines on planets
+  201 and 173 (Geological Survey, Retrieve Valuable Data, Launch ICBM,
+  Emergency Evacuation, Spread Democracy, Eradicate, Evacuate High-Value
+  Assets) all read `modifiers_agree=true agree=true`, repeats included. A
+  search `LUA_SEARCH_OBJECTIVES Launch ICBM=require Lidar Station exclude
+  SEAF Artillery` matched seed 787509373 row 27 after two seeds
+  (`LUA_SEARCH_MATCH_OBJECTIVES ... 59:[Launch ICBM/0, ..., Lidar
+  Station/3, Spore Spewer/3, Stalker Lair/3, Stalker Lair/3, ...]`),
+  published (`PUBLICATION_STATE_VERIFIED seed=787509373 row=27`), and the
+  hovered mission's game list agreed afterwards. Whether a level can drop
+  an objective was not checked.
 
 **Not yet validated in game: v0.30.0 planets under attack.** The release
 package of the invaded-planet change below, validated in game from a branch

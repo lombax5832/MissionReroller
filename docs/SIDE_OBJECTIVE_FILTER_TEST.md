@@ -2,10 +2,13 @@
 
 ## Status
 
-**Not yet validated in game.** The port matches the game's own code on
-2,400 emulated descriptors ([SIDE_OBJECTIVE_RESEARCH.md](SIDE_OBJECTIVE_RESEARCH.md)).
-Still to be checked in game: the world-modifier collection the search uses,
-the dialog, and a published match.
+**Validated in game on 2026-10-02** from the user's log
+(`Mission Reroller 0.31.0 docked dialog`, loader line
+`mods/ipodalexei/mission_reroller_experiment: loaded`): eleven
+`SIDE_OBJECTIVE_CHECK` lines with `modifiers_agree=true agree=true`, and a
+Launch ICBM search requiring Lidar Station and excluding SEAF Artillery that
+published seed 787509373 and whose hovered mission agreed with the game.
+Not checked: the in-mission map after a drop (step 6).
 
 ## What changed
 
