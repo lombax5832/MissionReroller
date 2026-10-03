@@ -6,6 +6,14 @@ GitHub release notes and, as one plain-text line each, the Nexus Mods
 changelog. How each change was
 made and tested is in the development log, [docs/HISTORY.md](docs/HISTORY.md).
 
+## v0.32.1 Proton fix
+
+- Fixed the reroll panel closing as soon as it opened when playing through
+  Proton on Linux or Steam Deck, after which the shortcut did nothing until
+  the game was restarted.
+- If the panel cannot read the planet's data it now says Planet data
+  unavailable and stays open, instead of shutting the mod down.
+
 ## v0.32.0 Enemy units without Know Your Constellation
 
 - Pointing at an enemy force now shows the units a mission with it can
