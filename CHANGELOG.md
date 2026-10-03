@@ -6,6 +6,20 @@ GitHub release notes and, as one plain-text line each, the Nexus Mods
 changelog. How each change was
 made and tested is in the development log, [docs/HISTORY.md](docs/HISTORY.md).
 
+## v0.31.0 Side objectives
+
+- New Side objectives section: require or exclude side objectives such as
+  Lidar Station, SEAF Artillery, Stalker Lair or Stratagem Jammer, per
+  checked mission or for the whole operation. A mission must have every
+  required one and none of the excluded ones.
+- Tactical objectives such as Terminate Illegal Broadcast and Upload Escape
+  Pod Data are in the same list.
+- The list shows only what each mission can draw on the viewed planet at the
+  map difficulty, with its number of side and tactical objectives. A row
+  that no longer fits is dimmed; point at it to read why.
+- The panel's rows sit a little closer together to make room for the new
+  section.
+
 ## v0.30.0 Planets under attack
 
 - Planets under attack (invasions) can now be rerolled. Searching on one
