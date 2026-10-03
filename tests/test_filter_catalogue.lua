@@ -139,20 +139,21 @@ end
 do
     local P=dofile(root..'/side_objective_prediction.lua')
     local lidar,artillery,sam,spewer,broadcast,pod=0xf1969b14,0x86cfeedb,0xc46443b2,0x62f023e9,0x4c10b12e,0xfdab51c3
-    local jammer,eggs,nest=0x6cac3f28,0xca82b4ab,0xb3dd50be
+    local jammer,eggs,nest,larva=0x6cac3f28,0xca82b4ab,0xb3dd50be,0x3209b101
     local records={[lidar]={id=lidar,minimum=0,maximum=0,environments={1,2,3,4}},[artillery]={id=artillery,minimum=0,maximum=0,environments={0,0,0,0}},
         [sam]={id=sam,minimum=0,maximum=0,environments={0,0,0,0}},[spewer]={id=spewer,minimum=2,maximum=0,environments={0,0,0,0}},
         [broadcast]={id=broadcast,minimum=0,maximum=0,environments={0,0,0,0}},[pod]={id=pod,minimum=0,maximum=0,environments={0,0,0,0}},
         [jammer]={id=jammer,minimum=0,maximum=0,environments={7,0,0,0}},[eggs]={id=eggs,minimum=0,maximum=0,environments={0,0,0,0}},
-        [nest]={id=nest,minimum=0,maximum=0,environments={0,0,0,0}}}
+        [nest]={id=nest,minimum=0,maximum=0,environments={0,0,0,0}},
+        [larva]={id=larva,minimum=0,maximum=0,environments={0,0,0,0}}}
     local function pool(list)
         local out={}
         for _,e in ipairs(list)do out[#out+1]={id=e[1],role=e[2],weight=e[3] or 1,minimum=0,maximum=1}end
         return out
     end
     local missions={
-        [0]={category=1,pool=pool({{lidar,3},{artillery,3},{spewer,3},{jammer,3},{broadcast,2},{pod,2},{eggs,3,0},{nest,3}})},
-        [59]={category=1,pool=pool({{sam,3},{artillery,3},{pod,2}})},
+        [0]={category=1,pool=pool({{lidar,3},{artillery,3},{spewer,3},{jammer,3},{broadcast,2},{pod,2},{eggs,3,0},{nest,3},{larva,2}})},
+        [59]={category=1,pool=pool({{sam,3},{artillery,3},{pod,2},{broadcast,3}})},
         [7]={category=2,pool=pool({{lidar,3}})},
     }
     local inputs={context=function(_,effect)return {modifiers={},banned=effect==2 and {[sam]=true} or {}}end,
@@ -164,7 +165,10 @@ do
     C.objectives(c,inputs,P,100,6,S.options)
     local icbm,eradicate,any=c.objective_groups[1],c.objective_groups[3],c.objective_groups[0]
     local function names(group)local out={};for _,row in ipairs(group.list)do out[#out+1]=row.name end;return table.concat(out,', ')end
-    assert(names(icbm)=='Lidar Station, SEAF Artillery, SEAF SAM Site, Shrieker Nest, Spore Spewer, Terminate Illegal Broadcast',names(icbm))
+    -- Side objectives first; Illegal Broadcast is side on type 59, so side here.
+    assert(names(icbm)=='Lidar Station, SEAF Artillery, SEAF SAM Site, Shrieker Nest, Spore Spewer, Terminate Illegal Broadcast, Retrieve Mutant Larva',names(icbm))
+    assert(icbm.list[6].role==3 and icbm.list[7].role==2 and icbm.list[1].role==3,'Roles')
+    assert(icbm.kinds[0].rows[broadcast]==2 and icbm.kinds[59].rows[broadcast]==3,'Per type, its own role')
     assert(names(eradicate)=='','Category scale 0 offers nothing')
     assert(any.set[lidar] and any.set[sam] and not any.set[jammer] and not any.set[pod] and not any.set[eggs],'Environment, configuration and weight')
     assert(icbm.kinds[0].side==3 and icbm.kinds[0].tactical==1 and icbm.kinds[7]==nil and eradicate.kinds[7].side==0)

@@ -11,6 +11,11 @@ local function model(section,items,extra)
     for k,v in pairs(extra or {})do m[k]=v end
     return m
 end
+-- The last n items are tactical objectives, the others side objectives.
+local function roles(items,n)
+    for i,item in ipairs(items)do item.role=i>#items-n and 'tactical' or 'side' end
+    return items
+end
 local three={{id=2,name='Geological Survey',selected=true},{id=5,name='Evacuate High-Value Assets'},{id=62,name='Neutralize Ground-to-Orbit Defenses'}}
 local function running(m)m.running=true;m.locked=true;m.ready=false;m.can_start=false;m.can_clear=false;m.step=2;return m end
 local cases={
@@ -31,7 +36,7 @@ local cases={
     {'time',model('time',{{id='time:any',name='Any time'},{id='time:day',name='Day',mode='chosen'},{id='time:night',name='Night'}},{time_note='HOLDS 2H 30M / DAY 15H 42M'}),11},
     {'running time',running(model('time',{{id='time:any',name='Any time'},{id='time:day',name='Day'},{id='time:night',name='Night',mode='chosen'}})),11},
     {'side objectives',model('objectives',list(22,'objective:2:'),{groups=three,objective_slots='4 SIDE + 1 TACTICAL'}),33},
-    {'many side objectives',model('objectives',list(32,'objective:0:'),{groups={{id=0,name='Any mission',selected=true}},objective_note='ANY MISSION OF THE OPERATION'}),41},
+    {'many side objectives',model('objectives',roles(list(28,'objective:0:'),12),{groups={{id=0,name='Any mission',selected=true}},objective_note='ANY MISSION OF THE OPERATION'}),37},
     {'no side objectives',model('objectives',{},{groups=three}),11},
     {'running side objectives',running(model('objectives',list(9,'objective:2:'),{groups=three})),20},
 }
@@ -78,9 +83,18 @@ assert(b.rows[1].h<38 and b.rows[1].h>=24,'Thirteen modifiers shrink their rows'
 -- Side objectives fill two columns and close up when there are many.
 b=P.layout(1920,1080,model('objectives',list(10,'objective:2:'),{groups=three}))
 assert(b.rows[1].h==32 and b.rows[6].x==b.rows[1].x+308 and b.rows[2].y==b.rows[1].y-35,'Side objectives in two columns')
-b=P.layout(1920,1080,model('objectives',list(32,'objective:2:'),{groups=three}))
+b=P.layout(1920,1080,model('objectives',roles(list(28,'objective:2:'),12),{groups=three}))
 assert(b.rows[1].y-b.rows[2].y<35 and b.rows[1].y-b.rows[2].y>=20,'Many side objectives close up')
-assert(not pcall(P.layout,1920,1080,model('objectives',list(33,'objective:2:'),{groups=three})),'At most 32 side objectives')
+assert(not pcall(P.layout,1920,1080,model('objectives',roles(list(33,'objective:2:'),12),{groups=three})),'At most 16 rows')
+-- Side objectives, then tactical ones, each a labelled block of two columns.
+b=P.layout(1920,1080,model('objectives',roles(list(7,'objective:2:'),3),{groups=three}))
+assert(#b.labels==2 and b.labels[1].text=='SIDE' and b.labels[2].text=='TACTICAL','Two labels')
+assert(b.rows[3].x==b.rows[1].x+308 and b.rows[2].y==b.rows[1].y-35,'Side objectives in two columns')
+assert(b.rows[5].x==b.rows[1].x and b.rows[7].x==b.rows[5].x+308,'Tactical objectives start a new block')
+assert(b.rows[5].y<b.rows[2].y-35,'The tactical label sits between the blocks')
+b=P.layout(1920,1080,model('objectives',roles(list(3,'objective:2:'),3),{groups=three}))
+assert(#b.labels==1 and b.labels[1].text=='TACTICAL','Only tactical objectives')
+b=P.layout(1920,1080,model('missions',list(4)));assert(#b.labels==0,'Missions have no labels')
 -- The header after an open section follows its last row by the same space,
 -- unless the enemy section has note lines to show.
 local function gap(m)
@@ -329,4 +343,13 @@ for _,features in ipairs({'none','failing','broken metrics'})do
     assert(level.pos[1]<1216+25+610-#level.value*level.size*0.5 and level.pos[1]>1216+25+305,'Estimated widths keep text inside')
     panel:clear()
 end
-print('docked panel: layouts at four resolutions, retained updates, section switch, enemy tooltips inside the window and optional primitives: passed')
+-- The side-objective section labels its two blocks.
+do
+    local r=engine('full');local panel=P.new(r.e)
+    local items=roles(list(5,'objective:2:','Objective'),2);items[1].mode='require';items[4].mode='exclude'
+    panel:show({},{},face,nowhere,model('objectives',items,{groups=three,objective_slots='3 SIDE + 1 TACTICAL'}))
+    local side,tactical=r.find('SIDE'),r.find('TACTICAL')
+    assert(side and tactical and side.pos[2]>tactical.pos[2],'SIDE above TACTICAL')
+    assert(r.find('3 SIDE + 1 TACTICAL') and r.find('OBJECTIVE 5') and r.find('SIDE OBJECTIVES'))
+end
+print('docked panel: layouts at four resolutions, retained updates, section switch, side and tactical blocks, enemy tooltips inside the window and optional primitives: passed')

@@ -16,7 +16,7 @@ function P.layout(width,height,model)
     assert(width>=640 and height>=480,'Viewport too small')
     model=model or {}
     local s=math.min(width/1920,height/1080)
-    local b={s=s,w=W*s,h=H*s,targets={},headers={},rows={},groups={},pager={}}
+    local b={s=s,w=W*s,h=H*s,targets={},headers={},rows={},groups={},pager={},labels={}}
     -- Hang off the real right edge, also on screens wider than 16:9.
     b.x,b.y=width-(EDGE+W)*s,(height-H*s)/2
     local function target(id,left,top,w,h,enabled)
@@ -48,13 +48,27 @@ function P.layout(width,height,model)
             local last=section.id=='enemies' and first+18 or first-8
             if #items>0 and (section.id=='missions' or section.id=='objectives') then
                 -- Two columns filled downwards, closer together when long.
-                local rows=math.ceil(#items/2)
-                local pitch=math.min(35,math.floor((FOOT-14-below-first)/rows))
-                assert(rows<=(section.id=='missions' and 12 or 16) and pitch>=20,'Too many rows in one section')
+                -- Side objectives and tactical ones are two labelled blocks.
+                local blocks,label={},section.id=='objectives' and 22 or 0
                 for n,item in ipairs(items)do
-                    b.rows[n]=target(item.id,LEFT+math.floor((n-1)/rows)*308,first+((n-1)%rows)*pitch,302,pitch-3,usable(item))
+                    local role=section.id=='objectives' and (item.role or 'side') or nil
+                    if #blocks==0 or blocks[#blocks].role~=role then blocks[#blocks+1]={role=role,first=n,count=0}end
+                    blocks[#blocks].count=blocks[#blocks].count+1
                 end
-                last=first+rows*pitch-3
+                local rows=0
+                for _,block in ipairs(blocks)do block.rows=math.ceil(block.count/2);rows=rows+block.rows end
+                local pitch=math.min(35,math.floor((FOOT-14-below-first-label*#blocks)/rows))
+                assert(rows<=(section.id=='missions' and 12 or 16) and pitch>=20,'Too many rows in one section')
+                local y=first
+                for _,block in ipairs(blocks)do
+                    if block.role then b.labels[#b.labels+1]={text=block.role=='side' and 'SIDE' or 'TACTICAL',top=y};y=y+label end
+                    for i=0,block.count-1 do
+                        local n=block.first+i
+                        b.rows[n]=target(items[n].id,LEFT+math.floor(i/block.rows)*308,y+(i%block.rows)*pitch,302,pitch-3,usable(items[n]))
+                    end
+                    y=y+block.rows*pitch
+                end
+                last=y-3
             elseif #items>0 then
                 local h=math.min(38,math.floor((FOOT-14-below-first-(#items-1)*4)/#items))
                 for n,item in ipairs(items)do b.rows[n]=target(item.id,LEFT,first+(n-1)*(h+4),INNER,h,usable(item))end
@@ -92,7 +106,7 @@ function P.new(e)
         local items,groups,summaries=model.items or {},model.groups or {},model.summaries or {}
         local key={width,height,face.font,face.material,face.atlas,tostring(model.section),model.page or 1,model.pages or 1}
         for _,group in ipairs(groups)do key[#key+1]='group:'..group.id..':'..group.name end
-        for _,item in ipairs(items)do key[#key+1]=tostring(item.id)..':'..item.name end
+        for _,item in ipairs(items)do key[#key+1]=tostring(item.id)..':'..item.name..':'..tostring(item.role) end
         key=table.concat(key,'|')
         if target~=world or key~=identity then self:clear() end
         local font,mat=e.IdString64.from_hex(face.font),e.IdString64.from_hex(face.material)
@@ -347,6 +361,7 @@ function P.new(e)
                     rect('group'..n,t.x,t.y,t.w,t.h,992,chosen and white or glass(hover==t.id and 51 or 18))
                     text('group'..n,groups[n].name,t.x+t.w/2,t.y+t.h/2,15,chosen and ink or white,'centre',t.w-12*s)
                 end
+                for n,l in ipairs(b.labels)do text('role'..n,l.text,left+2*s,at(l.top+9),14,muted)end
                 local note=empty and '' or model.objective_slots or model.objective_note or ''
                 local used_width=text('meta_right',note,right-2*s,at(b.meta),15,muted,'right',300*s)
                 text('meta',hint or empty or 'CLICK TO CYCLE: ANY, REQUIRED, EXCLUDED',left+2*s,at(b.meta),15,hint and white or muted,nil,INNER*s-used_width-18*s)

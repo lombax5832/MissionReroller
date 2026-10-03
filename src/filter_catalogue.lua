@@ -146,7 +146,8 @@ end
 -- the side (role 3) and tactical (role 2) entries of its pool that this
 -- difficulty, the configuration, the world modifiers of at least one
 -- operation here and a biome environment the planet can give allow. A row
--- is a title (Prediction.rows). Group i covers the eligible mission types of
+-- is a title (Prediction.rows) with its role, 3 when any mission type of
+-- the group draws it as a side objective, else 2. Group i covers the eligible mission types of
 -- family i, group 0 every one. Each group keeps, per mission type, its side
 -- and tactical slots and the role of each row it offers, for C.possible.
 -- The catalogue changes only after every input decoded.
@@ -185,7 +186,10 @@ function C.objectives(catalogue,inputs,Prediction,planet,difficulty,options)
                     for _,target in ipairs({group,groups[0]})do
                         if not target.set[row]then
                             target.set[row]=true
-                            target.list[#target.list+1]={id=row,name=Prediction.names[row]}
+                            target.list[#target.list+1]={id=row,name=Prediction.names[row],role=e.role}
+                        elseif e.role==3 then
+                            -- A side objective of one type is listed as side.
+                            for _,option in ipairs(target.list)do if option.id==row then option.role=3 end end
                         end
                     end
                 end
@@ -203,7 +207,10 @@ function C.objectives(catalogue,inputs,Prediction,planet,difficulty,options)
         end
     end
     for kind in pairs(catalogue.native)do if not named[kind]then offer(groups[0],kind)end end
-    for _,group in pairs(groups)do table.sort(group.list,function(a,b)return a.name<b.name end)end
+    -- Side objectives first, then tactical ones, each by name.
+    for _,group in pairs(groups)do
+        table.sort(group.list,function(a,b)if a.role~=b.role then return a.role>b.role end;return a.name<b.name end)
+    end
     catalogue.objective_groups=groups
 end
 -- Whether one mission type of a group can hold every required row and still

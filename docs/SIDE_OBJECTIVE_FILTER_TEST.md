@@ -40,7 +40,9 @@ Difficulty 6 or higher on a Terminid or Automaton planet.
 2. **Panel.** Press F7 and open SIDE OBJECTIVES. With no mission checked the
    tab reads `ANY MISSION` and the line under it `ANY MISSION OF THE
    OPERATION`. Check Launch ICBM: the tab changes to Launch ICBM and the
-   line reads `3 SIDE + 1 TACTICAL` (4 at difficulty 8 to 10).
+   line reads `3 SIDE + 1 TACTICAL` (4 at difficulty 8 to 10). The rows
+   stand in two labelled blocks, SIDE (Lidar Station, SEAF Artillery, ...)
+   and TACTICAL below it (Upload Escape Pod Data, ...).
 3. **Require and exclude.** With Launch ICBM checked, click Lidar Station
    once (yellow, REQUIRED) and SEAF Artillery twice (red, EXCLUDED). The
    section header reads `2 RULES`. Press REROLL OPERATIONS.

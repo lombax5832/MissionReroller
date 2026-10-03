@@ -5,6 +5,15 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
+**Not yet validated in game: side and tactical blocks.** After the v0.31.0
+test the user asked to tell side objectives from tactical ones. The SIDE
+OBJECTIVES section now lists side objectives under a SIDE label and
+tactical ones under TACTICAL, each block in two columns
+(`src/docked_panel.lua`). `C.objectives` gives each row its role: side when
+any mission type of the group draws it as a side objective (Mobile Radar
+and Terminate Illegal Broadcast are side on some types and tactical on
+others), else tactical, and sorts side rows first. Matching is unchanged.
+
 **Validated in game: v0.31.0 side objectives.** A SIDE
 OBJECTIVES section requires or excludes side and tactical objectives per
 checked mission, or for the operation with `ANY MISSION`. Grilled with the
