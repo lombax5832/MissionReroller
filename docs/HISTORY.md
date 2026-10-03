@@ -5,6 +5,22 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
+**Validated in game: bundled Know Your Constellation roster.**
+Know Your Constellation v4.0 shipped without the `EnemyIntelligence.roster`
+export the v0.28.0 tooltips read, so players saw no units. With
+CowboyBingus's permission the release now carries that mod's v4.0
+`roster.lua` and `roster_data.lua` unchanged in
+`src/vendor/know_your_constellation` (upstream `662609f`, pinned by git
+blob ID in `tests/test_bundled_roster.py`). `src/bundled_roster.lua` wraps
+them as roster api 1, with Know Your Constellation's `from_native` tag
+mapping and English unit names. `F.roster` in `src/unit_forecast.lua` takes
+an installed export first and falls back to the bundled roster when that
+mod is missing, has no export or has disabled itself, still guarded by the
+data's build matching `src/offsets.lua`. The log says which:
+`KYC_ROSTER ready bundled v4.0 build 25480438 (<why not installed>)`.
+Test plan: [BUNDLED_ROSTER_TEST.md](BUNDLED_ROSTER_TEST.md). The user
+confirmed it working in game on 2026-10-03; no log lines were quoted.
+
 **Validated in game: side and tactical blocks.** After the v0.31.0
 test the user asked to tell side objectives from tactical ones. The SIDE
 OBJECTIVES section now lists side objectives under a SIDE label and

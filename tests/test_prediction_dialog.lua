@@ -186,11 +186,14 @@ assert(tabs()=='Geological Survey* | Spread Democracy' and last_model.group==2 a
 assert(last_model.items[1].name=='Constellation 2 *' and last_model.items[2].name=='Constellation 4 *'
     and last_model.items[1].title=='Constellation 2','The game tag is not displayed; tags a map stamp can add are marked')
 do
-    -- Without Know Your Constellation a marked row's tooltip is its note alone.
+    -- Without Know Your Constellation the bundled copy of its roster gives the units.
     local function logged(prefix)for _,line in ipairs(logs)do if line:sub(1,#prefix)==prefix then return line end end end
-    assert(logged('KYC_ROSTER off: not installed'),'The first frame logs the missing roster')
+    assert(logged('KYC_ROSTER ready bundled v4.0 build 25480438 (not installed)'),'The first frame logs the bundled roster')
     local tip=assert(last_model.tooltip(last_model.items[1]))
-    assert(tip.title=='Constellation 2' and tip.note and not tip.large,'A note-only tooltip')
+    assert(tip.title=='Constellation 2' and tip.note and #tip.large>0 and #tip.small>0
+        and tip.credit=='Unit data: Know Your Constellation','Units from the bundled roster')
+    local function names(t)local l={}for i,e in ipairs(t.large)do l[i]=e.name..'='..e.ticks end;return table.concat(l,',')..'|'..table.concat(t.small,',')end
+    local bundled=names(assert(last_model.tooltip(last_model.items[2])))
     -- With it, the mission's units through its exported roster, in its tag IDs.
     local asked
     EnemyIntelligence={revision='v4.0',status='ready',roster={api=1,build=25480438,
@@ -201,9 +204,10 @@ do
     assert(tip.large[1].name=='Bile Titans' and tip.large[1].ticks==7 and tip.small[2]=='Scavengers' and tip.with=='Predator Strain')
     assert(table.concat(asked.snapshot.tags,',')=='8,3' and asked.snapshot.faction==2 and asked.snapshot.difficulty==10 and asked.zone[5]==2)
     assert(logged('KYC_ROSTER ready revision v4.0 build 25480438'))
-    -- Its build check failing hides the units; a roster that raises turns them off.
+    -- Its build check failing leaves the bundled roster; a roster that raises turns the units off.
     EnemyIntelligence.status='disabled: Unsupported game module'
-    assert(not last_model.tooltip(last_model.items[2]).large and logged('KYC_ROSTER off: revision v4.0 disabled: Unsupported game module'))
+    assert(names(last_model.tooltip(last_model.items[2]))==bundled,'The bundled units again')
+    assert(logged('KYC_ROSTER ready bundled v4.0 build 25480438 (revision v4.0 disabled: Unsupported game module)'))
     EnemyIntelligence.status='ready';EnemyIntelligence.roster.forecast=function()error('broken table')end
     assert(not last_model.tooltip(last_model.items[1]).large and logged('KYC_ROSTER_FAILED'))
     EnemyIntelligence.roster.forecast=function()return {large={},small={}}end

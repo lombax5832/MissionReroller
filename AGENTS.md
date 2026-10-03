@@ -76,6 +76,7 @@ replaces the old one.
 ```
 src/                         library modules and runtimes, joined at build time
 src/offsets.lua              every build-specific address and offset (docs/UPDATING.md)
+src/vendor/                  third-party files kept byte for byte, pinned by a test
 src/mods/ipodalexei/         mission_reroller.lua, the inert core the entry embeds
 scripts/build.py             release: NAME, DEFAULT_VERSION, manifest text; MODULE/GUID from build_core
 scripts/build_*.py           other configurations of the release source, listed in scripts/README.md

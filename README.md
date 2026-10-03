@@ -62,12 +62,14 @@ the same GUID, so your manager treats it as the same mod.
      none is checked. Each constellation cycles ANY, ACCEPTED, EXCLUDED. The
      list shows only what that mission can draw at the map difficulty, named
      as Know Your Constellation names them. A `*` marks a constellation the
-     map can still add after the reroll; point at it to read why. With a
-     [Know Your Constellation](https://github.com/CowboyBingus/KnowYourConstellation)
-     version that shares its roster installed, pointing at any constellation
-     shows the enemies a mission would have with it and the planet's
-     always-present forces: large enemies with their spawn-rate meter and the
-     others most common first, from that mod's own forecast.
+     map can still add after the reroll; point at it to read why. Pointing
+     at any constellation shows the enemies a mission would have with it and
+     the planet's always-present forces: large enemies with their spawn-rate
+     meter and the others most common first, from
+     [Know Your Constellation](https://github.com/CowboyBingus/KnowYourConstellation)'s
+     roster. An installed version of that mod that shares its roster is used
+     first; otherwise Mission Reroller uses the copy of its v4.0 roster it
+     bundles.
    - **Side objectives.** One button per checked mission, or `ANY MISSION`
      when none is checked. Each side objective, such as Lidar Station or
      SEAF Artillery, cycles ANY, REQUIRED, EXCLUDED. The mission must have
@@ -199,10 +201,14 @@ was allowed to write anything.
   [operation layout](docs/OPERATION_LAYOUT.md).
 - [Constellation research](docs/CONSTELLATION_RESEARCH.md) and the
   [constellation filter test](docs/CONSTELLATION_FILTER_TEST.md);
-  [Know Your Constellation tooltip test](docs/KYC_TOOLTIP_TEST.md).
+  [Know Your Constellation tooltip test](docs/KYC_TOOLTIP_TEST.md) and the
+  [bundled roster test](docs/BUNDLED_ROSTER_TEST.md).
 - [Hosting a lobby](docs/LOBBY_HOST_TEST.md) and the
   [docked dialog](docs/DOCKED_DIALOG_TEST.md).
 
 The unit tooltips call the roster that an installed Know Your Constellation
-exports; the reference Know Your Constellation checkout is read by one test.
-None of its source, data or artwork is embedded or redistributed here.
+exports, or else the copy of Know Your Constellation v4.0's `roster.lua` and
+`roster_data.lua` in `src/vendor/know_your_constellation`, included with
+CowboyBingus's permission. No other part of that mod's source, data or
+artwork is embedded or redistributed here; the reference checkout is read by
+one test.

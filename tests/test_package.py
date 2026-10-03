@@ -69,6 +69,10 @@ def test_offsets():
     subprocess.run([sys.executable, '-B', str(ROOT / 'tests/test_offsets.py')], check=True)
 
 
+def test_bundled_roster():
+    subprocess.run([sys.executable, '-B', str(ROOT / 'tests/test_bundled_roster.py')], check=True)
+
+
 def test_release_notes():
     subprocess.run([sys.executable, '-B', str(ROOT / 'tests/test_release_notes.py')], check=True)
 
@@ -79,5 +83,6 @@ if __name__ == '__main__':
     test_offsets()
     test_release_notes()
     test_runtime_host()
+    test_bundled_roster()
     test_dialog()
     print('test_package: passed')

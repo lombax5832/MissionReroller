@@ -1,5 +1,10 @@
 # Know Your Constellation tooltip test
 
+Since 2026-10-03 the release bundles Know Your Constellation's roster as a
+fallback for when no installed copy exports one;
+[BUNDLED_ROSTER_TEST.md](BUNDLED_ROSTER_TEST.md) supersedes step 8 and the
+`KYC_ROSTER off` log lines below.
+
 What changed, and what to check in game before the change ships:
 
 - Constellation rows use Know Your Constellation v4.0's names

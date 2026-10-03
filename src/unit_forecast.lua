@@ -1,15 +1,16 @@
 -- Tooltips of the enemy rows. Their units come from Know Your
 -- Constellation's own roster (EnemyIntelligence.roster, api 1) when that mod
--- runs for this game build; nothing of it is copied here. Without it only the
--- map-stamp note of a stamped tag is left. Pure: the dialog runtime hands in
--- the globals, the catalogue and the row.
+-- runs for this game build, else from the copy of its v4.0 roster bundled
+-- with CowboyBingus's permission (src/bundled_roster.lua). Without either only
+-- the map-stamp note of a stamped tag is left. Pure: the dialog runtime hands
+-- in the globals, the bundled roster, the catalogue and the row.
 local O=...
 local F={}
 F.STAMP_NOTE='* The map can add this after a reroll, so excluding it is not guaranteed'
 F.FOOTER='Possible encounters. Spawns are not guaranteed.'
 F.CREDIT='Unit data: Know Your Constellation'
--- The roster to use, or nil; and the reason, for the log.
-function F.roster(globals)
+-- The installed mod's roster, or nil; and the reason, for the log.
+local function installed(globals)
     local state=rawget(globals,'EnemyIntelligence')
     if type(state)~='table' then return nil,'not installed' end
     local revision='revision '..tostring(rawget(state,'revision'))
@@ -23,6 +24,16 @@ function F.roster(globals)
     if tostring(r.build)~=tostring(O.build)then return nil,revision..' roster build '..tostring(r.build)..' is not game build '..O.build end
     return r,revision..' build '..tostring(r.build)
 end
+-- The roster to use, or nil; and the reason, for the log. The installed
+-- mod's comes first; the bundled one only for the build its data is from.
+function F.roster(globals,bundled)
+    local r,why=installed(globals)
+    if r or not bundled then return r,why end
+    if tostring(bundled.build)~=tostring(O.build)then
+        return nil,why..'; bundled roster build '..tostring(bundled.build)..' is not game build '..O.build
+    end
+    return bundled,'bundled '..bundled.revision..' build '..tostring(bundled.build)..' ('..why..')'
+end
 -- A forecast's units, checked: names, and 1 to 10 meter ticks.
 local function units(report)
     assert(type(report)=='table' and type(report.large)=='table' and type(report.small)=='table','Invalid forecast')
@@ -35,12 +46,12 @@ local function units(report)
     for i,name in ipairs(report.small)do assert(type(name)=='string','Invalid enemy name');small[i]=name end
     return large,small
 end
--- new(emit,globals): one per dialog. tip(item,catalogue,forced) is the
+-- new(emit,globals,bundled): one per dialog. tip(item,catalogue,forced) is the
 -- tooltip of an enemy row, or nil: {title, with, large={{name,ticks}},
 -- small={name}, footer, note, credit}, every part but the title optional. A roster
 -- that fails turns unit tooltips off for the session; an input that cannot be
 -- read leaves only that tooltip without units.
-function F.new(emit,globals)
+function F.new(emit,globals,bundled)
     local self={}
     local said,broken,key,last
     local function say(line)if line~=said then said=line;emit(line)end end
@@ -48,7 +59,7 @@ function F.new(emit,globals)
     -- this mod's first frame.
     function self:roster()
         if broken then return nil end
-        local r,why=F.roster(globals)
+        local r,why=F.roster(globals,bundled)
         say('KYC_ROSTER '..(r and 'ready ' or 'off: ')..why)
         return r
     end
