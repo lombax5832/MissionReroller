@@ -109,8 +109,12 @@ def source(search=False,publish=False,dialog=False,version=None):
         for name,file in [('Panel','docked_panel.lua'),('Hint','keybind_hint.lua'),('Binding','mod_binding.lua'),('EscapeGate','escape_gate.lua'),('Compatibility','mission_compatibility.lua'),('FilterCatalogue','filter_catalogue.lua'),('FilterRequest','filter_request.lua'),('make_gate','window_mouse_gate.lua'),('make_router','modal_pointer.lua'),('make_cursor','window_cursor.lua'),
                           ('Constellations','constellation_prediction.lua'),('make_constellation_inputs','constellation_inputs.lua'),
                           ('SideObjectives','side_objective_prediction.lua'),('make_objective_inputs','side_objective_inputs.lua'),
-                          ('UnitForecast','unit_forecast.lua')]:
+                          ('UnitForecast','unit_forecast.lua'),
+                          ('KycRoster','vendor/know_your_constellation/roster.lua'),
+                          ('KycRosterData','vendor/know_your_constellation/roster_data.lua')]:
             library(name,file)
+        # Know Your Constellation's roster, bundled with CowboyBingus's permission.
+        derived('BundledRoster','(function(...)\n'+(root/'bundled_roster.lua').read_text()+'\nend)(O,KycRoster,KycRosterData)')
         planet.update({'constellation_inputs':'make_constellation_inputs','catalogue':'FilterCatalogue',
                        'compatibility':'Compatibility','options':'Search.options','labels':'Constellations.names',
                        'objective_inputs':'make_objective_inputs','objectives':'SideObjectives'})
