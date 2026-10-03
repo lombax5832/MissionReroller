@@ -237,4 +237,52 @@ assert(m.status=='Choose what the operation must contain','Any time ignores the 
 edit(t,'time:day',2);assert(t:rule_count()==2)
 edit(t,'clear');assert(t.time==nil and t:rule_count()==0,'Clear resets the time of day')
 assert(not pcall(C.validate,terminids,{},{},nil,'dusk'),'Only day or night')
-print('Filter request: toggles, conflicts, groups, pruning, pages, request copy, status precedence and time of day passed')
+-- Side objectives: per checked mission or the operation, cycling any,
+-- required, excluded; a mode the catalogue rules out is skipped.
+do
+    local lidar,artillery,sam,broadcast=0xf1969b14,0x86cfeedb,0xc46443b2,0x4c10b12e
+    local function group(kinds,...)
+        local g={list={},set={},kinds=kinds}
+        for i,id in ipairs({...})do g.list[i]={id=id,name='Objective '..id};g.set[id]=true end
+        return g
+    end
+    local survey={[22]={side=1,tactical=1,rows={[lidar]=3,[artillery]=3,[broadcast]=2}}}
+    local c={faction=2,slots=3,compatibility=nil,missions={{id=2,name='Survey'},{id=4,name='Democracy'}},mission_set={[2]=true,[4]=true},
+        modifiers={},modifier_set={},forced={},constellation_groups={[0]=offered(),[2]=offered(),[4]=offered()},
+        objective_groups={[0]=group({},lidar,artillery,sam,broadcast),[2]=group(survey,lidar,artillery,broadcast),
+            [4]=group({[28]={side=0,tactical=0,rows={}}})}}
+    local o=R.new(options,C,labels)
+    local function act(...)for _,a in ipairs({...})do assert(o:toggle(a,c)==true,a)end end
+    o:navigate('section:objectives')
+    local m=o:model(c,fresh())
+    assert(m.section=='objectives' and #m.groups==1 and m.groups[1].name=='Any mission' and #m.items==4)
+    assert(m.objective_note=='ANY MISSION OF THE OPERATION' and m.summaries.objectives=='Any')
+    act('objective:0:'..lidar,'objective:0:'..sam,'objective:0:'..sam)
+    local request=o:to_request(nil,10)
+    assert(request.objectives.groups[0][lidar]=='require' and request.objectives.groups[0][sam]=='exclude')
+    assert(o:rule_count()==2 and o:model(c,fresh()).summaries.objectives=='2 rules' and o:model(c,fresh()).can_start)
+    act('objective:0:'..sam);assert(o.objectives[0][sam]==nil,'Excluded goes back to any')
+    -- Checking a mission moves the rules to its own group.
+    act(2);m=o:model(c,fresh())
+    assert(o.objectives[0]==nil and m.group==2 and m.objective_slots=='1 SIDE + 1 TACTICAL' and m.objective_note==nil)
+    act('objective:2:'..lidar)
+    -- One side slot: Artillery can no longer be required, only excluded.
+    m=o:model(c,fresh())
+    for _,item in ipairs(m.items)do
+        if item.id=='objective:2:'..artillery then assert(item.enabled and item.reason:find('Too many'),item.reason)end
+    end
+    act('objective:2:'..artillery);assert(o.objectives[2][artillery]=='exclude','Skips the impossible requirement')
+    act('objective:2:'..broadcast);assert(o.objectives[2][broadcast]=='require','Tactical slot is separate')
+    o:validate(c)
+    request=o:to_request(nil,10)
+    assert(request.objectives.groups[2][lidar]=='require' and request.objectives.groups[2][artillery]=='exclude')
+    -- A fresh catalogue drops rows it no longer offers; unchecking drops the group.
+    local smaller={};for k,v in pairs(c)do smaller[k]=v end
+    smaller.objective_groups={[0]=group({}),[2]=group(survey,lidar),[4]=group({})}
+    assert(o:prune(smaller) and o.objectives[2][lidar]=='require' and o.objectives[2][artillery]==nil)
+    act(2,2);assert(next(o.objectives)==nil,'Unchecked mission loses its side objectives')
+    -- A mission without side objectives shows none.
+    act(4);o.group_choice=4;m=o:model(c,fresh());assert(#m.items==0 and m.objective_slots=='0 SIDE + 0 TACTICAL')
+    act('clear');assert(next(o.objectives)==nil and o:rule_count()==0)
+end
+print('Filter request: toggles, conflicts, groups, pruning, pages, request copy, status precedence, side objectives and time of day passed')

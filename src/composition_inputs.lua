@@ -98,6 +98,12 @@ return function(read,u,pointer,game,board,config,effects,eligible,make_environme
         return candidates,weights,rules
     end
     local environments=make_environments and make_environments(read,u,pointer,game,board,effects,api.biome_definition)
+    -- The planet's active world modifiers for an operation's effects, as
+    -- definitions and hashes in native order; nil in alternate generation.
+    function api.world_modifiers(planet,effect_id)
+        local _,definitions,hashes=assert(environments,'Environment decoder unavailable')(planet,effect_id)
+        return definitions,hashes
+    end
     function api.template(index)
         assert(index>=0 and index<25,'Invalid operation template index')
         local at=game+O.rva.templates+index*O.template.size

@@ -76,6 +76,8 @@ for _,name in ipairs({'on_existing_match','on_search_match','advance_live_public
 assert(publication.advance_live_publication('tick',0)==false,'Nothing to publish')
 local constellations=factory('constellation_runtime.lua',runtime,{})(fake_host(config),lib,{})
 assert(type(constellations.bind_constellations)=='function' and type(constellations.observe_constellations)=='function')
+local objectives=factory('side_objective_runtime.lua',runtime,{})(fake_host(config),lib,{})
+assert(type(objectives.bind_objectives)=='function' and type(objectives.observe_objectives)=='function')
 local search_hooks={}
 local search=factory('prediction_search_runtime.lua',runtime,{})(fake_host(config),lib,search_hooks)
 assert(last():find('; test outcome',1,true),last())
@@ -95,7 +97,7 @@ assert(type(identity.tick)=='function')
 assert(last()=='Mission Reroller 9.9.9 test build; test mode; test key; background progress enabled',last())
 assert(globals.shutdown()==4 and closed and calls[1]=='release shutdown' and calls[2]=='shutdown')
 -- Every runtime waits for the native handles; each factory registered once.
-assert(#binders==5,#binders)
+assert(#binders==6,#binders)
 -- Without the search the capture slices on the adapter's timer.
 local timed={}
 for _,bind in ipairs(binders)do bind({api={time=function()timed[#timed+1]=true;return 0 end}})end

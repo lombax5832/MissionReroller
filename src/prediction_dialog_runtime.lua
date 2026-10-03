@@ -39,7 +39,7 @@ do
     -- options or ESC menu above it.
     local DEFAULT_KEY=0x76
     local screens_logged
-    local tag_error
+    local tag_error,objective_error
     -- A city or megafactory appears on the map as its operation. The one
     -- under the cursor when the dialog opens, or else the selected one,
     -- limits the dialog and the search to that city.
@@ -143,15 +143,16 @@ do
         return s,d,view
     end
     local function catalogue_for(s,d,within,only)
-        -- Mission and modifier filters survive a constellation input failure.
-        local result,err=Planet.bind(read,u,api.pointer,game,s.board,s.planet).catalogue(s,d,
+        -- Mission and modifier filters survive a constellation or side-objective input failure.
+        local result,err,failure=Planet.bind(read,u,api.pointer,game,s.board,s.planet).catalogue(s,d,
             only or within and function(row)return Search.in_scope(row,within)end)
         if err and tostring(err)~=tag_error then tag_error=tostring(err);emit('CONSTELLATION_CATALOGUE_BLOCKED '..tag_error)end
+        if failure and tostring(failure)~=objective_error then objective_error=tostring(failure);emit('SIDE_OBJECTIVE_CATALOGUE_BLOCKED '..objective_error)end
         return result
     end
     validate_search_request=function(s,request)
         FilterCatalogue.validate(catalogue_for(s,request.difficulty,Search.scope(request.scope)),request.required,request.modifiers,
-            request.constellations,request.time,request.excluded)
+            request.constellations,request.time,request.excluded,request.objectives)
     end
     -- Day and night on the viewed planet while a time of day is chosen
     -- (src/day_night.lua), refreshed once a second: the buffer note, or why
@@ -372,6 +373,6 @@ do
         stingray.Script.set_temp_byte_count(temp);assert(ok,err)
     end
     M.dialog_enabled=true
-    emit('Mission filters: F7 or the Reroll operations binding on the MODS tab, on the galactic map only; Escape closes; native cursor; docked panel; key hint beside BACK '..(HINT_WIDGET and 'at widget '..HINT_WIDGET or 'disabled')..'; alone or hosting a lobby; all checked families in one operation; map difficulty; constellations per mission; repeat searches allowed')
+    emit('Mission filters: F7 or the Reroll operations binding on the MODS tab, on the galactic map only; Escape closes; native cursor; docked panel; key hint beside BACK '..(HINT_WIDGET and 'at widget '..HINT_WIDGET or 'disabled')..'; alone or hosting a lobby; all checked families in one operation; map difficulty; constellations and side objectives per mission; repeat searches allowed')
 end
 return {dialog_tick=dialog_tick,dialog_release=dialog_release,validate_search_request=validate_search_request}

@@ -26,8 +26,8 @@ def main():
         'live': ({'search': True, 'publish': True},
                  ['live_publication_runtime.lua', 'prediction_search_runtime.lua', 'identity_probe_runtime.lua']),
         'release': ({'search': True, 'publish': True, 'dialog': True, 'version': build.VERSION},
-                    ['live_publication_runtime.lua', 'constellation_runtime.lua', 'prediction_search_runtime.lua',
-                     'prediction_dialog_runtime.lua', 'identity_probe_runtime.lua']),
+                    ['live_publication_runtime.lua', 'constellation_runtime.lua', 'side_objective_runtime.lua',
+                     'prediction_search_runtime.lua', 'prediction_dialog_runtime.lua', 'identity_probe_runtime.lua']),
     }
     for name, (options, runtimes) in variants.items():
         source = probe.source(**options)
@@ -41,8 +41,8 @@ def main():
         assert ((SRC / 'guarded_write.lua').read_text().encode() in source) == writes, name + ': guarded write text'
         for file in runtimes:
             assert source.count(wrapped(file, RUNTIME)) == 1, name + ': ' + file + ' text changed'
-        for file in {'live_publication_runtime.lua', 'constellation_runtime.lua', 'prediction_search_runtime.lua',
-                     'prediction_dialog_runtime.lua'} - set(runtimes):
+        for file in {'live_publication_runtime.lua', 'constellation_runtime.lua', 'side_objective_runtime.lua',
+                     'prediction_search_runtime.lua', 'prediction_dialog_runtime.lua'} - set(runtimes):
             assert (SRC / file).read_text().encode() not in source, name + ' carries ' + file
         # No chunk-wide forward declarations for the runtimes to assign.
         assert b'local on_prediction_ready,advance_prediction_search,on_search_match' not in source

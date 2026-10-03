@@ -80,6 +80,14 @@ code={
     difficulty_tables={module='game',rva=0x1758000,size=2542,sha256='024764812851f88c0b534aeb8ef0525817bdf790823d83eb7b3dc2cab713e1cb',from='1758000, the difficulty rows and the constellation fallback, src/constellation_prediction.lua'},
     enemy_tag_order={module='game',rva=0x177dd80,size=277,sha256='90d75e1e339e79ca48f8194313a9e2703301843e8b385941ef595d942fb626fd',from='177dd80, the enemy-tag resolution order, src/constellation_prediction.lua'},
     mission_exclusions={module='game',rva=0x177deb0,size=580,sha256='407ecedd04478500d5d7d98137eda180ac321215a451e860094860acac9974a3',from='177deb0, level-owned constellation inputs and mission exclusions, src/constellation_prediction.lua'},
+    -- The side objectives of a mission descriptor (docs/SIDE_OBJECTIVE_RESEARCH.md),
+    -- which src/side_objective_prediction.lua ports.
+    objective_inputs={module='game',rva=0x1756660,size=177,sha256='fd8b7400ce12c69ece8792e12f2c514d0fa050fc8a98688df6aa3b069d1be903',from='1756660, packs the descriptor inputs of 1756730'},
+    side_objectives={module='game',rva=0x1756730,size=4409,sha256='8878f7da05c325609b169c2b5e81b4d17ce5570d8a73a2ad3741f8ea445c41ec',from='1756730, counts, minimum and sub-step draws, pools, src/side_objective_prediction.lua'},
+    objective_draw={module='game',rva=0x1757870,size=569,sha256='99c45fc2b8f09fa67c1009c9e23cea984860a673bc5fe6e483f1bd2ee0eac8d7',from='1757870, the weighted objective draw, src/side_objective_prediction.lua'},
+    biome_choice={module='game',rva=0x1758d40,size=1611,sha256='d30c2ddee2d45f6ef6f0999b6eaacb452f421541eb7262faf95364d6327b197d',from='1758d40, the seeded biome of a mission, src/side_objective_inputs.lua'},
+    environment_choice={module='game',rva=0x1758fc0,size=971,sha256='49c949cde941854b960cd9d375c6606e23f457feafb961c0b64ee29503d8c7cf',from='1758fc0, the seeded biome environment of a mission, src/side_objective_inputs.lua'},
+    objective_modifiers={module='game',rva=0x1267a00,size=317,sha256='7f6468191dbc3a3bb1f93d0e34c55c8e4a6d7ffdd3fba4e2c3839ac8665fbb4a',from='1267a00, the world modifier definitions of a descriptor, src/side_objective_inputs.lua'},
     configuration_key={module='game',rva=0x7bb8c0,size=114,sha256='5f6ebb6996126298f77a2dff82ca660fc10ed79ffa9605b51c92e5aa1dc3075f',from='7bb8c0, configuration key folding, src/configuration_lookup.lua'},
     stamp_records={module='game',rva=0xf70f20,size=761,sha256='333283ea3b864b0081c8d884694b16cfe62b16aa1621566d1c57a03d3dae13db',from='f70f20, the stamp records reachable from the loaded definitions, src/constellation_runtime.lua'},
     -- The viewed planet's sky, which src/planet_sky.lua reproduces
@@ -135,6 +143,9 @@ globals={
     invasion_modifiers={module='game',rva=0x32ef77c,anchor={rva=0x12676f9,bytes='488d057c800802'},from='the world modifier per invasion level, 0x48 bytes apart, 1267460'},
     templates={module='game',rva=0x32fef10,anchor={rva=0x11e328e,bytes='488d357bbc1102'},from='25 operation templates, 11e3250; struct template'},
     mission_types={module='game',rva=0x3773420,anchor={rva=0x11e51f5,bytes='488d1524e25802'},from='162 mission type records, 177deb0; struct mission_type'},
+    objective_types={module='game',rva=0x32ef870,anchor={rva=0x1756c99,bytes='488d3dd08bb901'},from='153 objective records of 0xa0 bytes, 1756730'},
+    objective_scales={module='game',rva=0x21437d0,anchor={rva=0x1756856,bytes='4c8d3d73cf9e00'},from='four category rows of 0x50 bytes scaling the side objective count, 1756730'},
+    objective_flag={module='game',rva=0x33264e0,anchor={rva=0x17577e1,bytes='488b05f8ecbc01'},from='an object whose +0x24 appends objective 0x68bfbb59, 1756730'},
     application={module='exe',rva=0x1a10210,anchor={rva=0x3f6ad3,bytes='488b0d36976101'},from='the Stingray application and its windows, docs/MOUSE_INPUT.md'},
 },
 
@@ -265,9 +276,14 @@ structs={
         size={0x11c,anchor='mission_eligibility'},
         weight={0x940,anchor={rva=0xfd307a,bytes='430f2f841a40090000'}},
         id={0x958,anchor='mission_eligibility'},
+        -- A world modifier the environment needs on the descriptor, 1758fc0.
+        requirement={0x944,sum='biome_environment.weight+4'},
     },
     world_modifier={
         flags={0x110,anchor={rva=0x1267315,bytes='41f6821001000001'}},
+        -- Objective ids the modifier bans from a mission, 1756730.
+        banned_objectives={0x2c8,anchor={rva=0x17574ce,bytes='4d8b88c8020000'}},
+        banned_objective_count={0x2d0,anchor={rva=0x17574c3,bytes='418b90d0020000'}},
     },
     global_effects={
         size={0x164,anchor={rva=0x11def83,bytes='4881c564010000'}},

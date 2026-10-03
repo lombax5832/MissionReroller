@@ -108,10 +108,12 @@ def source(search=False,publish=False,dialog=False,version=None):
     if dialog:
         for name,file in [('Panel','docked_panel.lua'),('Hint','keybind_hint.lua'),('Binding','mod_binding.lua'),('EscapeGate','escape_gate.lua'),('Compatibility','mission_compatibility.lua'),('FilterCatalogue','filter_catalogue.lua'),('FilterRequest','filter_request.lua'),('make_gate','window_mouse_gate.lua'),('make_router','modal_pointer.lua'),('make_cursor','window_cursor.lua'),
                           ('Constellations','constellation_prediction.lua'),('make_constellation_inputs','constellation_inputs.lua'),
+                          ('SideObjectives','side_objective_prediction.lua'),('make_objective_inputs','side_objective_inputs.lua'),
                           ('UnitForecast','unit_forecast.lua')]:
             library(name,file)
         planet.update({'constellation_inputs':'make_constellation_inputs','catalogue':'FilterCatalogue',
-                       'compatibility':'Compatibility','options':'Search.options','labels':'Constellations.names'})
+                       'compatibility':'Compatibility','options':'Search.options','labels':'Constellations.names',
+                       'objective_inputs':'make_objective_inputs','objectives':'SideObjectives'})
     if publish:
         for name,file in [('make_publication','seed_publication.lua'),('make_ui_selection','ui_operation_selection.lua'),
                           ('make_guarded_write','guarded_write.lua'),
@@ -152,10 +154,12 @@ def source(search=False,publish=False,dialog=False,version=None):
     if dialog:
         parts.append('local constellations='+factory(root,'constellation_runtime.lua',inputs,'host,lib,{}'))
         identity_hooks.append('observe_constellations=constellations.observe_constellations')
+        parts.append('local objectives='+factory(root,'side_objective_runtime.lua',inputs,'host,lib,{}'))
+        identity_hooks.append('observe_objectives=objectives.observe_objectives')
     if search:
         search_hooks=[]
         if dialog:
-            search_hooks.append('bind_constellations=constellations.bind_constellations')
+            search_hooks+=['bind_constellations=constellations.bind_constellations','bind_objectives=objectives.bind_objectives']
         if publish:
             search_hooks+=[f'{name}=publication.{name}' for name in ('on_existing_match','on_search_match')]
         parts.append('local search_hooks={'+','.join(search_hooks)+'}')

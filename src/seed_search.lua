@@ -31,9 +31,19 @@ return function(evaluate,catalogue,options)
         end
         if next(copy)then constellations.groups[group]=copy;c=c+1 end
     end
+    -- Side-objective groups follow the same rule; rows are objective ids.
+    local objectives,o={groups={}},0
+    for group,rows in pairs(options.objectives and options.objectives.groups or {})do
+        assert(integer(group,0,#catalogue.options) and ((group==0 and n==0) or required[group]),'Invalid side objective group')
+        local copy={}
+        for row,mode in pairs(rows)do
+            assert(integer(row,1,4294967295) and (mode=='require' or mode=='exclude'),'Invalid side objective rule');copy[row]=mode
+        end
+        if next(copy)then objectives.groups[group]=copy;o=o+1 end
+    end
     local daynight=options.daynight
     assert(daynight==nil or type(daynight)=='function','Invalid day/night check')
-    assert(n<=3 and (n+x+m+c>0 or daynight),'Select missions, modifier rules or constellations')
+    assert(n<=3 and (n+x+m+c+o>0 or daynight),'Select missions, modifier rules, constellations or side objectives')
     local scope=catalogue.scope and catalogue.scope(options.scope)
     assert(scope or options.scope==nil,'City scope unavailable')
     local difficulty,limit=options.difficulty,options.limit
@@ -49,7 +59,8 @@ return function(evaluate,catalogue,options)
         if not ok then self.status='failed';self.error=tostring(operations);return self.status end
         local valid={}
         for _,op in ipairs(operations)do if op.valid then valid[#valid+1]=op end end
-        local match=catalogue.find({operations=valid},difficulty,required,modifiers,constellations,scope,daynight,x>0 and excluded or nil)
+        local match=catalogue.find({operations=valid},difficulty,required,modifiers,constellations,scope,daynight,x>0 and excluded or nil,
+            o>0 and objectives or nil)
         if match then self.status='matched';self.seed=seed;self.operation=match;self.operations=operations
         elseif self.attempts>=limit then self.status='exhausted' end
         return self.status

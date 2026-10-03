@@ -11,7 +11,7 @@ function R.new(options,catalogue,labels,stamped)
     -- One section is open at a time, or none. The enemy section shows the
     -- rules of one group: a checked mission, or 0 for any mission.
     return setmetatable({options=options,catalogue=catalogue,labels=labels,stamped=stamped or {},
-        selected={},excluded={},modifiers={},constellations={},time=nil,section='missions',page=1,pages=1,group_choice=0},R)
+        selected={},excluded={},modifiers={},constellations={},objectives={},time=nil,section='missions',page=1,pages=1,group_choice=0},R)
 end
 -- A copy of a set, with id set to value when given.
 local function copy(set,id,value)
@@ -32,12 +32,22 @@ end
 local function prune_groups(self)
     local active={};for _,group in ipairs(self:groups())do active[group]=true end
     for group in pairs(self.constellations)do if not active[group]then self.constellations[group]=nil end end
+    for group in pairs(self.objectives)do if not active[group]then self.objectives[group]=nil end end
 end
 -- The constellation rules of the active groups, as a copy.
 function R:tag_filter()
     local groups={}
     for _,group in ipairs(self:groups())do
         local copy={};for tag,mode in pairs(self.constellations[group] or {})do copy[tag]=mode end
+        if next(copy)then groups[group]=copy end
+    end
+    return {groups=groups}
+end
+-- The side-objective rules of the active groups, as a copy.
+function R:objective_filter()
+    local groups={}
+    for _,group in ipairs(self:groups())do
+        local copy={};for row,mode in pairs(self.objectives[group] or {})do copy[row]=mode end
         if next(copy)then groups[group]=copy end
     end
     return {groups=groups}
@@ -50,21 +60,22 @@ function R:rule_count()
     for _ in pairs(self.excluded)do n=n+1 end
     for _ in pairs(self.modifiers)do n=n+1 end
     for _,tags in pairs(self:tag_filter().groups)do for _ in pairs(tags)do n=n+1 end end
+    for _,rows in pairs(self:objective_filter().groups)do for _ in pairs(rows)do n=n+1 end end
     return n
 end
 -- Whether the request can be met; true without a catalogue.
 function R:possible(catalogue)
     if not catalogue then return true end
-    return self.catalogue.possible(catalogue,self.selected,self.modifiers,self:tag_filter(),self.excluded)
+    return self.catalogue.possible(catalogue,self.selected,self.modifiers,self:tag_filter(),self.excluded,self:objective_filter())
 end
 -- Raises with the reason the request cannot be searched.
 function R:validate(catalogue)
-    self.catalogue.validate(catalogue,self.selected,self.modifiers,self:tag_filter(),self.time,self.excluded)
+    self.catalogue.validate(catalogue,self.selected,self.modifiers,self:tag_filter(),self.time,self.excluded,self:objective_filter())
 end
 -- The request reroll_session.start takes, as a copy.
 function R:to_request(scope,difficulty)
     return {difficulty=difficulty,required=copy(self.selected),excluded=copy(self.excluded),
-        modifiers=copy(self.modifiers),constellations=self:tag_filter(),
+        modifiers=copy(self.modifiers),constellations=self:tag_filter(),objectives=self:objective_filter(),
         scope=scope and {region=scope.region} or nil,time=self.time}
 end
 -- Drops the rules a fresh catalogue no longer offers. A catalogue of another
@@ -79,6 +90,10 @@ function R:prune(catalogue,new_view)
     for group,tags in pairs(self.constellations)do
         local offered=(catalogue.constellation_groups or {})[group]
         for tag in pairs(tags)do if not (offered and offered.set[tag])then tags[tag]=nil;removed=true end end
+    end
+    for group,rows in pairs(self.objectives)do
+        local offered=(catalogue.objective_groups or {})[group]
+        for row in pairs(rows)do if not (offered and offered.set[row])then rows[row]=nil;removed=true end end
     end
     prune_groups(self)
     return removed
@@ -98,18 +113,28 @@ end
 -- Whether a mission that is neither required nor excluded could be required,
 -- with the reason when not; and whether it could be excluded.
 function R:can_require(id,catalogue,filter)
-    return self.catalogue.possible(catalogue,copy(self.selected,id,true),self.modifiers,filter,self.excluded)
+    return self.catalogue.possible(catalogue,copy(self.selected,id,true),self.modifiers,filter,self.excluded,self:objective_filter())
 end
 function R:can_exclude(id,catalogue,filter)
-    return self.catalogue.possible(catalogue,self.selected,self.modifiers,filter,copy(self.excluded,id,true))
+    return self.catalogue.possible(catalogue,self.selected,self.modifiers,filter,copy(self.excluded,id,true),self:objective_filter())
+end
+-- Whether a side-objective row of a group could take a mode, with the
+-- reason when not.
+function R:can_objective(group,row,mode,catalogue)
+    if not catalogue then return true end
+    local filter=self:objective_filter()
+    filter.groups[group]=copy(filter.groups[group] or {},row,mode)
+    return self.catalogue.possible(catalogue,self.selected,self.modifiers,self:tag_filter(),self.excluded,filter)
 end
 -- Edits the request: clear, a mission id, 'modifier:<id>',
--- 'constellation:<group>:<id>' or 'time:any|day|night'. A mission cycles
--- any, required, excluded. One the catalogue cannot require with the rest
--- stays unchecked; a required one that cannot be excluded goes back to any.
+-- 'constellation:<group>:<id>', 'objective:<group>:<row>' or
+-- 'time:any|day|night'. A mission cycles any, required, excluded. One the
+-- catalogue cannot require with the rest stays unchecked; a required one
+-- that cannot be excluded goes back to any. A side objective cycles the
+-- same way, skipping a mode the catalogue rules out.
 -- Returns whether the action was an edit.
 function R:toggle(action,catalogue)
-    if action=='clear' then self.selected={};self.excluded={};self.modifiers={};self.constellations={};self.time=nil
+    if action=='clear' then self.selected={};self.excluded={};self.modifiers={};self.constellations={};self.objectives={};self.time=nil
     elseif action=='time:any' then self.time=nil
     elseif action=='time:day' or action=='time:night' then self.time=action:sub(6)
     elseif type(action)=='number' then
@@ -134,6 +159,17 @@ function R:toggle(action,catalogue)
         local tags=self.constellations[target] or {}
         tags[id]=tags[id]==nil and 'accept' or tags[id]=='accept' and 'exclude' or nil
         self.constellations[target]=next(tags) and tags or nil
+    elseif type(action)=='string' and action:match('^objective:')then
+        local target,row=action:match('^objective:(%d+):(%d+)$')
+        target,row=tonumber(target),tonumber(row)
+        local rows=self.objectives[target] or {}
+        local mode=rows[row]
+        local order=mode==nil and {'require','exclude'} or mode=='require' and {'exclude'} or {}
+        rows[row]=nil
+        for _,next_mode in ipairs(order)do
+            if self:can_objective(target,row,next_mode,catalogue)then rows[row]=next_mode;break end
+        end
+        self.objectives[target]=next(rows) and rows or nil
     else return false end
     return true
 end
@@ -160,18 +196,19 @@ function R:model(catalogue,v)
     for _,id in ipairs(groups)do if id==self.group_choice then group=id end end
     self.group_choice=group
     local filter=self:tag_filter()
-    local names,modifier_rules,tag_rules={},0,0
+    local names,modifier_rules,tag_rules,objective_rules={},0,0,0
     for _,id in ipairs(groups)do if id~=0 then names[#names+1]=options[id].name end end
     local checked=#names
     for id,option in ipairs(options)do if excluded[id]then names[#names+1]='not '..option.name end end
     for _ in pairs(modifiers)do modifier_rules=modifier_rules+1 end
     for _,tags in pairs(filter.groups)do for _ in pairs(tags)do tag_rules=tag_rules+1 end end
-    local rules=#names+modifier_rules+tag_rules+(self.time and 1 or 0)
+    for _,rows in pairs(self:objective_filter().groups)do for _ in pairs(rows)do objective_rules=objective_rules+1 end end
+    local rules=#names+modifier_rules+tag_rules+objective_rules+(self.time and 1 or 0)
     local compatible,compatibility_reason=self:possible(catalogue)
     local running,fresh,retained,fixed=v.running,v.fresh,v.retained,v.fixed
     local busy=running or v.queued
     local locked=busy or not (fresh or retained)
-    local items,pages,tabs,forced={},1,{},{}
+    local items,pages,tabs,forced,slots={},1,{},{},nil
     if display and section=='missions' then
         local available=catalogue.missions or {}
         pages=math.max(1,math.ceil(#available/PAGE));self.page=math.min(self.page,pages)
@@ -205,6 +242,35 @@ function R:model(catalogue,v)
         end
         -- The names table also holds the game's tag, which the log keeps.
         for i,tag in ipairs(catalogue.forced or {})do forced[i]=((self.labels[tag] or 'tag '..tag):gsub(' %b()$',''))end
+    elseif display and section=='objectives' then
+        local offered=(catalogue.objective_groups or {})[group]
+        if offered then
+            local rows=self.objectives[group] or {}
+            for _,option in ipairs(offered.list)do
+                local mode=rows[option.id]
+                -- A row that can take neither rule is disabled with the reason.
+                local enabled,reason=true,nil
+                if not mode then
+                    local can,why=self:can_objective(group,option.id,'require',catalogue)
+                    if not can then
+                        enabled=self:can_objective(group,option.id,'exclude',catalogue)
+                        reason=why
+                    end
+                end
+                items[#items+1]={id='objective:'..group..':'..option.id,name=option.name,mode=mode,enabled=enabled,reason=reason}
+            end
+            -- The side and tactical slots of the group's mission types.
+            if group~=0 then
+                local side,tactical
+                for _,info in pairs(offered.kinds)do
+                    side=math.max(side or 0,info.side);tactical=math.max(tactical or 0,info.tactical)
+                end
+                if side then slots=side..' SIDE + '..tactical..' TACTICAL' end
+            end
+        end
+        for i,id in ipairs(groups)do
+            tabs[i]={id=id,name=id==0 and 'Any mission' or options[id].name,selected=id==group}
+        end
     elseif display and section=='time' then
         for _,side in ipairs({{'any','Any time'},{'day','Day'},{'night','Night'}})do
             items[#items+1]={id='time:'..side[1],name=side[2],mode=(self.time or 'any')==side[1] and 'chosen' or nil}
@@ -238,10 +304,13 @@ function R:model(catalogue,v)
         faction=display and catalogue.faction or nil,scope=v.scope and 'city' or 'planet',
         section=section,items=items,page=self.page,pages=pages,groups=tabs,group=group,
         slots=display and catalogue.slots or nil,checked=checked,rules=rules,
+        objective_slots=slots,
         summaries={missions=#names>0 and table.concat(names,', ') or 'Any',modifiers=count(modifier_rules),enemies=count(tag_rules),
+            objectives=count(objective_rules),
             time=self.time=='day' and 'Day' or self.time=='night' and 'Night' or 'Any'},
         time_note=v.sky and v.sky.note or nil,
         forced=table.concat(forced,', '),
-        note=display and section=='enemies' and group==0 and 'Check a mission to set its own enemies' or nil}
+        note=display and section=='enemies' and group==0 and 'Check a mission to set its own enemies' or nil,
+        objective_note=display and section=='objectives' and group==0 and 'ANY MISSION OF THE OPERATION' or nil}
 end
 return R

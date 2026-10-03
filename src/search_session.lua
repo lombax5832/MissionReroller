@@ -115,6 +115,35 @@ local function operation_satisfies(group,op)
     end
     return found or not wanted
 end
+-- A side-objective group holds the rules for one mission, row ->
+-- 'require' or 'exclude': the mission draws every required row and no
+-- excluded one. A mission without resolved objectives never satisfies one.
+local function objectives_satisfy(group,m)
+    if not group or not next(group)then return true end
+    if not m.objectives then return false end
+    for row,mode in pairs(group)do
+        if (mode=='require')~=(m.objectives[row]==true)then return false end
+    end
+    return true
+end
+-- Group 0 applies when no mission is checked: every required row is drawn
+-- by some mission of the operation, and no mission draws an excluded one.
+local function operation_objectives(group,op)
+    if not group or not next(group)then return true end
+    if #op.missions==0 then return false end
+    local found={}
+    for _,m in ipairs(op.missions)do
+        if not m.objectives then return false end
+        for row,mode in pairs(group)do
+            if m.objectives[row]then
+                if mode=='exclude' then return false end
+                found[row]=true
+            end
+        end
+    end
+    for row,mode in pairs(group)do if mode=='require' and not found[row]then return false end end
+    return true
+end
 -- The operation in progress keeps its seed and missions whatever the campaign
 -- seed becomes (operation_identity preserves its row). Returns its row and
 -- difficulty when it belongs to the snapshot's planet.
@@ -140,17 +169,20 @@ function S.scope(value)
 end
 -- daynight, when given, must also accept the operation (src/day_night.lua).
 -- excluded families must not appear in the operation at all, whatever their
--- constellations.
-function S.find(snapshot,difficulty,required,modifiers,constellations,scope,daynight,excluded)
+-- constellations. objectives holds side-objective groups; a required family
+-- needs one mission that satisfies both its constellation and its
+-- side-objective rules.
+function S.find(snapshot,difficulty,required,modifiers,constellations,scope,daynight,excluded,objectives)
     local groups=constellations and constellations.groups or {}
+    local rows=objectives and objectives.groups or {}
     for _,op in ipairs(snapshot.operations) do
         if op.difficulty==difficulty and S.in_scope(op.row,scope) then
-            local found={};local yes=operation_satisfies(groups[0],op)
+            local found={};local yes=operation_satisfies(groups[0],op) and operation_objectives(rows[0],op)
             for _,m in ipairs(op.missions) do
                 for i,opt in ipairs(S.options) do
                     for _,id in ipairs(opt.ids) do if m.native_type==id then
                         if excluded and excluded[i] then yes=false end
-                        if satisfies(groups[i],m) then found[i]=true end
+                        if satisfies(groups[i],m) and objectives_satisfy(rows[i],m) then found[i]=true end
                     end end
                 end
             end

@@ -3,7 +3,8 @@
 A Helldivers 2 mod that rerolls the operations on a planet's war table until
 one matches what you want to play: the mission types it must or must not
 contain, the operation modifiers it must or must not have, the enemy forces each
-mission must or must not carry, and whether it lands in the day or the night. It runs inside the game's Lua VM as an addon
+mission must or must not carry, the side objectives each mission must or must
+not have, and whether it lands in the day or the night. It runs inside the game's Lua VM as an addon
 for [Bingus Shared Loader](https://github.com/CowboyBingus/BingusSharedLoader).
 
 Current release: **v0.20.3**, `releases/Mission-Reroller-v0.20.3.zip`
@@ -47,7 +48,7 @@ the same GUID, so your manager treats it as the same mod.
    operations** under Mission Reroller on the MODS tab of Options > Mouse &
    Keyboard. Bind a key there and it replaces F7, and the hint shows it.
    While that row has no key, F7 stays the shortcut.
-3. Choose what the operation must contain. The four sections open one at a
+3. Choose what the operation must contain. The five sections open one at a
    time:
    - **Missions.** Click a row to cycle ANY, REQUIRED, EXCLUDED. Require up
      to the number of slots an operation has; all required missions must fit
@@ -67,6 +68,17 @@ the same GUID, so your manager treats it as the same mod.
      shows the enemies a mission would have with it and the planet's
      always-present forces: large enemies with their spawn-rate meter and the
      others most common first, from that mod's own forecast.
+   - **Side objectives.** One button per checked mission, or `ANY MISSION`
+     when none is checked. Each side objective, such as Lidar Station or
+     SEAF Artillery, cycles ANY, REQUIRED, EXCLUDED. The mission must have
+     every required one and none of the excluded ones; with `ANY MISSION`,
+     each required one must be on some mission of the operation and no
+     mission may have an excluded one. The list also holds the tactical
+     objectives (Terminate Illegal Broadcast, Upload Escape Pod Data and
+     the like) and shows only what that mission can draw on this planet at
+     the map difficulty. The line under the buttons shows how many side and
+     tactical objectives the mission has; a row that no longer fits, or that
+     would leave nothing to draw, is dimmed, and pointing at it says why.
    - **Time of day.** Any time, Day or Night. With Day or Night, every
      mission of the match stays on that side for 2.5 hours after the reroll,
      clear of dusk and dawn. The line under the heading shows how long it
@@ -112,6 +124,12 @@ OPERATIONS`. Tell your lobby before you reroll. Tested with two players.
   always present.
 - **Illuminate missions and difficulty 1** draw no constellations, so their
   enemy force lists are empty.
+- **Side objectives follow the game's own draw.** The mod computes them
+  from each mission's seed the way the game does when it builds the mission.
+  Eradicate, Evacuate High-Value Assets and Rapid Acquisition, and every
+  mission at difficulty 1, have none. Hovering a mission on the war table
+  logs a `SIDE_OBJECTIVE_CHECK` line comparing the prediction with the
+  game's list.
 - **Day and night move, cities do not.** Each planet turns under its sun,
   so a mission's time of day changes as you play. The war table shows the
   local time when you hover a planet (`SEST`). A reroll moves most missions
@@ -143,7 +161,7 @@ The mod's log is `MissionRerollerExperiment.log` in
 | `offset signature <name> mismatch` or `offset anchor <name> mismatch` | The game files are the supported build, but the code the mod relies on differs in memory, usually because another mod changed it. Send the line with a list of your mods. |
 
 When reporting a problem, include both logs. Near the top, the mod's log
-names its version (`Mission Reroller 0.30.0 docked dialog`) and, from the
+names its version (`Mission Reroller 0.31.0 docked dialog`) and, from the
 first frame, every Lua mod the loaders started: a `MODS` count, then one
 `MOD <name> version=<version> status=<status>` line each. A version reads
 `unknown` when that mod does not publish one.

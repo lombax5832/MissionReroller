@@ -5,7 +5,7 @@
 local P={}
 local W,H,EDGE,LEFT,INNER,FOOT=664,1008,40,25,610,820
 local SECTIONS={{id='missions',title='MISSIONS'},{id='modifiers',title='MODIFIERS'},{id='enemies',title='ENEMY FORCES'},
-    {id='time',title='TIME OF DAY'}}
+    {id='objectives',title='SIDE OBJECTIVES'},{id='time',title='TIME OF DAY'}}
 local FACTIONS={[2]={'TERMINIDS',255,179,0},[3]={'AUTOMATONS',255,90,79},[4]={'ILLUMINATE',197,139,255}}
 local STEPS={'1 CHECK PLANET','2 SEARCH SEEDS','3 REFRESH BOARD','4 OPEN OPERATION'}
 local WORDS={require='REQUIRED',accept='ACCEPTED',exclude='EXCLUDED',chosen='CHOSEN'}
@@ -35,23 +35,26 @@ function P.layout(width,height,model)
         if model.section==section.id then
             local first,below=top+36,(#SECTIONS-i)*58
             b.meta=top+19
-            if section.id=='enemies' then
+            if section.id=='enemies' or section.id=='objectives' then
                 local groups=model.groups or {}
                 local w=(INNER+4)/math.max(1,#groups)-4
                 for n,group in ipairs(groups)do b.groups[n]=target('group:'..group.id,LEFT+(n-1)*(w+4),top+10,w,36,true)end
-                first=top+(#groups>0 and 54 or 10);below=below+notes;b.meta=first+9
+                first=top+(#groups>0 and 54 or 10);b.meta=first+9
+                if section.id=='enemies' then below=below+notes else first=first+30 end
             elseif section.id=='missions' and (model.pages or 1)>1 then
                 b.pager[1]=target('previous_page',LEFT+INNER-64,top+6,30,26,true)
                 b.pager[2]=target('next_page',LEFT+INNER-30,top+6,30,26,true)
             end
             local last=section.id=='enemies' and first+18 or first-8
-            if #items>0 and section.id=='missions' then
+            if #items>0 and (section.id=='missions' or section.id=='objectives') then
+                -- Two columns filled downwards, closer together when long.
                 local rows=math.ceil(#items/2)
-                assert(rows<=12,'Too many missions on one page')
+                local pitch=math.min(35,math.floor((FOOT-14-below-first)/rows))
+                assert(rows<=(section.id=='missions' and 12 or 16) and pitch>=20,'Too many rows in one section')
                 for n,item in ipairs(items)do
-                    b.rows[n]=target(item.id,LEFT+math.floor((n-1)/rows)*308,first+((n-1)%rows)*35,302,32,usable(item))
+                    b.rows[n]=target(item.id,LEFT+math.floor((n-1)/rows)*308,first+((n-1)%rows)*pitch,302,pitch-3,usable(item))
                 end
-                last=first+rows*35-3
+                last=first+rows*pitch-3
             elseif #items>0 then
                 local h=math.min(38,math.floor((FOOT-14-below-first-(#items-1)*4)/#items))
                 for n,item in ipairs(items)do b.rows[n]=target(item.id,LEFT,first+(n-1)*(h+4),INNER,h,usable(item))end
@@ -322,6 +325,7 @@ function P.new(e)
             end
             local section=model.section
             local empty=#items==0 and (not faction and 'NO PLANET CHOSEN' or section=='enemies' and 'NO ENEMY FORCES CAN BE CHOSEN HERE'
+                or section=='objectives' and 'NO SIDE OBJECTIVES FOR THIS MISSION HERE'
                 or 'NO ELIGIBLE OPTIONS FOR THIS PLANET AND DIFFICULTY')
             if section=='time' then
                 text('meta_right',model.time_note or '',right-2*s,at(b.meta),15,muted,'right',330*s)
@@ -337,6 +341,15 @@ function P.new(e)
                         ..(model.checked or 0)..' OF '..tostring(model.slots)..' SLOTS'
                 local used_width=text('meta_right',note,limit,at(b.meta),15,muted,'right',300*s)
                 text('meta',hint or empty or 'CLICK TO CYCLE: ANY, REQUIRED, EXCLUDED',left+2*s,at(b.meta),15,hint and white or muted,nil,limit-left-used_width-18*s)
+            elseif section=='objectives' then
+                for n,t in ipairs(b.groups)do
+                    local chosen=groups[n].selected
+                    rect('group'..n,t.x,t.y,t.w,t.h,992,chosen and white or glass(hover==t.id and 51 or 18))
+                    text('group'..n,groups[n].name,t.x+t.w/2,t.y+t.h/2,15,chosen and ink or white,'centre',t.w-12*s)
+                end
+                local note=empty and '' or model.objective_slots or model.objective_note or ''
+                local used_width=text('meta_right',note,right-2*s,at(b.meta),15,muted,'right',300*s)
+                text('meta',hint or empty or 'CLICK TO CYCLE: ANY, REQUIRED, EXCLUDED',left+2*s,at(b.meta),15,hint and white or muted,nil,INNER*s-used_width-18*s)
             elseif section=='enemies' then
                 for n,t in ipairs(b.groups)do
                     local chosen=groups[n].selected
@@ -354,9 +367,9 @@ function P.new(e)
             end
             for n,t in ipairs(b.rows)do
                 local item,over,off,cy=items[n],hover==t.id,not t.enabled,t.y+t.h/2
-                if section=='missions' then
+                if section=='missions' or section=='objectives' then
                     -- A required mission is ticked yellow, an excluded one struck red.
-                    local picked,out=selected[item.id],item.mode=='exclude'
+                    local picked,out=selected[item.id] or item.mode=='require',item.mode=='exclude'
                     rect('row'..n,t.x,t.y,t.w,t.h,992,picked and wash(YELLOW,over and 56 or 28)
                         or out and wash(RED,over and 52 or 26) or glass(off and 5 or over and 41 or 13))
                     rect('box'..n,t.x+9*s,cy-8*s,16*s,16*s,993,picked and yellow or out and red or off and dim or outline)
