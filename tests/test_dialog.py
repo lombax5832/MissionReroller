@@ -36,7 +36,7 @@ with tempfile.TemporaryDirectory() as folder:
     invasion=ROOT/'artifacts/invasion-live-173/capture.lua'
     if invasion.exists():
         subprocess.run([lua,str(ROOT/'tests/check_viewed_planet.lua'),str(invasion),str(ROOT/'src'),str(entry),
-            str(Path(folder)/'missing.txt')],check=True)
+            str(Path(folder)/'missing.txt'),'saved'],check=True)
     subprocess.run([lua,str(ROOT/'tests/test_reroll_handshake.lua'),str(entry),str(ROOT/'src')],check=True)
     subprocess.run([lua,str(ROOT/'tests/test_ffi_conflicts.lua'),str(entry)],check=True)
     subprocess.run([lua,str(ROOT/'tests/test_mod_inventory_entry.lua'),str(entry),build.VERSION],check=True)

@@ -1,8 +1,12 @@
--- Usage: luajit check_viewed_planet.lua <capture.lua> <src> <built entry> <missing page file>
+-- Usage: luajit check_viewed_planet.lua <capture.lua> <src> <built entry> <missing page file> [saved]
 -- Replays captured campaign memory of the viewed planet: the displayed board
 -- equals its prediction, and the dialog's options build at every difficulty.
 -- A page absent from the capture is written to <missing page file>, exit 3.
+-- With saved, a capture recorded before side objectives existed replays
+-- without their options: a page missing while they build is reported.
 local fixture=dofile(arg[1]);local root=arg[2];local ffi=require('ffi')
+-- Set while a saved capture builds its side-objective options.
+local objective_pass
 local function raw(s)return (s:gsub('..',function(v)return string.char(tonumber(v,16))end))end
 local pages={}
 for _,r in ipairs(fixture.ranges)do pages[tonumber(r.address)]=raw(r.hex)end
@@ -13,6 +17,7 @@ local function read(a,n)
         local page=math.floor(at/4096)*4096;local offset=at-page
         local data=pages[page]
         if not data then
+            if objective_pass then error(string.format('page 0x%x is not in this capture',page),0)end
             local out=assert(io.open(arg[4],'w'));out:write(string.format('0x%x',page));out:close()
             os.exit(3)
         end
@@ -83,8 +88,12 @@ assert(ok,'Displayed board differs from its prediction: '..tostring(why))
 print('Displayed board equals its prediction')
 local function names(list)local out={};for i,item in ipairs(list)do out[i]=item.name end;return table.concat(out,'; ')end
 for _,difficulty in ipairs(levels)do
-    local result,err=model.catalogue(snapshot,difficulty)
+    objective_pass=arg[5]=='saved'
+    local result,err,failure=model.catalogue(snapshot,difficulty)
+    objective_pass=false
     assert(not err,tostring(err))
+    if failure and arg[5]=='saved' then print('difficulty '..difficulty..': side objectives skipped, '..tostring(failure))
+    else assert(not failure,tostring(failure))end
     assert(result.faction and #result.missions>0,'No options at difficulty '..difficulty)
     print(string.format('difficulty %d faction %d: missions: %s | modifiers: %s',difficulty,result.faction,names(result.missions),names(result.modifiers)))
 end
