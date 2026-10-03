@@ -178,9 +178,13 @@ Requires Python 3, the `BingusSharedLoader` source next to this folder (or
 recorded seeds from a `KnowYourConstellation` checkout next to this folder.
 
 ```powershell
-python -B scripts/build.py          # releases/Mission-Reroller-v<version>.zip
+python -B scripts/build.py          # releases/Mission-Reroller-Dev-v<version>.zip
 python -B tests/test_package.py     # package checks, then the dialog tests
 ```
+
+A local build is named Mission Reroller Dev and has its own GUID, so your mod
+manager lists it beside the published mod; enable only one of the two. Setting
+`RELEASE_TAG=v<version>` builds the published package instead.
 
 `scripts/README.md` lists the release builder, the research builders kept for
 bisecting, and the analysis tools. No game binaries, extracted resources or
