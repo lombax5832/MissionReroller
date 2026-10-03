@@ -134,4 +134,82 @@ do
     assert(asked==1 and city.constellation_groups[11] and not city.constellation_groups[9],'A city reports its own effects and missions')
     assert(not pcall(build,function(row)return S.in_scope(row,{region=3})end),'A city without an operation has no catalogue')
 end
-print('Faction catalogue: city scope, constellation candidates, all three factions, mission visibility, legal modifier pools/budgets, request validation and require/exclude matching passed')
+-- Side objectives: rows a mission type can draw on this planet and
+-- difficulty, slots per type, and the checks on a request.
+do
+    local P=dofile(root..'/side_objective_prediction.lua')
+    local lidar,artillery,sam,spewer,broadcast,pod=0xf1969b14,0x86cfeedb,0xc46443b2,0x62f023e9,0x4c10b12e,0xfdab51c3
+    local jammer,eggs,nest=0x6cac3f28,0xca82b4ab,0xb3dd50be
+    local records={[lidar]={id=lidar,minimum=0,maximum=0,environments={1,2,3,4}},[artillery]={id=artillery,minimum=0,maximum=0,environments={0,0,0,0}},
+        [sam]={id=sam,minimum=0,maximum=0,environments={0,0,0,0}},[spewer]={id=spewer,minimum=2,maximum=0,environments={0,0,0,0}},
+        [broadcast]={id=broadcast,minimum=0,maximum=0,environments={0,0,0,0}},[pod]={id=pod,minimum=0,maximum=0,environments={0,0,0,0}},
+        [jammer]={id=jammer,minimum=0,maximum=0,environments={7,0,0,0}},[eggs]={id=eggs,minimum=0,maximum=0,environments={0,0,0,0}},
+        [nest]={id=nest,minimum=0,maximum=0,environments={0,0,0,0}}}
+    local function pool(list)
+        local out={}
+        for _,e in ipairs(list)do out[#out+1]={id=e[1],role=e[2],weight=e[3] or 1,minimum=0,maximum=1}end
+        return out
+    end
+    local missions={
+        [0]={category=1,pool=pool({{lidar,3},{artillery,3},{spewer,3},{jammer,3},{broadcast,2},{pod,2},{eggs,3,0},{nest,3}})},
+        [59]={category=1,pool=pool({{sam,3},{artillery,3},{pod,2}})},
+        [7]={category=2,pool=pool({{lidar,3}})},
+    }
+    local inputs={context=function(_,effect)return {modifiers={},banned=effect==2 and {[sam]=true} or {}}end,
+        counts=function(d)return {side=d>=6 and 3 or 1,tactical=1,substeps=0}end,
+        mission=function(kind)return missions[kind]end,scale=function(category)return category==2 and 0 or nil end,
+        environments=function()return function()return 1 end,{[1]=true}end,
+        objective=function(id)return records[id]end,disabled=function(id)return id==pod end}
+    local c={mission_set={[1]=true,[3]=true},native={[0]=true,[59]=true,[7]=true},effects={[1]=true}}
+    C.objectives(c,inputs,P,100,6,S.options)
+    local icbm,eradicate,any=c.objective_groups[1],c.objective_groups[3],c.objective_groups[0]
+    local function names(group)local out={};for _,row in ipairs(group.list)do out[#out+1]=row.name end;return table.concat(out,', ')end
+    assert(names(icbm)=='Lidar Station, SEAF Artillery, SEAF SAM Site, Shrieker Nest, Spore Spewer, Terminate Illegal Broadcast',names(icbm))
+    assert(names(eradicate)=='','Category scale 0 offers nothing')
+    assert(any.set[lidar] and any.set[sam] and not any.set[jammer] and not any.set[pod] and not any.set[eggs],'Environment, configuration and weight')
+    assert(icbm.kinds[0].side==3 and icbm.kinds[0].tactical==1 and icbm.kinds[7]==nil and eradicate.kinds[7].side==0)
+    -- A row banned by every operation's world modifiers is not offered.
+    local banned={mission_set={[1]=true},native={[59]=true},effects={[2]=true}}
+    C.objectives(banned,inputs,P,100,6,S.options)
+    assert(not banned.objective_groups[1].set[sam],'Banned everywhere')
+    banned.effects[1]=true;C.objectives(banned,inputs,P,100,6,S.options)
+    assert(banned.objective_groups[1].set[sam],'Allowed by one operation')
+    -- Below the minimum difficulty Spore Spewer is gone.
+    local low={mission_set={[1]=true},native={[0]=true},effects={[1]=true}}
+    C.objectives(low,inputs,P,100,1,S.options)
+    assert(not low.objective_groups[1].set[spewer] and low.objective_groups[1].kinds[0].side==1)
+    local function rules(group,list)return {groups={[group]=list}}end
+    local required={[1]=true}
+    c.slots,c.missions,c.modifier_set,c.mission_set=3,{{id=1},{id=3}},{},{[1]=true,[3]=true}
+    assert(C.possible(c,required,{},nil,nil,rules(1,{[lidar]='require',[artillery]='require',[spewer]='require'})))
+    local ok,why=C.possible(c,required,{},nil,nil,rules(1,{[lidar]='require',[artillery]='require',[spewer]='require',[nest]='require'}))
+    assert(not ok and why:find('Too many'),why)
+    assert(C.possible(c,required,{},nil,nil,rules(1,{[sam]='require',[artillery]='require'})),'Another mission type of the family holds them')
+    ok,why=C.possible(c,required,{},nil,nil,rules(1,{[lidar]='require',[sam]='require'}))
+    assert(not ok and why:find('cannot draw'),'No one type offers both')
+    ok,why=C.possible(c,required,{},nil,nil,rules(1,{[broadcast]='exclude'}))
+    assert(ok,'Mission 59 has no tactical row offered here, so excluding broadcast is fine')
+    ok,why=C.possible(c,required,{},nil,nil,rules(1,{[broadcast]='exclude',[sam]='require'}))
+    assert(ok)
+    local all={};for _,row in ipairs(icbm.list)do all[row.id]='exclude' end;all[sam]=nil
+    ok,why=C.possible(c,required,{},nil,nil,rules(1,all))
+    assert(ok,'59 still draws SAM')
+    all[sam]='exclude'
+    ok,why=C.possible(c,required,{},nil,nil,rules(1,all))
+    assert(not ok and why:find('excluded'),why)
+    assert(C.possible(c,{},{},nil,nil,rules(0,{[sam]='require',[spewer]='require'})))
+    ok,why=C.possible(c,{},{},nil,nil,rules(0,{[jammer]='require'}))
+    assert(not ok,'Not offered anywhere')
+    -- validate: the group needs its mission, rows must be offered, and one
+    -- rule group alone is a request.
+    C.validate(c,{},{},nil,nil,nil,rules(0,{[lidar]='require'}))
+    C.validate(c,required,{},nil,nil,nil,rules(1,{[artillery]='exclude'}))
+    assert(not pcall(C.validate,c,{},{},nil,nil,nil,rules(1,{[lidar]='require'})),'Group without its mission')
+    assert(not pcall(C.validate,c,required,{},nil,nil,nil,rules(1,{[jammer]='require'})),'Unavailable row')
+    assert(not pcall(C.validate,c,required,{},nil,nil,nil,rules(1,{[lidar]='accept'})),'Unknown mode')
+    -- The seed search accepts the same groups.
+    local search=make_search(function()return {}end,S,{seed=1,limit=1,difficulty=10,required={},objectives=rules(0,{[lidar]='require'})})
+    assert(search:step()=='exhausted')
+    assert(not pcall(make_search,function()return {}end,S,{seed=1,limit=1,difficulty=10,required={},objectives=rules(1,{[lidar]='require'})}))
+end
+print('Faction catalogue: city scope, constellation candidates, all three factions, mission visibility, legal modifier pools/budgets, side objectives, request validation and require/exclude matching passed')

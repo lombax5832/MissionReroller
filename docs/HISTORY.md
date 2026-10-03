@@ -5,6 +5,51 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
+**Validated in game: v0.31.0 side objectives.** A SIDE
+OBJECTIVES section requires or excludes side and tactical objectives per
+checked mission, or for the operation with `ANY MISSION`. Grilled with the
+user on 2026-10-02: briefing objectives only (no sub-steps), all required
+present and none excluded, per mission like enemy forces, presence only,
+English titles in the catalogue, and the matched objectives logged rather
+than shown.
+- **Where they come from.** Not map stamps: the descriptor packer `fc2ea0`
+  writes objective ids into the mission descriptor through `1756660` /
+  `1756730`, from the mission seed, type, difficulty, the planet's biomes
+  and its world modifiers. Nothing is on the board, so the search predicts
+  them like constellations. Details in
+  [SIDE_OBJECTIVE_RESEARCH.md](SIDE_OBJECTIVE_RESEARCH.md).
+- **Port.** `src/side_objective_prediction.lua` (pure) and
+  `src/side_objective_inputs.lua` (reads, with per-planet caches so a seed
+  costs no reads). `src/template_environments.lua` now also returns the
+  world modifiers it collects; they double as the descriptor's list.
+- **Evidence.** `scripts/validate_side_objectives.py` emulates `1756660` in
+  Unicorn on pages read from the running game and replays the port on the
+  same pages: 2,400 random descriptors, 3,524 side and 1,033 tactical
+  objectives, no mismatch. It showed `20bbb78` is `roundf`; the first port
+  took it for `ceilf`. A live descriptor read of a difficulty 10 Terminid
+  Launch ICBM showed the expected 4 side and 1 tactical objectives with a
+  repeated Spore Spewer.
+- **Filter.** `src/filter_catalogue.lua` offers what each mission type can
+  draw on the planet (environment, difficulty, configuration, bans) and
+  refuses more required rows than a type's slots or excluding every row of
+  a role; the dialog skips such a click. `S.find` takes the groups as its
+  last argument. The panel's rows close up to fit the fifth section.
+- **Diagnostics.** Hovering a mission logs `SIDE_OBJECTIVE_CHECK ...
+  modifiers_agree=... agree=...`; a search logs `LUA_SEARCH_OBJECTIVES` and,
+  on a match, `LUA_SEARCH_MATCH_OBJECTIVES`. Test plan in
+  [SIDE_OBJECTIVE_FILTER_TEST.md](SIDE_OBJECTIVE_FILTER_TEST.md).
+- **In game, 2026-10-02.** Eleven `SIDE_OBJECTIVE_CHECK` lines on planets
+  201 and 173 (Geological Survey, Retrieve Valuable Data, Launch ICBM,
+  Emergency Evacuation, Spread Democracy, Eradicate, Evacuate High-Value
+  Assets) all read `modifiers_agree=true agree=true`, repeats included. A
+  search `LUA_SEARCH_OBJECTIVES Launch ICBM=require Lidar Station exclude
+  SEAF Artillery` matched seed 787509373 row 27 after two seeds
+  (`LUA_SEARCH_MATCH_OBJECTIVES ... 59:[Launch ICBM/0, ..., Lidar
+  Station/3, Spore Spewer/3, Stalker Lair/3, Stalker Lair/3, ...]`),
+  published (`PUBLICATION_STATE_VERIFIED seed=787509373 row=27`), and the
+  hovered mission's game list agreed afterwards. Whether a level can drop
+  an objective was not checked.
+
 **Not yet validated in game: v0.30.0 planets under attack.** The release
 package of the invaded-planet change below, validated in game from a branch
 build on 2026-10-02. That build also carried every v0.29.0 change. The

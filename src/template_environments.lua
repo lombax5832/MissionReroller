@@ -152,6 +152,8 @@ return function(read,u,pointer,game,board,effects,biome_definition)
         for _,definition in ipairs(definitions)do array(definition,0x60,256)end
         local binding=effects.binding(planet,operation)
         if binding then array(binding,0x20,256)end
-        return result
+        -- The active world modifiers also travel on the mission descriptor
+        -- (1267a00), where src/side_objective_inputs.lua reads them.
+        return result,definitions,present
     end
 end

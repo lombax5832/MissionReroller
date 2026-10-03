@@ -38,4 +38,7 @@ were removed; the repository history keeps them.
 The remaining scripts read saved captures under the ignored `artifacts/`
 folder or, for `check_live_*.py`, live game memory through the Memory
 Explorer addon. They are development tools and package nothing. Each one's
-docstring says what it needs.
+docstring says what it needs. `validate_side_objectives.py` also reads live
+memory: it emulates the game's side-objective draw on pages read from the
+running game and replays the Lua port on them
+(`docs/SIDE_OBJECTIVE_RESEARCH.md`).

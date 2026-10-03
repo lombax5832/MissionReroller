@@ -14,22 +14,26 @@ end
 local three={{id=2,name='Geological Survey',selected=true},{id=5,name='Evacuate High-Value Assets'},{id=62,name='Neutralize Ground-to-Orbit Defenses'}}
 local function running(m)m.running=true;m.locked=true;m.ready=false;m.can_start=false;m.can_clear=false;m.step=2;return m end
 local cases={
-    {'missions',model('missions',list(22)),29},
-    {'paged missions',model('missions',list(24),{page=1,pages=2}),33},
-    {'one mission',model('missions',list(1)),8},
-    {'modifiers',model('modifiers',list(13,'modifier:')),20},
-    {'enemies',model('enemies',list(11,'constellation:2:'),{groups=three}),21},
-    {'any mission',model('enemies',list(6,'constellation:0:'),{groups={{id=0,name='Any mission',selected=true}},note='Check a mission',forced='Predator Strain'}),14},
-    {'no enemies',model('enemies',{},{groups=three}),10},
-    {'all closed',model(nil,{}),7},
-    {'running missions',running(model('missions',list(24),{page=2,pages=2})),33},
-    {'running modifiers',running(model('modifiers',list(13,'modifier:'))),20},
-    {'running enemies',running(model('enemies',list(11,'constellation:2:'),{groups=three})),21},
-    {'no catalogue, missions',model('missions',{},{faction=false,locked=true,can_start=false,can_clear=false}),7},
-    {'no catalogue, modifiers',model('modifiers',{},{faction=false,locked=true,can_start=false,can_clear=false}),7},
-    {'no catalogue, enemies',model('enemies',{},{faction=false,locked=true,can_start=false,can_clear=false}),7},
-    {'time',model('time',{{id='time:any',name='Any time'},{id='time:day',name='Day',mode='chosen'},{id='time:night',name='Night'}},{time_note='HOLDS 2H 30M / DAY 15H 42M'}),10},
-    {'running time',running(model('time',{{id='time:any',name='Any time'},{id='time:day',name='Day'},{id='time:night',name='Night',mode='chosen'}})),10},
+    {'missions',model('missions',list(22)),30},
+    {'paged missions',model('missions',list(24),{page=1,pages=2}),34},
+    {'one mission',model('missions',list(1)),9},
+    {'modifiers',model('modifiers',list(13,'modifier:')),21},
+    {'enemies',model('enemies',list(11,'constellation:2:'),{groups=three}),22},
+    {'any mission',model('enemies',list(6,'constellation:0:'),{groups={{id=0,name='Any mission',selected=true}},note='Check a mission',forced='Predator Strain'}),15},
+    {'no enemies',model('enemies',{},{groups=three}),11},
+    {'all closed',model(nil,{}),8},
+    {'running missions',running(model('missions',list(24),{page=2,pages=2})),34},
+    {'running modifiers',running(model('modifiers',list(13,'modifier:'))),21},
+    {'running enemies',running(model('enemies',list(11,'constellation:2:'),{groups=three})),22},
+    {'no catalogue, missions',model('missions',{},{faction=false,locked=true,can_start=false,can_clear=false}),8},
+    {'no catalogue, modifiers',model('modifiers',{},{faction=false,locked=true,can_start=false,can_clear=false}),8},
+    {'no catalogue, enemies',model('enemies',{},{faction=false,locked=true,can_start=false,can_clear=false}),8},
+    {'time',model('time',{{id='time:any',name='Any time'},{id='time:day',name='Day',mode='chosen'},{id='time:night',name='Night'}},{time_note='HOLDS 2H 30M / DAY 15H 42M'}),11},
+    {'running time',running(model('time',{{id='time:any',name='Any time'},{id='time:day',name='Day'},{id='time:night',name='Night',mode='chosen'}})),11},
+    {'side objectives',model('objectives',list(22,'objective:2:'),{groups=three,objective_slots='4 SIDE + 1 TACTICAL'}),33},
+    {'many side objectives',model('objectives',list(32,'objective:0:'),{groups={{id=0,name='Any mission',selected=true}},objective_note='ANY MISSION OF THE OPERATION'}),41},
+    {'no side objectives',model('objectives',{},{groups=three}),11},
+    {'running side objectives',running(model('objectives',list(9,'objective:2:'),{groups=three})),20},
 }
 for _,size in ipairs({{1280,720},{1920,1080},{3440,1440},{640,480}})do
     for _,case in ipairs(cases)do
@@ -51,24 +55,32 @@ for _,size in ipairs({{1280,720},{1920,1080},{3440,1440},{640,480}})do
                     name..': '..tostring(a.id)..' overlaps '..tostring(t.id))
             end
             local row=type(t.id)=='number' or tostring(t.id):find('^modifier:') or tostring(t.id):find('^constellation:') or tostring(t.id):find('^time:')
+                or tostring(t.id):find('^objective:')
             if m.locked then
                 assert(t.enabled==(not row and t.id~='start' and t.id~='clear'),name..': locked '..tostring(t.id))
             else assert(t.enabled,name..': '..tostring(t.id))end
         end
-        assert(#b.rows==#m.items and #b.groups==(m.section=='enemies' and #m.groups or 0))
+        assert(#b.rows==#m.items and #b.groups==((m.section=='enemies' or m.section=='objectives') and #m.groups or 0))
         assert(b.primary.id==(m.running and 'cancel' or 'start'))
     end
 end
 local b=P.layout(1920,1080,model('missions',list(22)))
 assert(b.x==1216 and b.y==36 and b.w==664 and b.h==1008 and b.s==1,'Design geometry')
-assert(b.rows[1].w==302 and b.rows[1].h==32 and b.rows[12].x==b.rows[1].x+308 and b.rows[2].y==b.rows[1].y-35,'Two columns, filled downwards')
+-- Five section headers close eleven rows up to 33 units apart.
+assert(b.rows[1].w==302 and b.rows[1].h==30 and b.rows[12].x==b.rows[1].x+308 and b.rows[2].y==b.rows[1].y-33,'Two columns, filled downwards')
 assert(b.rows[11].x==b.rows[1].x and b.rows[22].y==b.rows[11].y,'Columns are balanced')
 assert(b.headers[1].h==52 and b.headers[1].y>b.rows[1].y and b.headers[2].y<b.rows[11].y,'The open section holds its rows')
 b=P.layout(1920,1080,model('modifiers',list(8,'modifier:')))
 assert(b.rows[1].h==38 and b.rows[1].y-b.rows[2].y==42 and b.rows[1].w==610,'Modifier rows')
 b=P.layout(1920,1080,model('modifiers',list(13,'modifier:')))
--- Four section headers leave 29 units a row; the 19-unit labels still fit.
-assert(b.rows[1].h<38 and b.rows[1].h>=28,'Thirteen modifiers shrink their rows')
+-- Five section headers leave 25 units a row; the 19-unit labels still fit.
+assert(b.rows[1].h<38 and b.rows[1].h>=24,'Thirteen modifiers shrink their rows')
+-- Side objectives fill two columns and close up when there are many.
+b=P.layout(1920,1080,model('objectives',list(10,'objective:2:'),{groups=three}))
+assert(b.rows[1].h==32 and b.rows[6].x==b.rows[1].x+308 and b.rows[2].y==b.rows[1].y-35,'Side objectives in two columns')
+b=P.layout(1920,1080,model('objectives',list(32,'objective:2:'),{groups=three}))
+assert(b.rows[1].y-b.rows[2].y<35 and b.rows[1].y-b.rows[2].y>=20,'Many side objectives close up')
+assert(not pcall(P.layout,1920,1080,model('objectives',list(33,'objective:2:'),{groups=three})),'At most 32 side objectives')
 -- The header after an open section follows its last row by the same space,
 -- unless the enemy section has note lines to show.
 local function gap(m)
@@ -135,7 +147,7 @@ local r=engine('full');local panel=P.new(r.e)
 local m=model('modifiers',list(3,'modifier:','Modifier'),{summaries={missions='Geological Survey, Launch ICBM',modifiers='Any',enemies='Any'}})
 panel:show({},{},face,nowhere,m);panel:show({},{},face,nowhere,m)
 assert(r.updates==0 and r.created==1,'An unchanged state draws nothing')
-assert(#r.triangles==6,'Four chevrons and two chamfers')
+assert(#r.triangles==7,'Five chevrons and two chamfers')
 local rects,texts,measured=r.rects,r.texts,r.measured
 assert(measured>0)
 for _,o in ipairs(r.live)do
@@ -148,7 +160,7 @@ assert(math.abs(level.pos[1]+#level.value*level.size*0.5+0.05*level.size-(1216+2
 m.items[2].mode='require';m.summaries.modifiers='1 rule'
 panel:show({},{},face,nowhere,m)
 assert(r.updates>0 and r.destroyed==0 and r.rects==rects and r.texts==texts,'A rule updates the existing rows')
-assert(r.find('REQUIRED') and r.find('1 RULE') and #r.triangles==6)
+assert(r.find('REQUIRED') and r.find('1 RULE') and #r.triangles==7)
 m.items[2].mode='exclude';r.updates=0;panel:show({},{},face,nowhere,m);assert(r.updates>0 and r.find('EXCLUDED') and not r.find('REQUIRED') and r.find('ANY'))
 -- Hover and the reason of a row that cannot be chosen.
 local spot=P.layout(1920,1080,m).rows[1]
@@ -174,7 +186,7 @@ local old=r.destroyed
 m=model('enemies',list(11,'constellation:2:','Constellation'),{groups=three,forced='Predator Strain, Gloom Strain'})
 panel:show({},{[2]=true},face,nowhere,m)
 assert(r.destroyed==old+1 and not r.find('MODIFIER 2') and r.find('CONSTELLATION 11'),'A section switch removes the old rows')
-assert(r.find('ALWAYS PRESENT:') and r.find('PREDATOR STRAIN, GLOOM STRAIN') and r.find('GEOLOGICAL SURVEY') and #r.triangles==12)
+assert(r.find('ALWAYS PRESENT:') and r.find('PREDATOR STRAIN, GLOOM STRAIN') and r.find('GEOLOGICAL SURVEY') and #r.triangles==14)
 local cut
 for _,o in ipairs(r.live)do if o.kind=='text' and o.value:find('^NEUTRALIZE') then cut=o end end
 assert(cut and cut.value:find('%.%.%.$') and #cut.value<#'NEUTRALIZE GROUND-TO-ORBIT DEFENSES','Long names are cut to their button')

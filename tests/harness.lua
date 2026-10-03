@@ -61,7 +61,8 @@ function H.planet_model(src,replace)
         base_inputs=module('operation_base_inputs'),predictor=module('candidate_predictor'),
         constellation_inputs=module('constellation_inputs'),catalogue=module('filter_catalogue'),
         compatibility=module('mission_compatibility'),options=module('search_session').options,
-        labels=module('constellation_prediction').names}
+        labels=module('constellation_prediction').names,objective_inputs=module('side_objective_inputs'),
+        objectives=module('side_objective_prediction')}
     for key,value in pairs(replace or {})do m[key]=value end
     return module('planet_model')(m),m
 end

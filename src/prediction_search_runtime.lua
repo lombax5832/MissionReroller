@@ -1,12 +1,13 @@
 -- Controlled read-only search checkpoint: fixed filter, no UI or publication.
 -- A runtime factory: the assembler runs this file as function(host,lib,hooks).
--- hooks: bind_constellations, on_existing_match, on_search_match, and
+-- hooks: bind_constellations, bind_objectives, on_existing_match, on_search_match, and
 -- validate_search_request, which the assembler adds once the dialog exists.
 local M,emit,read,u,snapshot,config=host.M,host.emit,host.read,host.u,host.snapshot,host.config
 local reroll_session,O,map=host.reroll_session,host.O,host.map
 local Search,Planet,make_search_job,DayNight=lib.Search,lib.Planet,lib.make_search_job,lib.DayNight
-local ExternalEdits=lib.ExternalEdits
+local ExternalEdits,SideObjectives=lib.ExternalEdits,lib.SideObjectives
 local bind_constellations,on_existing_match,on_search_match=hooks.bind_constellations,hooks.on_existing_match,hooks.on_search_match
+local bind_objectives=hooks.bind_objectives
 local api,game,ffi,kernel
 host.when_initialized(function(n)api,game,ffi,kernel=n.api,n.game,n.ffi,n.kernel end)
 local on_prediction_ready,advance_prediction_search
@@ -34,13 +35,16 @@ local function search_clock()
     end
     return precise and precise() or api.time()
 end
-local function request_key(difficulty,required,modifiers,constellations,scope,time,excluded)
+local function request_key(difficulty,required,modifiers,constellations,scope,time,excluded,objectives)
     local parts={'d'..difficulty,'r'..(scope and scope.region or 'all'),'t'..(time or 'any')}
     for id in pairs(required)do parts[#parts+1]='m'..id end
     for id in pairs(excluded)do parts[#parts+1]='x'..id end
     for id,mode in pairs(modifiers)do parts[#parts+1]=string.format('o%u:%s',id,mode)end
     for group,tags in pairs(constellations and constellations.groups or {})do
         for tag,mode in pairs(tags)do parts[#parts+1]='c'..group..':'..tag..':'..mode end
+    end
+    for group,rows in pairs(objectives and objectives.groups or {})do
+        for row,mode in pairs(rows)do parts[#parts+1]=string.format('s%d:%u:%s',group,row,mode)end
     end
     table.sort(parts);return table.concat(parts,',')
 end
@@ -60,6 +64,15 @@ on_prediction_ready=function(s,definitions,now)
         for group,tags in pairs(request.constellations.groups)do
             local copy={};for tag,value in pairs(tags)do copy[tag]=value end
             constellations.groups[group]=copy
+        end
+    end
+    local objectives
+    if request.objectives and next(request.objectives.groups)then
+        if not bind_objectives then reroll_session.finish('search_failed');emit('FILTER_BLOCKED Side objective filters unavailable');return end
+        objectives={groups={}}
+        for group,rows in pairs(request.objectives.groups)do
+            local copy={};for row,value in pairs(rows)do copy[row]=value end
+            objectives.groups[group]=copy
         end
     end
     -- The Day / Night filter checks the viewed planet's sky (src/day_night.lua).
@@ -83,17 +96,26 @@ on_prediction_ready=function(s,definitions,now)
         if not ok then reroll_session.finish('search_failed');emit('FILTER_BLOCKED '..tostring(err));return end
     end
     if M.dialog_enabled and on_existing_match then
-        if constellations then
+        if constellations or objectives then
             local ok,err=pcall(function()
-                local annotate=bind_constellations(Planet.bind(read,u,api.pointer,game,s.board,s.planet))
-                for _,op in ipairs(s.decoded.operations)do annotate(op,u(s.operations,op.row*92+28),op.operation_id)end
+                local model=Planet.bind(read,u,api.pointer,game,s.board,s.planet)
+                for _,bind in ipairs({constellations and bind_constellations or false,objectives and bind_objectives or false})do
+                    if bind then
+                        local annotate=bind(model)
+                        for _,op in ipairs(s.decoded.operations)do
+                            annotate(op,u(s.operations,op.row*92+28),op.operation_id)
+                            -- Side objectives are drawn on first use; draw them here, where a failure is caught.
+                            for _,mission in ipairs(op.missions)do local _=mission.objectives end
+                        end
+                    end
+                end
             end)
             if not ok then reroll_session.finish('search_failed');emit('FILTER_BLOCKED '..tostring(err));return end
         end
         -- An operation another mod edited (s.external) holds missions no seed
         -- gives; it is never offered as the match.
         local existing=Search.find({operations=ExternalEdits.without(s.decoded.operations,s.external)},
-            request.difficulty,required,modifiers,constellations,scope,daynight and daynight.accepts,excluded)
+            request.difficulty,required,modifiers,constellations,scope,daynight and daynight.accepts,excluded,objectives)
         if existing then reroll_session.progress(0);on_existing_match(s,existing,now);return end
     end
     -- A city has one operation per difficulty. While it is in progress no
@@ -109,7 +131,7 @@ on_prediction_ready=function(s,definitions,now)
         local result=Planet.capture(frozen_read,u,api.pointer,game)(s,definitions)
         assert(ExternalEdits.composition_passes(result,s.external) and result.independent_bases,'Frozen baseline prediction mismatch')
     end
-    local key=request_key(request.difficulty,required,modifiers,constellations,scope,request.time,excluded)
+    local key=request_key(request.difficulty,required,modifiers,constellations,scope,request.time,excluded,objectives)
     local first=(s.seed+1)%4294967296
     local resumed=resume and resume.key==key and resume.planet==s.planet and resume.baseline==s.seed
     if resumed then first=resume.next end
@@ -118,22 +140,25 @@ on_prediction_ready=function(s,definitions,now)
         local predict=planet.predictor(definitions)
         -- Tag inputs join the frozen read set and are revalidated with it.
         local annotate=constellations and bind_constellations(planet)
+        local annotate_objectives=objectives and bind_objectives(planet)
         local function accepts(row)return Search.in_scope(row,scope)end
         local function evaluate(seed,difficulty)
             local operations=predict(seed,difficulty,accepts)
             if annotate then for _,op in ipairs(operations)do annotate(op)end end
+            if annotate_objectives then for _,op in ipairs(operations)do if op.valid then annotate_objectives(op)end end end
             return operations
         end
         -- Search the requested difficulty; confirm a match on the whole board.
         return function(seed)return evaluate(seed,request.difficulty)end,function(seed)return evaluate(seed)end
     end,{seed=first,limit=limit,difficulty=request.difficulty,required=required,excluded=excluded,modifiers=modifiers,
-        constellations=constellations,scope=scope,daynight=daynight and daynight.accepts,
+        constellations=constellations,objectives=objectives,scope=scope,daynight=daynight and daynight.accepts,
         quantum=4096,clock=search_clock,slice=0.016,batch=256,revalidate=1})
     current_search.baseline=s
     current_search.required=required
     current_search.excluded=excluded
     current_search.modifiers=modifiers
     current_search.constellations=constellations
+    current_search.objectives=objectives
     current_search.scope=scope
     current_search.daynight=daynight
     current_search.definitions=definitions
@@ -186,6 +211,21 @@ on_prediction_ready=function(s,definitions,now)
                 ..(#excluded>0 and ' exclude '..table.concat(excluded,'|') or '')
         end
         table.sort(tag_rules);emit('LUA_SEARCH_CONSTELLATIONS '..table.concat(tag_rules,', '))
+    end
+    if objectives then
+        local rules={}
+        for group,rows in pairs(objectives.groups)do
+            local wanted,unwanted={},{}
+            for row,mode in pairs(rows)do
+                local name=SideObjectives.names[row] or string.format('%08x',row)
+                if mode=='exclude' then unwanted[#unwanted+1]=name else wanted[#wanted+1]=name end
+            end
+            table.sort(wanted);table.sort(unwanted)
+            rules[#rules+1]=(group==0 and 'operation' or Search.options[group].name)
+                ..'=require '..(#wanted>0 and table.concat(wanted,'+') or 'none')
+                ..(#unwanted>0 and ' exclude '..table.concat(unwanted,'|') or '')
+        end
+        table.sort(rules);emit('LUA_SEARCH_OBJECTIVES '..table.concat(rules,', '))
     end
     emit(string.format('LUA_SEARCH_STARTED planet=%d region=%s baseline_seed=%u first_seed=%u resumed=%s difficulty=%d required=%s limit=%d read_only='..tostring(M.read_only),
         s.planet,scope and scope.region or 'all',s.seed,first,tostring(resumed==true),request.difficulty,table.concat(names,' + '),limit))
@@ -262,6 +302,13 @@ advance_prediction_search=function(action,now)
                 end
                 for i,mission in ipairs(job.operation.missions)do tags[i]=mission.native_type..':'..tags[i]end
                 emit('LUA_SEARCH_MATCH_CONSTELLATIONS row='..job.operation.row..' missions='..table.concat(tags,','))
+            end
+            if job.objectives then
+                local lists={}
+                for _,mission in ipairs(job.operation.missions)do
+                    lists[#lists+1]=mission.native_type..':['..SideObjectives.describe(mission.objective_list or {})..']'
+                end
+                emit('LUA_SEARCH_MATCH_OBJECTIVES row='..job.operation.row..' missions='..table.concat(lists,' '))
             end
             emit(string.format('LUA_SEARCH_MATCH seed=%u row=%d attempts=%d seeds_per_second=%.0f ranges=%d bytes=%d max_slice_ms=%.3f %s missions=%s read_only='..tostring(M.read_only)..' published=false selected=false',
                 job.seed,job.operation.row,job.attempts,job.attempts/elapsed,job.ranges,job.bytes,max_slice,timing,table.concat(missions,',')))

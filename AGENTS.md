@@ -125,8 +125,8 @@ No single file in `src/` is the shipped entry. `scripts/build.py` calls
   after `initialize()` on the first frame. A runtime registers
   `host.when_initialized(function(n) ... end)` to receive them.
 - The runtimes are created in the order of their startup log lines:
-  publication, constellations, search, dialog, identity probe (which wraps
-  `update` / `shutdown`).
+  publication, constellations, side objectives, search, dialog, identity
+  probe (which wraps `update` / `shutdown`).
 - `tests/test_runtime_host.py` (run by `test_package.py`) checks every build
   carries these files unchanged, and `tests/test_runtime_factories.lua`
   creates each one with a fake host that allows no other globals. Lua tests
@@ -320,6 +320,10 @@ Installed under `../tools/`; versions and paths in `../tools/README.md`.
 - Constellations can be added to a mission by a map stamp after generation,
   so enemy force exclusions are predictions. Illuminate missions and
   difficulty 1 draw none. See `docs/CONSTELLATION_RESEARCH.md`.
+- Side objectives are drawn from the mission seed when a mission descriptor
+  is built, not stored on the board; `src/side_objective_prediction.lua`
+  ports the draw and `scripts/validate_side_objectives.py` checks it against
+  the game's code. See `docs/SIDE_OBJECTIVE_RESEARCH.md`.
 - World modifiers with environment tags depend on events, state-table rules
   and planet overrides; `src/template_environments.lua` ports the collector.
 - The game is an entity-component system; gameplay definitions ship in

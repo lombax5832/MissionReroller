@@ -14,7 +14,7 @@ return function(m)
     -- campaign effects decoded for the missions also feed the tag inputs.
     function Planet.bind(read,u,pointer,game,board,index)
         local planet={board=board,index=index}
-        local config,effects,inputs,tags
+        local config,effects,inputs,tags,objectives
         -- The configuration manager is read first, then the effects, in the
         -- order of the native collectors.
         local function configuration(missing)
@@ -43,21 +43,35 @@ return function(m)
             end
             return tags
         end
+        -- Side-objective inputs (side_objective_inputs.lua).
+        function planet.objective_inputs()
+            if not objectives then
+                local c=configuration('Missing configuration manager')
+                objectives=assert(m.objective_inputs,'Side objective inputs unavailable')(read,u,pointer,game,board,c,planet.inputs())
+            end
+            return objectives
+        end
         -- predict(seed, difficulty, accepts) for the planet's bases under a
         -- candidate seed (candidate_predictor.lua).
         function planet.predictor(definitions)
             return assert(make_predictor,'Candidate predictor unavailable')(read,u,pointer,game,board,definitions,index,planet.inputs())
         end
         -- The filter options of one difficulty, optionally one city's rows.
-        -- Mission and modifier options survive a tag input failure, which is
-        -- returned as the second value.
+        -- Mission and modifier options survive a tag or side-objective
+        -- input failure, returned as the second and third values.
         function planet.catalogue(snapshot,difficulty,accepts)
             local C=assert(m.catalogue,'Filter catalogue unavailable')
             local result=C.build(planet.inputs(),snapshot,difficulty,u,m.options,m.compatibility,accepts)
             local ok,err=pcall(function()
                 C.constellations(result,planet.constellation_inputs(),m.labels,index,difficulty,m.options)
             end)
-            return result,not ok and err or nil
+            local fine,failure=true,nil
+            if m.objective_inputs then
+                fine,failure=pcall(function()
+                    C.objectives(result,planet.objective_inputs(),m.objectives,index,difficulty,m.options)
+                end)
+            end
+            return result,not ok and err or nil,not fine and failure or nil
         end
         return planet
     end

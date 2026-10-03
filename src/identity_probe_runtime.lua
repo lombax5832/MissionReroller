@@ -10,6 +10,7 @@ local make_special_inputs,make_level_inputs,make_level_verification=lib.make_spe
 local choose_level,Planet,ModInventory=lib.choose_level,lib.Planet,lib.ModInventory
 local ExternalEdits,O,pointer=lib.ExternalEdits,host.O,host.pointer
 local dialog_tick,dialog_release,observe_constellations=hooks.dialog_tick,hooks.dialog_release,hooks.observe_constellations
+local observe_objectives=hooks.observe_objectives
 local on_prediction_ready,advance_prediction_search=hooks.on_prediction_ready,hooks.advance_prediction_search
 local advance_live_publication,search_clock=hooks.advance_live_publication,hooks.search_clock
 local api,game,ffi,kernel,user32
@@ -79,6 +80,7 @@ local function tick()
     local focused=pid[0]==kernel.GetCurrentProcessId()
     if dialog_tick then dialog_tick(focused,now)end
     if observe_constellations then observe_constellations(now)end
+    if observe_objectives then observe_objectives(now)end
     local down=focused and user32.GetAsyncKeyState(0x11)<0 and user32.GetAsyncKeyState(0x10)<0 and user32.GetAsyncKeyState(0x78)<0
     if M.dialog_enabled then down=false end
     if reroll_session.take_cancel() then

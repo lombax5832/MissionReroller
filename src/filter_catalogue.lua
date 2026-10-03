@@ -142,10 +142,110 @@ function C.constellations(catalogue,tags,labels,planet,difficulty,options)
         return {faction=catalogue.faction,difficulty=difficulty,tags=list,zone=zone,war=war}
     end
 end
+-- Side objectives a mission can draw (src/side_objective_prediction.lua):
+-- the side (role 3) and tactical (role 2) entries of its pool that this
+-- difficulty, the configuration, the world modifiers of at least one
+-- operation here and a biome environment the planet can give allow. A row
+-- is a title (Prediction.rows). Group i covers the eligible mission types of
+-- family i, group 0 every one. Each group keeps, per mission type, its side
+-- and tactical slots and the role of each row it offers, for C.possible.
+-- The catalogue changes only after every input decoded.
+function C.objectives(catalogue,inputs,Prediction,planet,difficulty,options)
+    local contexts={}
+    for effect in pairs(catalogue.effects or {})do contexts[#contexts+1]=inputs.context(planet,effect)end
+    assert(#contexts>0,'No operation effects for side objectives')
+    local counts=inputs.counts(difficulty)
+    local groups={[0]={list={},set={},kinds={}}}
+    local function offer(group,kind)
+        local mission=inputs.mission(kind)
+        local scale=inputs.scale(mission.category)
+        local side=scale and math.floor(counts.side*scale+0.5) or counts.side
+        local info={side=side,tactical=counts.tactical,rows={}}
+        local environments={}
+        for _,context in ipairs(contexts)do
+            local _,set=inputs.environments(planet,kind,context.modifiers)
+            for id in pairs(set)do environments[id]=true end
+        end
+        for _,e in ipairs(mission.pool)do
+            local row=Prediction.row_of[e.id]
+            local slots=e.role==3 and side or e.role==2 and counts.tactical or 0
+            if row and e.weight>0 and slots>0 then
+                local record=inputs.objective(e.id)
+                local allowed=record.environments[1]==0
+                for k=1,4 do
+                    local id=record.environments[k]
+                    if id==0 then break end
+                    if environments[id]then allowed=true end
+                end
+                local banned=true
+                for _,context in ipairs(contexts)do if not context.banned[e.id]then banned=false end end
+                if allowed and not banned and not inputs.disabled(record.id)
+                    and (record.minimum==0 or record.minimum<=difficulty) and (record.maximum==0 or difficulty<=record.maximum)then
+                    info.rows[row]=info.rows[row] or e.role
+                    for _,target in ipairs({group,groups[0]})do
+                        if not target.set[row]then
+                            target.set[row]=true
+                            target.list[#target.list+1]={id=row,name=Prediction.names[row]}
+                        end
+                    end
+                end
+            end
+        end
+        group.kinds[kind]=info;groups[0].kinds[kind]=info
+    end
+    local named={}
+    for id,option in ipairs(options)do
+        if catalogue.mission_set[id]then
+            groups[id]={list={},set={},kinds={}}
+            for _,kind in ipairs(option.ids)do
+                if catalogue.native[kind]then named[kind]=true;offer(groups[id],kind)end
+            end
+        end
+    end
+    for kind in pairs(catalogue.native)do if not named[kind]then offer(groups[0],kind)end end
+    for _,group in pairs(groups)do table.sort(group.list,function(a,b)return a.name<b.name end)end
+    catalogue.objective_groups=groups
+end
+-- Whether one mission type of a group can hold every required row and still
+-- draw a side and a tactical objective that is not excluded. The reason is
+-- the closest type's: too many rows, then all excluded, then rows missing.
+local function objectives_possible(group,rules)
+    local why,rank='This mission cannot draw every required side objective',0
+    for _,info in pairs(group.kinds)do
+        local side,tactical,fits=0,0,true
+        for row,mode in pairs(rules)do
+            if mode=='require' then
+                local role=info.rows[row]
+                if role==3 then side=side+1 elseif role==2 then tactical=tactical+1 else fits=false end
+            end
+        end
+        if fits and (side>info.side or tactical>info.tactical)then
+            fits=false
+            if rank<2 then why,rank='Too many required side objectives for this mission and difficulty',2 end
+        end
+        if fits then
+            -- A slot always draws from a non-empty pool, so excluding all of
+            -- one role's rows leaves nothing to match.
+            local offered,left={},{}
+            for row,role in pairs(info.rows)do
+                offered[role]=true
+                if rules[row]~='exclude' then left[role]=true end
+            end
+            if (info.side>0 and offered[3] and not left[3]) or (info.tactical>0 and offered[2] and not left[2])then
+                fits=false
+                if rank<1 then why,rank='Every side objective of this mission is excluded',1 end
+            end
+        end
+        if fits then return true end
+    end
+    return false,why
+end
 -- time, when given, is the Day / Night filter's side and counts as a rule.
 -- excluded holds the mission families no mission of the operation may be;
 -- each counts as a rule and takes no slot.
-function C.validate(catalogue,required,modifiers,constellations,time,excluded)
+-- objectives holds side-objective groups like constellations: row ->
+-- 'require' or 'exclude'; one rule group counts as a rule.
+function C.validate(catalogue,required,modifiers,constellations,time,excluded,objectives)
     local n,required_modifiers,total=0,0,0
     if time~=nil then assert(time=='day' or time=='night','Invalid time of day');total=1 end
     for id,value in pairs(required)do
@@ -174,10 +274,19 @@ function C.validate(catalogue,required,modifiers,constellations,time,excluded)
         end
         if next(tags)then total=total+1 end
     end
-    assert(total>0,'Choose at least one mission, modifier rule, constellation or time of day')
-    local possible,reason=C.possible(catalogue,required,modifiers,constellations,excluded);assert(possible,reason)
+    for group,rows in pairs(objectives and objectives.groups or {})do
+        assert((group==0 and n==0) or required[group],'Side objectives need their mission checked')
+        local offered=catalogue.objective_groups and catalogue.objective_groups[group]
+        for row,mode in pairs(rows)do
+            assert(offered and offered.set[row],'Side objective is unavailable for this mission')
+            assert(mode=='require' or mode=='exclude','Invalid side objective rule')
+        end
+        if next(rows)then total=total+1 end
+    end
+    assert(total>0,'Choose at least one mission, modifier rule, constellation, side objective or time of day')
+    local possible,reason=C.possible(catalogue,required,modifiers,constellations,excluded,objectives);assert(possible,reason)
 end
-function C.possible(catalogue,required,modifiers,constellations,excluded)
+function C.possible(catalogue,required,modifiers,constellations,excluded,objectives)
     local n=0;for _ in pairs(required)do n=n+1 end
     if n>catalogue.slots then return false,'No mission slots remain; uncheck a mission first' end
     -- Every operation holds at least one mission, so excluding every
@@ -195,6 +304,21 @@ function C.possible(catalogue,required,modifiers,constellations,excluded)
         for _,mode in pairs(tags)do if mode=='exclude' then excluded=excluded+1 end end
         if offered and not offered.open and excluded>0 and excluded>=#offered.list then
             return false,'Every constellation '..(group==0 and 'here' or 'of this mission')..' is excluded'
+        end
+    end
+    -- Per mission, one of its types must hold the required rows; for the
+    -- operation, every required row must be offered by some mission.
+    for group,rows in pairs(objectives and objectives.groups or {})do
+        local offered=catalogue.objective_groups and catalogue.objective_groups[group]
+        if offered and next(rows)then
+            if group==0 then
+                for row,mode in pairs(rows)do
+                    if mode=='require' and not offered.set[row]then return false,'No mission here can draw that side objective' end
+                end
+            else
+                local ok,why=objectives_possible(offered,rows)
+                if not ok then return false,why end
+            end
         end
     end
     if catalogue.compatibility then return catalogue.compatibility.possible(catalogue.profiles,required,modifiers,excluded)end

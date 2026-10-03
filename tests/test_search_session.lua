@@ -73,4 +73,24 @@ assert(S.active_row({planet=268,active=active(49,269,10)})==nil,'Another planet'
 assert(S.active_row({planet=269,active=active(49,269,10,'00')})==nil,'Not in progress')
 assert(S.active_row({planet=269,active=active(49,269,10):sub(3)})==nil,'A truncated record')
 assert(S.active_row({planet=269})==nil and S.active_row(nil)==nil,'No record or no snapshot')
-print('search: existing match, AND, pacing, timeout, legacy budget, uncapped mode, cancellation, context, operation in progress passed')
+-- Side objectives: every required row and no excluded one, on the same
+-- mission as its family; without a checked family across the operation.
+local function op(row,missions)return {row=row,difficulty=10,missions=missions}end
+local lidar,artillery,sam=0xf1969b14,0x86cfeedb,0xc46443b2
+local board={operations={
+    op(1,{{native_type=0,objectives={[artillery]=true,[lidar]=true}},{native_type=22,objectives={}}}),
+    op(2,{{native_type=0,objectives={[lidar]=true,[sam]=true}},{native_type=22,objectives={[artillery]=true}}}),
+    op(3,{{native_type=0}}),
+}}
+local function rows(group,rules)return {groups={[group]=rules}}end
+local icbm={[1]=true}
+assert(S.find(board,10,icbm,nil,nil,nil,nil,nil,rows(1,{[lidar]='require'})).row==1)
+assert(S.find(board,10,icbm,nil,nil,nil,nil,nil,rows(1,{[lidar]='require',[artillery]='exclude'})).row==2,'Excluded on the mission')
+assert(S.find(board,10,icbm,nil,nil,nil,nil,nil,rows(1,{[lidar]='require',[sam]='require'})).row==2,'Every required row')
+assert(not S.find(board,10,icbm,nil,nil,nil,nil,nil,rows(1,{[lidar]='require',[artillery]='require',[sam]='require'})),'All of them')
+assert(S.find(board,10,{},nil,nil,nil,nil,nil,rows(0,{[sam]='require',[artillery]='require'})).row==2,'Across the operation')
+assert(not S.find(board,10,{},nil,nil,nil,nil,nil,rows(0,{[lidar]='require',[artillery]='exclude'})),'Excluded anywhere in the operation')
+assert(not S.find({operations={board.operations[3]}},10,{},nil,nil,nil,nil,nil,rows(0,{[lidar]='exclude'})),'Unresolved objectives never match')
+assert(not S.find({operations={board.operations[3]}},10,icbm,nil,nil,nil,nil,nil,rows(1,{[lidar]='exclude'})))
+assert(S.find({operations={board.operations[3]}},10,icbm,nil,nil,nil,nil,nil,{groups={}}).row==3,'No rules, no objectives needed')
+print('search: existing match, AND, pacing, timeout, legacy budget, uncapped mode, cancellation, context, operation in progress and side objectives passed')
