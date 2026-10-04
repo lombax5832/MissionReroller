@@ -239,8 +239,16 @@ assert(r.find('NO PLANET') and r.find('NO PLANET CHOSEN') and r.find('OPEN A PLA
 m=model(nil,{},{time='night',time_hold='14m'})
 panel:show({},{},face,nowhere,m)
 assert(r.find('TIME OF DAY') and r.find('ANY') and r.find('DAY') and r.find('NIGHT') and not r.find('CHOSEN')
-    and r.find('NO SKY CHECK') and r.find('DAYLIGHT') and r.find('AT LEAST 14M') and not r.find('DARK'),'Time of day tiles')
+    and not r.find('NO SKY CHECK') and r.find('DAYLIGHT') and r.find('AT LEAST 14M') and not r.find('DARK'),'Time of day tiles')
 assert(panel:icons()==true,'The icons drew')
+-- ANY has no second line: its label sits in the middle of its tile.
+do
+    local any,tile=nil,P.layout(1920,1080,m).times[1]
+    for _,o in ipairs(r.live)do
+        if o.kind=='text' and o.value=='ANY' and o.pos[1]>=tile.x and o.pos[1]<tile.x+tile.w then any=o end
+    end
+    assert(any and math.abs(any.pos[2]+any.size*0.35-(tile.y+tile.h/2))<1e-6,'ANY is centred')
+end
 local function bitmaps()
     local found={}
     for _,o in ipairs(r.live)do if o.kind=='bitmap' then found[#found+1]=o end end

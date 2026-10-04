@@ -7,8 +7,8 @@ local W,H,EDGE,LEFT,INNER,FOOT=664,1008,40,25,610,820
 local SECTIONS={{id='missions',title='MISSIONS'},{id='modifiers',title='MODIFIERS'},{id='enemies',title='ENEMY FORCES'},
     {id='objectives',title='SIDE OBJECTIVES'},{id='time',title='TIME OF DAY',fixed=true}}
 -- The time of day is no dropdown: three tiles of this width on its header,
--- each a label over a line saying what that side means.
-local TIMES,TILE={{'any','ANY','NO SKY CHECK'},{'day','DAY','DAYLIGHT'},{'night','NIGHT','DARK'}},116
+-- each a label, DAY and NIGHT over a line saying what that side means.
+local TIMES,TILE={{'any','ANY'},{'day','DAY','DAYLIGHT'},{'night','NIGHT','DARK'}},116
 -- The galactic map's day and night icons for the DAY and NIGHT tiles:
 -- 48-pixel squares on one 4096x2048 page of the ship UI atlas (texture
 -- atlas b4a883566f3f243a in packages/content/atlas_ship), drawn through the
@@ -394,11 +394,13 @@ function P.new(e)
                         local label=on and ink or not tile.enabled and dim or white
                         rect('tile'..n,tile.x,tile.y,tile.w,tile.h,993,on and fill or dark)
                         if not on and over then rect('tile_hover'..n,tile.x,tile.y,tile.w,tile.h,994,fill)end
-                        local top,lx=tile.y+tile.h-15*s,tile.x+10*s
+                        -- A tile without a second line (ANY) centres its label.
+                        local top,lx=side[3] and tile.y+tile.h-15*s or tile.y+tile.h/2,tile.x+10*s
                         if side[1]~='any' and icon('icon'..n,side[1],tile.x+9*s,top-8*s,16*s,on and ink or white)then lx=tile.x+30*s end
                         text('tile'..n,side[2],lx,top,16,label,nil,tile.x+tile.w-10*s-lx)
-                        local line=on and side[1]~='any' and why or side[3]
-                        text('tile_line'..n,line,tile.x+10*s,tile.y+12*s,12,on and ink or not tile.enabled and dim or muted,nil,tile.w-20*s)
+                        if side[3]then
+                            text('tile_line'..n,on and why or side[3],tile.x+10*s,tile.y+12*s,12,on and ink or not tile.enabled and dim or muted,nil,tile.w-20*s)
+                        end
                     end
                 else
                     text('head'..i,section.title,t.x+58*s,cy,21,open and ink or white,nil,200*s)

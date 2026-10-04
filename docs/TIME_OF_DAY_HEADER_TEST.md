@@ -4,8 +4,8 @@
 
 Section 5 of the panel, TIME OF DAY, is no longer a dropdown. Three tiles
 sit on its header, right of the title: ANY, DAY and NIGHT. DAY and NIGHT
-carry the galactic map's sun and moon icons. Each tile has a second line:
-`NO SKY CHECK`, `DAYLIGHT` and `DARK`. The chosen tile is yellow and its
+carry the galactic map's sun and moon icons. DAY and NIGHT have a second line:
+`DAYLIGHT` and `DARK`. The chosen tile is yellow and its
 second line says how long the side holds: `AT LEAST 2H 30M`, less on short
 days (`AT LEAST 14M`). While the planet's sky loads it is amber and reads
 `WAITING`; when no city can hold that side it is red and reads
@@ -44,7 +44,7 @@ rectangles, amber and red, labels without icons),
 1. Open the galactic map, view a planet, press F7.
    - Pass: `mods/ipodalexei/mission_reroller_experiment: loaded`,
      `TIME_ICONS drawn` and no `STOPPED:` line. Section 5 shows TIME OF DAY
-     with three tiles: ANY (yellow, `NO SKY CHECK`), DAY with a sun
+     with three tiles: ANY (yellow, one line), DAY with a sun
      (`DAYLIGHT`) and NIGHT with a moon (`DARK`). The moon's thick side is
      at the lower right, as on the galactic map. Sections 1 to 4 still open
      and close.
