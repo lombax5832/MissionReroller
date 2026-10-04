@@ -16,7 +16,7 @@ A mission is no longer dimmed because of `ANY MISSION` rules that checking
 it would discard. Before, excluding every enemy force under `ANY MISSION`
 dimmed every mission, so the player could not check one to start over.
 
-The red is the excluded rows' wash, stronger under the pointer. Nothing is
+The red is the excluded rows' red at a brighter wash, stronger under the pointer. Nothing is
 logged: the header is the whole notice.
 
 ## Status

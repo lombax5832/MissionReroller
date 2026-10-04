@@ -377,10 +377,10 @@ function P.new(e)
                 local section=SECTIONS[i]
                 local open,over,cy=model.section==section.id and not section.fixed,hover==t.id,t.y+t.h/2
                 -- A header whose rules a mission click discarded takes the
-                -- excluded rows' red until it is clicked.
+                -- excluded rows' red, brighter, until it is clicked.
                 local changed=not open and (model.changed or {})[section.id]
                 rect('head'..i,t.x,t.y,t.w,t.h,992,open and (over and color(255,241,110) or yellow)
-                    or changed and wash(RED,over and 52 or 26) or glass(over and 43 or 18))
+                    or changed and wash(RED,over and 96 or 64) or glass(over and 43 or 18))
                 rect('number'..i,t.x+16*s,cy-14*s,28*s,28*s,993,open and ink or glass(36))
                 text('number'..i,i,t.x+30*s,cy,16,open and yellow or white,'centre')
                 if section.fixed then
