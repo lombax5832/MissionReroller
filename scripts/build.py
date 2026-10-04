@@ -22,7 +22,7 @@ RELEASE_NAME = 'Mission Reroller'
 # The GUID and name of untagged (local) builds.
 DEVELOPMENT_GUID = '97a929ab-793e-49e8-b186-f39daa8984e8'
 DEVELOPMENT_NAME = 'Mission Reroller Dev'
-DEFAULT_VERSION = '0.32.1'
+DEFAULT_VERSION = '0.33.0'
 # What mod managers show for the mod and its one option.
 DESCRIPTION = ('Rerolls the operations on a planet\'s war table until one has the missions, modifiers, '
                'enemy forces and time of day you choose. Press F7 on the galactic map to open the panel '

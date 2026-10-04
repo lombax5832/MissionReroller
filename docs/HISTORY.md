@@ -5,6 +5,22 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
+**Not yet validated in game: v0.33.0 time of day tiles and mission
+changed headers.** The release carries three changes since v0.32.1. Time of
+day moved from a dropdown to ANY, DAY and NIGHT tiles on the section's
+header, DAY and NIGHT drawn with the galactic map's sun and moon from the
+ship UI atlas through `Gui.bitmap_uv`; the chosen tile says how long the
+side holds, amber while the sky loads and red when no city holds it. Test
+plan: [TIME_OF_DAY_HEADER_TEST.md](TIME_OF_DAY_HEADER_TEST.md). A mission
+click that discards enemy force or side objective rules marks the section
+header red with `- MISSION CHANGED` until the header or CLEAR is clicked,
+and `ANY MISSION` rules no longer dim missions; the user tested it in game
+on 2026-10-04 with nothing logged
+([MISSION_CHANGED_TEST.md](MISSION_CHANGED_TEST.md)). `src/filter_catalogue.lua`
+now counts the copies the remaining side and tactical rows can fill, so
+exclusions that leave too few for a mission's slots are refused before a
+search starts.
+
 **Validated in game: v0.32.1 page checks under Proton.** A
 Proton player's v0.31.0 log stopped on `unexpected target page` right after
 `MODAL_OPEN`: the dialog's snapshot failed one of its four page checks, the

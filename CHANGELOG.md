@@ -6,6 +6,24 @@ GitHub release notes and, as one plain-text line each, the Nexus Mods
 changelog. How each change was
 made and tested is in the development log, [docs/HISTORY.md](docs/HISTORY.md).
 
+## v0.33.0 Time of day tiles
+
+- Time of day is now picked with three tiles on its section heading, Any,
+  Day and Night, with the galactic map's sun and moon on Day and Night,
+  instead of a dropdown.
+- The chosen Day or Night tile says how long the mission stays on that side
+  after the reroll, at least 2h 30m, or less on planets and moons with short
+  days. It turns amber while the planet's sky loads and red when no city on
+  the planet can hold that side.
+- Checking the first mission discards the rules set under Any mission, and
+  unchecking a mission discards its own. The Enemy forces or Side objectives
+  heading that lost rules now turns red and says Mission changed until you
+  click it or Clear.
+- A mission is no longer dimmed by Any mission rules that checking it would
+  discard, so excluding every enemy force no longer locks out every mission.
+- Excluding so many side objectives that a mission cannot fill its slots is
+  now refused up front, instead of starting a search that could never match.
+
 ## v0.32.1 Proton fix
 
 - Fixed the reroll panel closing as soon as it opened when playing through
