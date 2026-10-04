@@ -78,7 +78,9 @@ local logs={}
 local function emit(line)logs[#logs+1]=line end
 local request
 local session={status=nil}
+local estimate
 local reroll_session={view=function()return {request=request}end,report=function()end,progress=function()end,
+    estimate=function(e)estimate=e or estimate end,
     result=function()end,advance=function(status)session.status=status end,finish=function(status)session.status=status end}
 local clock=os.clock
 H.natives(update,{api={pointer=pointer,time=clock},game=game,ffi=ffi})
@@ -140,7 +142,7 @@ local Timed=setmetatable({source=function(spec)
     return result,why
 end},{__index=SeedSolver})
 local function search(name,r,solver,bounded)
-    request=r;logs={};session.status=nil;source_ms,gap_ms,gap_at=0,0,nil
+    request=r;logs={};session.status=nil;source_ms,gap_ms,gap_at=0,0,nil;estimate=nil
     set(ready,'SeedSolver',solver~=false and Timed or nil)
     local started=clock()
     ready(snapshot,definitions,started)
@@ -163,6 +165,11 @@ local function search(name,r,solver,bounded)
     print(string.format('  %s: %s (paths and chain %.0f ms, longest stretch without a pause %.0f ms at %s); matched seed %u row %s after %d candidates in %.2f s, %s, longest slice %s ms',
         name,line,source_ms,gap_ms,tostring(gap_at),found,match:match('row=(%d+)'),attempts,took,match:match('mode=%w+') or 'mode=none',
         match:match('max_slice_ms=([%d.]+)')))
+    if estimate then
+        print(string.format('    dialog estimate: 1 in %.0f seeds match, usually %.2f s (took %.2f s, %s walk steps, %s expected)',
+            1/estimate.match,estimate.seconds,took,match:match('walk_steps=(%d+)'),
+            text:match('expected_steps=(%d+)')))
+    end
     print(string.format('    frozen inputs: %s ranges, %s bytes (limits 20000 and 2097152)',match:match('ranges=(%d+)'),
         match:match('bytes=(%d+)')))
     -- The set-up yields within its frame slice (the search's 16 ms).

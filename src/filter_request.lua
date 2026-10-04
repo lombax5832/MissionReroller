@@ -198,6 +198,24 @@ local function grouped(n)
     return digits
 end
 local function count(n)return n==0 and 'Any' or n..(n==1 and ' rule' or ' rules')end
+-- How strict a solved search's filter is and how long it usually takes
+-- (prediction_search_runtime.lua: {match, seconds, elapsed}).
+local function estimate_text(e)
+    local strict
+    if e.match>=0.5 then strict='Most seeds match'
+    else
+        local n=1/e.match
+        local scale=10^math.max(0,math.floor(math.log10(n))-1)
+        strict='1 in '..grouped(math.floor(n/scale+0.5)*scale)..' seeds match'
+    end
+    local s=e.seconds
+    -- One unmeasured text redrawn every frame: kept under the panel's width.
+    local usual=s<1 and 'expect under a second' or s<90 and string.format('expect about %d s',math.floor(s+0.5))
+        or s<=180 and string.format('expect about %d min',math.floor(s/60+0.5))
+        or 'over the 3 min limit'
+    local late=(e.elapsed or 0)>math.max(2,2*s) and s<=180 and ', running long' or ''
+    return strict..' - '..usual..late
+end
 local CHANGED=' - Mission changed'
 -- The panel's model. catalogue is the last one built, used for compatibility
 -- even while not shown. v: shown (the catalogue may be displayed), fresh
@@ -316,7 +334,8 @@ function R:model(catalogue,v)
     return {running=busy,locked=locked,ready=ready,can_start=ready and rules>0,can_clear=not locked and rules>0,
         difficulty=v.difficulty,status=tostring(status),tone=tone,
         step=busy and (running and run.step or 1) or nil,
-        detail=busy and grouped(running and run.progress or 0)..' of '..grouped(v.limit)..' seeds searched'
+        detail=busy and (running and run.estimate and estimate_text(run.estimate)
+            or grouped(running and run.progress or 0)..' of '..grouped(v.limit)..' seeds searched')
             or ready and rules>0 and tone=='idle' and 'Rerolls every unstarted operation of the campaign' or '',
         faction=display and catalogue.faction or nil,scope=v.scope and 'city' or 'planet',
         section=section,items=items,page=self.page,pages=pages,groups=tabs,group=group,

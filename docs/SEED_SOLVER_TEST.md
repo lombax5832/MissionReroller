@@ -66,6 +66,12 @@ ran out (not expected). Send the whole log after the session.
      or a briefing that contradicts the rules.
    - Also note: the request may be impossible (`SEED_SOLVER_OFF reason=no
      draw path`): pick other rules.
+   - **Estimate.** While it searches, the line under the progress strip
+     reads `1 IN <n> SEEDS MATCH - EXPECT ...`. Note it and compare with
+     `elapsed_s=`: the estimate is right within a few times either way.
+     The `SEED_SOLVER` line's `match=1/<n> expected_steps=<n>` and the
+     match line's `walk_steps=` give the numbers behind it. The text fits
+     on one line inside the panel.
 4. **Frame rate.** During steps 2 and 3 the game keeps running smoothly
    (the map can be panned while it searches).
    - Pass: `max_slice_ms=` in each `LUA_SEARCH_MATCH` line about what a

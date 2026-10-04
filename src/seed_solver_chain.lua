@@ -73,6 +73,34 @@ return function(Math)
         return best
     end
 
+    -- The walk steps expected before the first candidate: a job walks the
+    -- solutions of its root draw (share r of all values) and yields on
+    -- average p/r candidates per step, p its path's probability; jobs (each
+    -- path for each of `rows` rows, as R.new orders them) take turns of
+    -- `quantum` steps. share thins the candidates (an accept check). The
+    -- most likely paths come first, so the first turns usually decide.
+    function R.expected_steps(paths,rows,quantum,share)
+        local rates={}
+        for _,path in ipairs(paths)do
+            local root=R.plan(path)
+            local r=root and (root.hi-root.lo+1)/M32 or 1
+            for _=1,rows do rates[#rates+1]=path.probability/r*(share or 1)end
+        end
+        if #rates==0 then return math.huge end
+        -- One cycle of turns: steps spent while no candidate came, and the
+        -- chance none came.
+        local spent,alive=0,1
+        for _,rate in ipairs(rates)do
+            if rate>0 then
+                local none=math.exp(-rate*quantum)
+                spent=spent+alive*(1-none)/rate
+                alive=alive*none
+            else spent=spent+alive*quantum end
+        end
+        if alive>=1 then return math.huge end
+        return spent/(1-alive)
+    end
+
     -- Campaign-stream positions of a generated row's ID and seed draws: two
     -- draws per generated row before it (operation_identity.lua), the
     -- preserved row drawing none; no ID fallback while the pool outnumbers

@@ -169,6 +169,36 @@ local function solve(f)
         return 0
     end
     assert(#found==want,string.format('%s: %d of %d seeds within %d steps',f.name,#found,want,chain.steps))
+    -- The estimates the search shows (seed_solver_search.lua): candidates per
+    -- walk step, and the share of seeds whose board matches.
+    if f.scope=='any' and not f.daynight then
+        -- Walk steps to the first candidate, over chains from random starts.
+        -- With the factor 2 seed_solver_search.lua applies for clustering.
+        local predicted=2*Chain.expected_steps(paths,#rows,4096)
+        local total=0
+        for _=1,30 do
+            local first=Chain.new({paths=paths,rows=rows,planet=C.planet,random=random})
+            repeat local seed,done=first.next(65536)until seed or done
+            total=total+first.steps
+        end
+        local observed=total/30
+        assert(observed<predicted*3+64 and observed>predicted/3-64,
+            string.format('%s: %.0f walk steps to a candidate, %.0f predicted',f.name,observed,predicted))
+        local q=0
+        for _,path in ipairs(paths)do q=q+path.probability end
+        local share=1-(1-math.min(1,q))^#rows
+        local sampled=''
+        if share>=1/300 then
+            local hits=0
+            for _=1,2000 do if matches(C.board_of(random()),f)then hits=hits+1 end end
+            local expected=share*2000
+            assert(math.abs(hits-expected)<=4*math.sqrt(expected)+0.15*expected,
+                string.format('%s: %d of 2000 seeds match, %.0f predicted',f.name,hits,expected))
+            sampled=string.format(', %d of 2000 random seeds matched (%.0f predicted)',hits,expected)
+        end
+        note=note..string.format(' [estimate: 1 in %.0f seeds match%s; %.0f walk steps to a candidate, %.0f predicted]',
+            1/share,sampled,observed,predicted)
+    end
     print(string.format('  %s: %d seeds, per seed %.0f walk steps, %.1f candidates, %.3f s (LuaJIT, boards included)%s',
         f.name,#found,chain.steps/#found,candidates/#found,took/#found,note))
     return #found

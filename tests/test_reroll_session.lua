@@ -125,13 +125,15 @@ session,M=new(true)
 local first={difficulty=10,required={[4]=true}}
 session.start(first);session.take_request();session.advance('search_running')
 session.progress(256);session.report('No match in 256 seeds; search again to continue');session.result({status='exhausted'})
+session.estimate({match=0.01,seconds=2,elapsed=1});assert(session.view().estimate.seconds==2)
 session.finish('search_exhausted')
 view=session.view()
 assert(view.report=='No match in 256 seeds; search again to continue' and view.progress==256 and view.result.status=='exhausted' and view.request==first)
 local second={difficulty=9,required={}}
 assert(session.start(second))
 view=session.view()
-assert(view.request==second and view.report==nil and view.progress==0 and view.result==nil,'The last run does not stand for this one')
+assert(view.request==second and view.report==nil and view.progress==0 and view.result==nil and view.estimate==nil,
+    'The last run does not stand for this one')
 session.report('This operation is in progress; its missions are fixed');session.report(nil)
 assert(session.view().report==nil)
 session.take_request();session.finish('cancelled')

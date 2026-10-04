@@ -427,6 +427,34 @@ The scoped scan only predicts the city's row, so it is fast (15,000 seeds/s
 offline, 4,467 in game): the solver matters for a city with rare rules or a
 Day / Night window, much less for missions alone.
 
+### The estimate in the dialog, 2026-10-04
+
+While the solver searches, the line under the progress strip shows how
+strict the filter is and how long such a search usually takes, in place of
+the seed count: `1 in 23,000 seeds match - expect about 4 s` (`Most seeds
+match`, `expect under a second`, `over the 3 min limit`, and `, running
+long` once a search has taken twice its estimate).
+
+- **Strictness.** The paths are disjoint outcomes of the draws, so their
+  probabilities add to q, the share of one row's operation seeds that
+  follow one; with r generated rows (1 for a city) a campaign seed matches
+  with 1 - (1 - q)^r, times the share of valid IDs for Day / Night. On
+  2,000 random seeds per filter the predicted and sampled counts agreed
+  (424 and 414, 92 and 98, 181 and 182, 92 and 83). Parts of a filter the
+  paths leave out are not counted.
+- **Time.** A job yields about p/r candidates per walk step (r the share of
+  values its root draw takes); jobs take turns of 4,096 steps, most likely
+  path first, so `seed_solver_chain.lua` `expected_steps` sums one cycle of
+  truncated exponential waits. The walk's solutions cluster, and the first
+  candidate came after 0.8 to 3.4 times that many steps on the captures'
+  filters, so the search uses twice it. The runtime divides by the walk
+  rate measured once 200,000 steps have run (800,000 steps a second until
+  then, the rate the in-game searches showed) and adds the set-up and
+  0.3 s for the match's confirmation.
+- **Log.** `SEED_SOLVER ... match=1/<n> expected_steps=<n>`; the match line's
+  `walk_steps=` is the actual count.
+- The scan has no estimate: it runs only for requests without paths.
+
 ## Next steps, if pursued
 
 1. The in-game test ([SEED_SOLVER_TEST.md](SEED_SOLVER_TEST.md)).

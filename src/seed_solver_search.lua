@@ -36,7 +36,11 @@ return function(Math,Paths,Chain,Time,Inputs)
     -- checkpoint() called often while the paths and walks are set up.
     -- Returns {next(budget) -> seed | nil, done; steps(); paths; rows;
     -- valid, ids: how many operation IDs the Day / Night window passes, of
-    -- how many} or nil, reason.
+    -- how many; estimate={match, steps}} or nil, reason. estimate.match is
+    -- the share of campaign seeds whose board matches the paths (one row of
+    -- them at least), estimate.steps the walk steps expected before the
+    -- first candidate (almost every candidate matches).
+    -- Parts of the filter left to the predictor are not counted.
     -- The campaign-stream position of a city's (campaign event's) seed
     -- draw: after the two draws of every generated normal row, one per
     -- event row in event order (operation_identity.lua), the preserved row
@@ -126,7 +130,17 @@ return function(Math,Paths,Chain,Time,Inputs)
         end
         local chain=Chain.new({paths=paths,rows=rows,planet=input.planet,random=spec.random,accept=accept,
             checkpoint=spec.checkpoint})
-        return {next=chain.next,steps=function()return chain.steps end,paths=#paths,rows=#rows,valid=valid,ids=ids}
+        -- Paths are disjoint outcomes of the draws, so their probabilities add.
+        local share=accept and ids>0 and valid/ids or 1
+        local q=0
+        for _,path in ipairs(paths)do q=q+path.probability end
+        q=math.min(1,q)*share
+        -- The walk's solutions come in clusters, so the first candidate takes
+        -- longer than independent draws would: 0.8 to 3.4 times as long on
+        -- the captures' filters (tests/test_seed_solver_chain.lua).
+        local estimate={match=1-(1-q)^#rows,steps=2*Chain.expected_steps(paths,#rows,4096,share)}
+        return {next=chain.next,steps=function()return chain.steps end,paths=#paths,rows=#rows,valid=valid,ids=ids,
+            estimate=estimate}
     end
     return R
 end

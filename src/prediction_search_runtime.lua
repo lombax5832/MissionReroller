@@ -16,6 +16,8 @@ local current_search,search_started,last_progress,max_slice
 local slices,step_time,context_time
 local wait_started,wait_total,last_wait_poll
 local default_limit=1000000
+-- Walk steps per second of a search in game (about a million on 2026-10-04).
+local solver_rate=800000
 -- The last range searched without a match, so an unchanged request continues
 -- after it instead of repeating it.
 local resume
@@ -161,7 +163,9 @@ on_prediction_ready=function(s,definitions,now)
             local ms=(search_clock()-started)*1000
             if ok and result then
                 source=result
-                emit(string.format('SEED_SOLVER paths=%d rows=%d setup_ms=%.0f%s',result.paths,result.rows,ms,
+                result.setup=ms/1000
+                emit(string.format('SEED_SOLVER paths=%d rows=%d setup_ms=%.0f match=1/%.0f expected_steps=%.0f%s',result.paths,
+                    result.rows,ms,1/math.max(result.estimate.match,1e-12),result.estimate.steps,
                     result.ids and string.format(' daynight_ids=%d/%d',result.valid,result.ids) or ''))
             else
                 emit(string.format('SEED_SOLVER_OFF reason=%s setup_ms=%.0f; scanning seeds in order',
@@ -278,6 +282,15 @@ advance_prediction_search=function(action,now)
     end
     reroll_session.progress(job.attempts)
     local elapsed=math.max(now-search_started-wait_total-waiting,0.001)
+    -- The dialog's estimate: the solver's expected walk at the walk rate
+    -- measured so far, or a typical in-game rate before there is one, plus
+    -- the set-up and the match's confirmation.
+    if job.source and job.source.estimate and job.solving~=false then
+        local e,steps=job.source.estimate,job.source.steps()
+        local work=elapsed-(job.source.setup or 0)
+        local rate=steps>=200000 and work>0.5 and steps/work or solver_rate
+        reroll_session.estimate({match=e.match,seconds=(job.source.setup or 0)+e.steps/rate+0.3,elapsed=elapsed})
+    else reroll_session.estimate(nil)end
     local compiled=rawget(_G,'jit') and type(jit.status)=='function' and jit.status()
     local timing=string.format('elapsed_s=%.2f slices=%d work_ms=%.0f context_ms=%.0f jit=%s',elapsed,slices,
         (step_time-context_time)*1000,context_time*1000,tostring(compiled))

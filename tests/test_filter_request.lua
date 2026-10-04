@@ -231,6 +231,22 @@ for i,case in ipairs(cases)do
 end
 m=g:model(terminids,fresh({running=true}))
 assert(m.running and m.locked and not m.can_start and not m.can_clear)
+-- A solved search shows how strict its filter is and how long it usually
+-- takes, in place of the seed count.
+local function solving(e)
+    local v=fresh({running=true});v.run={caption='Searching seeds',step=2,progress=3,estimate=e}
+    return g:model(terminids,v).detail
+end
+for _,case in ipairs({
+    {{match=0.6,seconds=0.4,elapsed=0.1},'Most seeds match - expect under a second'},
+    {{match=1/23456,seconds=4.4,elapsed=1},'1 in 23,000 seeds match - expect about 4 s'},
+    {{match=1/7.3,seconds=12,elapsed=30},'1 in 7 seeds match - expect about 12 s, running long'},
+    {{match=1/1234567,seconds=150,elapsed=20},'1 in 1,200,000 seeds match - expect about 3 min'},
+    {{match=1e-9,seconds=900,elapsed=400},'1 in 1,000,000,000 seeds match - over the 3 min limit'},
+})do
+    local text=solving(case[1])
+    assert(text==case[2],text)
+end
 m=g:model(terminids,fresh({fixed=true}))
 assert(not m.ready and not m.can_start and not m.locked and m.can_clear,'An operation in progress blocks the start, not editing')
 m=g:model(terminids,fresh({scope={region=1}}));assert(m.scope=='city')
