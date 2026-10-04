@@ -321,9 +321,8 @@ per seed offline against 0.003 s without it.
 
 Not ported: the sampling lattice (offline reference only), per-ID paths
 (`shared_paths` returns nil when operations of a difficulty differ in more
-than level tiles), operation-level rules (group 0), city scope and special
-operations (whose levels are drawn, so Day / Night would need their level
-draws constrained too).
+than level tiles), operation-level rules (group 0), and special operations
+other than a scoped city (**Cities** below).
 
 ## In the search, 2026-10-04
 
@@ -353,7 +352,7 @@ revalidated, then published as before.
   missions, modifier rules and the window's movement are left to the
   predictor: they make candidates less selective, never wrong.
 - **Fallback.** `source` returns nil and a reason, and the search scans in
-  order, for a city scope, a request without a required mission (group-0
+  order, for a request without a required mission (group-0
   rules, exclusions or modifiers only), operations of the difficulty that
   differ in more than their level tiles, special levels or modifier
   missions, a pool smaller than the rows, a difficulty above the cap, a
@@ -387,6 +386,46 @@ ranges and 60 KB (limits 20,000 and 2 MB). On this capture every request
 was also common enough for scanning to match within 23 candidates; the
 speed-up on rare requests is the measurement above. The in-game test is
 [SEED_SOLVER_TEST.md](SEED_SOLVER_TEST.md).
+
+### Cities, 2026-10-04
+
+The in-game test of the search ran four solved searches on planet 268
+(difficulty 6, three missions with an enemy force and side-objective rules,
+one by day): each matched within 7 candidates in 0.42 to 1.13 s, published
+and verified, and the city search fell back with `SEED_SOLVER_OFF
+reason=city scope`, matching by scan after 3,002 seeds.
+
+A city or megafactory is a campaign event: one operation per difficulty in
+rows `30 + region*10 + difficulty - 1`, ID the region, category and faction
+from its event, and a special level graph. Three differences from a normal
+row, all fixed in draw count:
+
+- **Its seed.** `operation_identity.lua` draws the event rows' seeds after
+  every normal row (two draws each), one per event row in event order, the
+  preserved row drawing none; `seed_solver_search.lua` `event_position`
+  gives the campaign-stream position.
+- **Its levels.** `mission_level_choice.lua` takes `levels[1]` for the
+  first mission and makes one `rng:index(#levels)` draw for each later one,
+  its retries over used levels drawing nothing more. The paths
+  (`P.paths(op, required, rules, level_ok)`) place each later mission seed
+  one draw further on.
+- **Day / Night.** The levels are drawn, so the ID check does not apply.
+  With `level_ok(node)` (the live checker on one node) each level draw
+  becomes a constraint: its outcome intervals by raw index, the retry
+  replayed over the levels already used, kept when the resulting node
+  passes; the first mission's level must pass too. Missions after the last
+  required one are left free, so a few candidates still fail the
+  predictor's check.
+
+`planet.solver(definitions, difficulty, seeded, region)` builds the city's
+one operation; `source` solves its one row. On the planet 100 capture
+(region 2, row 54, difficulty 5) one, two and three of its missions each
+matched on the first candidate, two by day on the third or fourth (102
+paths); at night there was no path, every level the missions can take
+being on the day side then, and scanning agreed (no match in 5,000 seeds).
+The scoped scan only predicts the city's row, so it is fast (15,000 seeds/s
+offline, 4,467 in game): the solver matters for a city with rare rules or a
+Day / Night window, much less for missions alone.
 
 ## Next steps, if pursued
 

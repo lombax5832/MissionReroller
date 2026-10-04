@@ -57,23 +57,34 @@ return function(m)
             return assert(make_predictor,'Candidate predictor unavailable')(read,u,pointer,game,board,definitions,index,planet.inputs())
         end
         -- The seed solver's inputs for every normal operation ID of one
-        -- difficulty (seed_solver_inputs.lua; seeded adds the enemy-tag and
+        -- difficulty, or with region for that city's operation only
+        -- (seed_solver_inputs.lua; seeded adds the enemy-tag and
         -- side-objective inputs), and the identity input its rows are drawn
-        -- from (operation_identity.lua). Nil and a reason when the planet's
-        -- normal rows cannot be solved.
-        function planet.solver(definitions,difficulty,seeded)
+        -- from (operation_identity.lua). Nil and a reason when those rows
+        -- cannot be solved.
+        function planet.solver(definitions,difficulty,seeded,region)
             local Inputs=assert(m.solver_inputs,'Seed solver unavailable')
             local inputs=planet.inputs()
             local rows,_,input=make_bases(read,u,pointer,game,board,definitions,index,inputs)(0)
-            if difficulty>input.max_difficulty then return nil,'difficulty above the cap'end
-            local category,faction
-            for _,op in ipairs(rows)do
-                if not op.special and not op.preserved then category,faction=op.category,op.faction;break end
-            end
-            if not category then return nil,'no normal operation'end
             local bases={}
-            for id=0,input.pool_count-1 do
-                bases[#bases+1]={difficulty=difficulty,id=id,category=category,faction=faction,explicit_hash=0}
+            if region then
+                -- A city is a campaign event; its operation's ID is the region.
+                for _,op in ipairs(rows)do
+                    if op.special and op.id==region and op.difficulty==difficulty then
+                        bases[1]={difficulty=difficulty,id=region,category=op.category,faction=op.faction,explicit_hash=0}
+                    end
+                end
+                if not bases[1]then return nil,'no city operation at the difficulty'end
+            else
+                if difficulty>input.max_difficulty then return nil,'difficulty above the cap'end
+                local category,faction
+                for _,op in ipairs(rows)do
+                    if not op.special and not op.preserved then category,faction=op.category,op.faction;break end
+                end
+                if not category then return nil,'no normal operation'end
+                for id=0,input.pool_count-1 do
+                    bases[#bases+1]={difficulty=difficulty,id=id,category=category,faction=faction,explicit_hash=0}
+                end
             end
             local levels=m.levels(read,u,game)
             local solver=Inputs(index,bases,inputs,function(op)return levels(definitions,op)end,

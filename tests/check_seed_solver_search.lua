@@ -185,15 +185,25 @@ local difficulty=best.difficulty
 local fams={}
 for _,m in ipairs(best.missions)do local f=family(m.native_type);if f then fams[#fams+1]=f end end
 local model=Planet.bind(read,u,pointer,game,board,planet)
-local catalogue=model.catalogue(snapshot,difficulty)
+-- A capture made before the tag and side-objective inputs were read cannot
+-- build the dialog's options: its requests carry missions only.
+local listed,catalogue=pcall(model.catalogue,snapshot,difficulty)
+if not listed then
+    print('  no enemy-force or side-objective options in this capture: '..tostring(catalogue))
+    catalogue={constellation_groups={}}
+end
 local function required(n)local r={};for i=1,n do r[fams[i]]=true end;return r end
 print(string.format('planet=%d seed=%u difficulty=%d row=%d families=%s, in progress: row %s',planet,seed,difficulty,best.row,
     table.concat(fams,','),tostring(fixed)))
 jit.flush()
 local function case(name,r,expect)
-    r.difficulty=difficulty;r.limit=r.limit or 1000000
+    r.difficulty=r.difficulty or difficulty;r.limit=r.limit or 1000000
     local text=search(name,r)
-    if expect=='solver' then
+    if expect=='solver' and text:find('SEED_SOLVER_OFF reason=[^\n]*Missing capture page')then
+        -- An older capture lacks the mission-seed inputs these rules need;
+        -- the search scanned instead, as in game on any set-up error.
+        print('    (rules need inputs this capture lacks: scanned instead)')
+    elseif expect=='solver' then
         assert(text:find('SEED_SOLVER paths=',1,true) and text:find('mode=solver',1,true),name..': not solved\n'..text)
     else
         assert(text:find('SEED_SOLVER_OFF reason='..expect,1,true),name..': expected fallback '..expect..'\n'..text)
@@ -226,7 +236,7 @@ local other
 for id in ipairs(Search.options)do
     local used=false
     for _,f in ipairs(fams)do if f==id then used=true end end
-    if not used and catalogue.mission_set[id]then other=id;break end
+    if not used and (not catalogue.mission_set or catalogue.mission_set[id])then other=id;break end
 end
 case('an excluded mission only',{required={},excluded={[other]=true}},'no required mission')
 -- A selective request: every mission; the first carries only the last
@@ -247,9 +257,49 @@ if wanted and wanted.list[1]then
     hard.objectives={groups={[fams[2]]=rules}}
 end
 local text,_,solved,solved_s=search(n..' missions with an enemy force and a side objective',hard)
-assert(text:find('mode=solver',1,true),'The selective request was not solved')
-hard.limit=20000
-local _,found,attempts,took=search('the same, scanning (no solver)',hard,false,true)
-print(string.format('  solver: %d candidates in %.2f s; scanning: %d candidates in %.2f s%s',solved,solved_s,attempts,took,
-    found and '' or ' without a match'))
+if text:find('SEED_SOLVER_OFF reason=[^\n]*Missing capture page')then
+    print('    (rules need inputs this capture lacks: scanned instead)')
+else
+    assert(text:find('mode=solver',1,true),'The selective request was not solved')
+    hard.limit=20000
+    local _,found,attempts,took=search('the same, scanning (no solver)',hard,false,true)
+    print(string.format('  solver: %d candidates in %.2f s; scanning: %d candidates in %.2f s%s',solved,solved_s,attempts,took,
+        found and '' or ' without a match'))
+end
+
+-- A city or megafactory: its operation is a campaign event with a special
+-- level graph, one row per difficulty, its levels drawn per seed.
+local city
+for _,op in ipairs(decoded.operations)do
+    if op.row>=30 and op.row~=fixed and (not city or #op.missions>#city.missions)then city=op end
+end
+if city then
+    local region=math.floor((city.row-30)/10)
+    local kinds={}
+    for _,m in ipairs(city.missions)do local f=family(m.native_type);if f then kinds[#kinds+1]=f end end
+    print(string.format('city: region %d row %d difficulty %d families=%s',region,city.row,city.difficulty,table.concat(kinds,',')))
+    local function within(n)local r={};for i=1,n do r[kinds[i]]=true end;return r end
+    local base={difficulty=city.difficulty,scope={region=region}}
+    local function with(fields)local r={};for k,v in pairs(base)do r[k]=v end;for k,v in pairs(fields)do r[k]=v end;return r end
+    for n=1,#kinds do case('city, '..n..' of its missions',with({required=within(n)}),'solver')end
+    if #kinds>=2 then
+        for _,side in ipairs({'night','day'})do
+            local ok,err=pcall(case,'city, two missions at '..side,with({required=within(2),time=side}),'solver')
+            if not ok then
+                -- The levels the missions can take may all be on the other side now.
+                assert(tostring(err):find('reason=no draw path',1,true),err)
+                print('  city, two missions at '..side..': no draw path')
+                -- Scanning must agree: no seed matches.
+                local _,found=search('city, two missions at '..side..', scanning (no solver)',
+                    with({required=within(2),time=side,limit=5000}),false,true)
+                assert(not found,'A scanned seed matched where the solver found no path')
+            end
+        end
+    end
+    local all=with({required=within(#kinds),limit=20000})
+    local _,found,attempts,took=search('city, all its missions, scanning (no solver)',all,false,true)
+    print(string.format('  city scanning: %d candidates in %.2f s%s',attempts,took,found and '' or ' without a match'))
+else
+    print('city: none in this capture')
+end
 print('Seed solver search: requests matched through the solver on captured campaign memory')

@@ -560,9 +560,12 @@ return function(choose_category,make_choose_mission,make_finalize)
         -- Every draw path through one operation's composition yielding all
         -- required kinds ({kind, ...} in order), each delivered through a
         -- mission_paths() branch when rules[kind] has rules. Draws after the
-        -- last required mission are left free.
-        function P.paths(op,required,rules)
-            assert(not op.special and #op.extra==0,'special levels and modifier missions are not solved')
+        -- last required mission are left free. A special level graph (a city
+        -- or other campaign event) draws each mission's level after the
+        -- first (mission_level_choice.lua); level_ok(node), when given,
+        -- constrains those draws and the first level to passing nodes.
+        function P.paths(op,required,rules,level_ok)
+            assert(#op.extra==0,'modifier missions are not solved')
             rules=rules or {}
             local missions={}
             local out={}
@@ -578,7 +581,34 @@ return function(choose_category,make_choose_mission,make_finalize)
                 list[#list+1]={false,nil,1} -- the slot may hold the kind without meeting its rules
                 return list
             end
-            local function walk(template,slot,position,usage,counts,kinds,constraints,probability)
+            -- The level of a mission slot: {node, next position, draw
+            -- constraint or nil} per outcome, as mission_level_choice.lua
+            -- picks it from levels after the used ones.
+            local n=#op.levels
+            local function level_branches(slot,position,used)
+                if not op.special or slot==0 then
+                    local node=op.levels[slot+1]
+                    if level_ok and not level_ok(node)then return {}end
+                    return {{node,position,nil}}
+                end
+                if not level_ok then return {{nil,position+1,nil}}end
+                local out={}
+                for _,part in ipairs(partition(function(o)return math.min(n-1,math.floor(o*(1/4294967296)*n))end))do
+                    local index=part.key
+                    for attempt=0,n-1 do
+                        index=(index+attempt)%n
+                        local taken=false
+                        for _,level in ipairs(used)do if op.levels[index+1]==level then taken=true;break end end
+                        if not taken then break end
+                    end
+                    local node=op.levels[index+1]
+                    if level_ok(node)then
+                        out[#out+1]={node,position+1,{kind='direct',position=position,lo=part.first,hi=part.last}}
+                    end
+                end
+                return out
+            end
+            local function walk(template,slot,position,usage,counts,kinds,constraints,probability,used)
                 local missing={}
                 for _,k in ipairs(required)do
                     local have=false
@@ -610,9 +640,14 @@ return function(choose_category,make_choose_mission,make_finalize)
                     local cons={unpack(constraints)}
                     if step then cons[#cons+1]=step end
                     if #eligible==0 or slot>=#op.levels then
-                        walk(template,slot+1,at,usage,counts,kinds,cons,p)
+                        walk(template,slot+1,at,usage,counts,kinds,cons,p,used)
                     else
-                        local seed_position=at
+                      for _,level in ipairs(level_branches(slot,at,used))do
+                        local node,seed_position,lstep=level[1],level[2],level[3]
+                        local u1={unpack(used)};u1[#u1+1]=node
+                        local cons={unpack(cons)}
+                        local p=p
+                        if lstep then cons[#cons+1]=lstep;p=p*(lstep.hi-lstep.lo+1)/M32 end
                         local choices={}
                         if #eligible==1 then choices[1]={eligible[1],nil,counts}
                         else
@@ -641,10 +676,11 @@ return function(choose_category,make_choose_mission,make_finalize)
                                     if s then c3[#c3+1]=s end
                                     local k2={unpack(kinds)}
                                     if delivers then k2[#k2+1]=kind end
-                                    walk(template,slot+1,seed_position+1,u2,c2,k2,c3,q*mp)
+                                    walk(template,slot+1,seed_position+1,u2,c2,k2,c3,q*mp,u1)
                                 end
                             end
                         end
+                      end
                     end
                 end
             end
@@ -658,7 +694,7 @@ return function(choose_category,make_choose_mission,make_finalize)
                     for _,t in ipairs(op.templates)do if t.index==part.key then template=t;break end end
                     local base={}
                     if part.first~=0 or part.last~=LAST then base[1]={kind='final',position=1,lo=part.first,hi=part.last}end
-                    walk(template,0,1,{},{},{},base,(part.last-part.first+1)/M32)
+                    walk(template,0,1,{},{},{},base,(part.last-part.first+1)/M32,{})
                 end
             end
             table.sort(out,function(a,b)return a.probability>b.probability end)
@@ -668,7 +704,7 @@ return function(choose_category,make_choose_mission,make_finalize)
         -- The paths for the required kinds at a difficulty when every
         -- operation there has the same inputs (IDs differing only in their
         -- level tiles), else nil.
-        function P.shared_paths(operations,difficulty,required,rules)
+        function P.shared_paths(operations,difficulty,required,rules,level_ok)
             local derived={id=true,effect_id=true,levels=true}
             local signature,sample
             for _,op in ipairs(operations)do
@@ -682,7 +718,7 @@ return function(choose_category,make_choose_mission,make_finalize)
                 end
             end
             if not sample then return {}end
-            return P.paths(sample,required,rules)
+            return P.paths(sample,required,rules,level_ok)
         end
         return P
     end

@@ -7,9 +7,17 @@ Every candidate is still predicted and checked by the same matcher, and a
 match is published and selected as before, so what a player sees is the
 same except for speed: a rare request should match in about a second where
 it used to take tens of seconds or the 180 s limit. Requests the solver
-cannot seed (a city, no mission checked, and a few others) search as before.
+cannot seed (no mission checked, and a few others) search as before.
 
-Not yet run.
+## Result, 2026-10-04
+
+Steps 1 to 3, 5 and 6 (then the fallback) passed on planet 268, difficulty
+6: four searches matched with `mode=solver` within 7 candidates in 0.42 to
+1.13 s, each `PUBLICATION_STATE_VERIFIED`, the day search with
+`DAYNIGHT_VERIFIED holds=true` (`daynight_ids=5/35`). The city search on
+planet 100 region 2 logged `SEED_SOLVER_OFF reason=city scope` and matched
+by scan. `max_slice_ms` was 22 to 27 for the solver and the scan alike.
+Cities are solved since; step 6 now checks that, step 7 the fallback.
 
 ## Setup
 
@@ -60,8 +68,8 @@ ran out (not expected). Send the whole log after the session.
      draw path`): pick other rules.
 4. **Frame rate.** During steps 2 and 3 the game keeps running smoothly
    (the map can be panned while it searches).
-   - Pass: `max_slice_ms=` in each `LUA_SEARCH_MATCH` line around 16 to 20
-     and `setup_ms=` on the `SEED_SOLVER` line under a few hundred ms (it
+   - Pass: `max_slice_ms=` in each `LUA_SEARCH_MATCH` line about what a
+     scanned search shows (22 to 27 on 2026-10-04) and `setup_ms=` on the `SEED_SOLVER` line under a few hundred ms (it
      is spread over frames).
    - Fail: a visible hitch when the search starts, or `max_slice_ms=`
      above 40.
@@ -75,17 +83,29 @@ ran out (not expected). Send the whole log after the session.
    - Also fine: `daynight_ids=0/<total>`: no operation of that difficulty
      can be at night now; the search runs to its limit without a match.
      Try DAY, or another planet.
-6. **Fallback.** With the cursor on a city or megafactory marker, open the
-   dialog (it reads `This city or megafactory only`), check a mission and
-   press REROLL OPERATIONS.
-   - Pass: `SEED_SOLVER_OFF reason=city scope ...; scanning seeds in order`,
-     then the usual match lines without `mode=`.
+6. **City.** With the cursor on a city or megafactory marker, open the
+   dialog (it reads `This city or megafactory only`), check two of its
+   missions, choose DAY or NIGHT and press REROLL OPERATIONS.
+   - Pass: `SEED_SOLVER paths=<n> rows=1 ...`, `LUA_SEARCH_MATCH ...
+     row=<30 + region*10 + difficulty - 1> ... mode=solver`, then
+     `DAYNIGHT_VERIFIED holds=true` and `PUBLICATION_STATE_VERIFIED`; the
+     city's operation opens on that side.
+   - Also fine: `SEED_SOLVER_OFF reason=no draw path`: none of the levels
+     the city's missions can take is on that side now. The scan then runs
+     to its limit without a match; try the other side.
+   - Fail: `SEED_SOLVER_OFF` with any other reason, or a match outside the
+     city.
+7. **Fallback.** Check no mission, exclude one in its section, and press
+   REROLL OPERATIONS.
+   - Pass: `SEED_SOLVER_OFF reason=no required mission ...; scanning seeds
+     in order`, then the usual match lines without `mode=`.
    - Fail: any error after `SEED_SOLVER_OFF`.
 
 ## Log lines
 
-Pass: `SEED_SOLVER paths=` for steps 2, 3 and 5; `mode=solver` on their
-`LUA_SEARCH_MATCH` lines; `SEED_SOLVER_OFF reason=city scope` for step 6;
+Pass: `SEED_SOLVER paths=` for steps 2, 3, 5 and 6; `mode=solver` on their
+`LUA_SEARCH_MATCH` lines; `SEED_SOLVER_OFF reason=no required mission` for
+step 7;
 `PUBLICATION_STATE_VERIFIED` after every match.
 
 Fail, and send the log: `SEED_SOLVER_OFF reason=` with a Lua error or

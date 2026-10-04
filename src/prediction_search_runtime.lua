@@ -150,7 +150,8 @@ on_prediction_ready=function(s,definitions,now)
         if SeedSolver then
             local started=search_clock()
             local ok,result,why=pcall(function()
-                local solver,input=planet.solver(definitions,request.difficulty,constellations~=nil or objectives~=nil)
+                local solver,input=planet.solver(definitions,request.difficulty,constellations~=nil or objectives~=nil,
+                    scope and scope.region)
                 if not solver then return nil,input end
                 return SeedSolver.source({solver=solver,input=input,identity=predict_identity,difficulty=request.difficulty,
                     required=required,options=Search.options,constellations=constellations,objectives=objectives,scope=scope,
