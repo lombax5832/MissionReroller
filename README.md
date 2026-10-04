@@ -84,6 +84,11 @@ the same GUID, so your manager treats it as the same mod.
      the map difficulty. The line under the buttons shows how many side and
      tactical objectives the mission has; a row that no longer fits, or that
      would leave nothing to draw, is dimmed, and pointing at it says why.
+   - **Rules a mission click discards.** Enemy force and side objective
+     rules belong to their mission. Checking the first mission discards the
+     `ANY MISSION` rules, and unchecking a mission discards its own. The
+     heading of a section that lost rules turns red and adds
+     `- MISSION CHANGED` until you click it or CLEAR.
    - **Time of day.** ANY, DAY or NIGHT, three tiles on the section's
      heading, DAY and NIGHT with the galactic map's sun and moon. With Day
      or Night, every mission of the match stays on that side for 2.5 hours

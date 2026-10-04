@@ -383,6 +383,27 @@ do
     assert(r.updates>0 and label('NUKE NURSERY')=='237,241,245','Clearing the exclusion redraws the row')
     panel:clear()
 end
+-- A section whose rules a mission click discarded has a red header and a
+-- white summary until it is clicked.
+do
+    r=engine('full');panel=P.new(r.e)
+    m=model('missions',{{id=4,name='Spread Democracy',mode='require'}},{checked=1,changed={enemies=true},
+        summaries={missions='Spread Democracy',modifiers='Any',enemies='Any - Mission changed',objectives='Any'}})
+    local function reds()
+        local n=0
+        for _,o in ipairs(drawn('rect',992))do if o.color[2]==255 and o.color[3]==107 and o.color[4]==90 then n=n+1 end end
+        return n
+    end
+    panel:show({},{[1]=true},face,nowhere,m)
+    assert(reds()==1,'Only the changed header is red')
+    assert(assert(r.find('ANY - MISSION CHANGED')).color[2]==237,'The summary turns white')
+    m.changed={};m.summaries.enemies='Any';panel:show({},{[1]=true},face,nowhere,m)
+    assert(reds()==0 and r.find('ANY'),'The header goes back')
+    m.section='enemies';m.changed={enemies=true};m.summaries.enemies='Any - Mission changed'
+    panel:show({},{[1]=true},face,nowhere,m)
+    assert(reds()==0,'An open section keeps its yellow header')
+    panel:clear()
+end
 -- Triangles and metrics are optional, and a failure turns them off.
 for _,features in ipairs({'none','failing','broken metrics'})do
     r=engine(features);panel=P.new(r.e)

@@ -155,8 +155,31 @@ edit(f,4);assert(f.constellations[4]==nil)
 edit(f,2,2,4);m=f:model(terminids,fresh())
 assert(not next(f.selected) and not next(f.excluded))
 assert(m.group==0 and m.groups[1].name=='Any mission' and m.note=='Check a mission to set its own enemies')
+local section=f.section
+f:navigate('section:enemies');f:navigate('section:enemies');assert(not next(f.changed),'Clicking the header clears the mark')
 edit(f,'constellation:0:6');edit(f,2)
 assert(next(f:to_request(nil,10).constellations.groups)==nil,'Checking a mission discards the any-mission rules')
+m=f:model(terminids,fresh())
+assert(m.changed.enemies and not m.changed.objectives and m.summaries.enemies=='Any - Mission changed','The discard marks the enemy section')
+assert(m.summaries.objectives=='Any','Only the section that lost rules')
+assert(f:navigate('section:enemies'));m=f:model(terminids,fresh())
+assert(not m.changed.enemies and m.summaries.enemies=='Any','Clicking the header clears the mark')
+f.section=section
+-- Unchecking a mission without rules marks nothing.
+edit(f,2,2);assert(not next(f.changed),'No rules, no mark')
+-- Unchecking a mission with rules marks its section.
+edit(f,4,'constellation:4:2',4);assert(f.changed.enemies,'Unchecking discards the mission rules')
+edit(f,'clear');assert(not next(f.changed),'Clear drops the mark')
+edit(f,2)
+-- Any-mission rules a check would discard do not disable the mission.
+do
+    local x=R.new(options,C,labels)
+    for _,tag in ipairs({2,4,6})do x:toggle('constellation:0:'..tag,terminids);x:toggle('constellation:0:'..tag,terminids)end
+    local mx=x:model(terminids,fresh())
+    assert(not x:possible(terminids) and mx.tone=='bad','Every any-mission constellation excluded')
+    for _,item in ipairs(mx.items)do assert(item.enabled,'Mission '..item.id..' stays enabled')end
+    assert(x:toggle(2,terminids) and x.selected[2] and x.changed.enemies and x:possible(terminids))
+end
 
 -- A catalogue of another faction prunes what it does not offer.
 edit(f,2,2,9,9,2);assert(f.excluded[9] and f.selected[2])
@@ -269,9 +292,11 @@ do
     assert(request.objectives.groups[0][lidar]=='require' and request.objectives.groups[0][sam]=='exclude')
     assert(o:rule_count()==2 and o:model(c,fresh()).summaries.objectives=='2 rules' and o:model(c,fresh()).can_start)
     act('objective:0:'..sam);assert(o.objectives[0][sam]==nil,'Excluded goes back to any')
-    -- Checking a mission moves the rules to its own group.
+    -- Checking a mission discards the any-mission rules and marks the section.
     act(2);m=o:model(c,fresh())
     assert(o.objectives[0]==nil and m.group==2 and m.objective_slots=='1 SIDE + 1 TACTICAL' and m.objective_note==nil)
+    assert(m.changed.objectives and not m.changed.enemies and m.summaries.objectives=='Any - Mission changed')
+    o:navigate('section:objectives');o:navigate('section:objectives');assert(not next(o.changed))
     c.objective_groups[2].list[3].role=2
     m=o:model(c,fresh())
     assert(m.items[1].role=='side' and m.items[3].role=='tactical','Rows carry their role for the panel')
@@ -291,8 +316,9 @@ do
     smaller.objective_groups={[0]=group({}),[2]=group(survey,lidar),[4]=group({})}
     assert(o:prune(smaller) and o.objectives[2][lidar]=='require' and o.objectives[2][artillery]==nil)
     act(2,2);assert(next(o.objectives)==nil,'Unchecked mission loses its side objectives')
+    assert(o.changed.objectives,'Unchecking marks the side objectives')
     -- A mission without side objectives shows none.
     act(4);o.group_choice=4;m=o:model(c,fresh());assert(#m.items==0 and m.objective_slots=='0 SIDE + 0 TACTICAL')
-    act('clear');assert(next(o.objectives)==nil and o:rule_count()==0)
+    act('clear');assert(next(o.objectives)==nil and o:rule_count()==0 and not next(o.changed))
 end
 print('Filter request: toggles, conflicts, groups, pruning, pages, request copy, status precedence, side objectives and time of day passed')
