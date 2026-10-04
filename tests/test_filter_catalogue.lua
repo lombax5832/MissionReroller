@@ -146,6 +146,7 @@ do
         [jammer]={id=jammer,minimum=0,maximum=0,environments={7,0,0,0}},[eggs]={id=eggs,minimum=0,maximum=0,environments={0,0,0,0}},
         [nest]={id=nest,minimum=0,maximum=0,environments={0,0,0,0}},
         [larva]={id=larva,minimum=0,maximum=0,environments={0,0,0,0}}}
+    for _,r in pairs(records)do r.cap,r.mask=1,0 end
     local function pool(list)
         local out={}
         for _,e in ipairs(list)do out[#out+1]={id=e[1],role=e[2],weight=e[3] or 1,minimum=0,maximum=1}end
@@ -193,14 +194,50 @@ do
     assert(not ok and why:find('cannot draw'),'No one type offers both')
     ok,why=C.possible(c,required,{},nil,nil,rules(1,{[broadcast]='exclude'}))
     assert(ok,'Mission 59 has no tactical row offered here, so excluding broadcast is fine')
+    -- Only 59 draws SAM, and its three side slots take all three of its rows.
     ok,why=C.possible(c,required,{},nil,nil,rules(1,{[broadcast]='exclude',[sam]='require'}))
-    assert(ok)
+    assert(not ok and why=='Too many excluded side objectives for this mission and difficulty',why)
     local all={};for _,row in ipairs(icbm.list)do all[row.id]='exclude' end;all[sam]=nil
     ok,why=C.possible(c,required,{},nil,nil,rules(1,all))
-    assert(ok,'59 still draws SAM')
+    assert(not ok and why=='Every side objective of this mission is excluded',why)
     all[sam]='exclude'
     ok,why=C.possible(c,required,{},nil,nil,rules(1,all))
     assert(not ok and why:find('excluded'),why)
+    -- Three side slots: what is left must fill them. Type 0 keeps Artillery
+    -- and Spore Spewer, type 59 SEAF SAM Site and Artillery.
+    assert(C.possible(c,required,{},nil,nil,rules(1,{[lidar]='exclude',[nest]='exclude'})),'59 keeps three side rows')
+    ok,why=C.possible(c,required,{},nil,nil,rules(1,{[lidar]='exclude',[nest]='exclude',[broadcast]='exclude'}))
+    assert(not ok and why=='Too many excluded side objectives for this mission and difficulty',why)
+    -- A title with spare copies fills two slots.
+    missions[0].pool[1].maximum=4;records[lidar].cap=2
+    local copies={mission_set={[1]=true},native={[0]=true},effects={[1]=true},slots=3,missions={{id=1}},modifier_set={}}
+    C.objectives(copies,inputs,P,100,6,S.options)
+    assert(C.possible(copies,required,{},nil,nil,rules(1,{[artillery]='exclude',[nest]='exclude'})),'Lidar twice and Spore Spewer')
+    ok,why=C.possible(copies,required,{},nil,nil,rules(1,{[artillery]='exclude',[nest]='exclude',[spewer]='exclude'}))
+    assert(not ok and why:find('Too many excluded'),why)
+    missions[0].pool[1].maximum=1;records[lidar].cap=1
+    -- The reported case: four side slots, five rows of one copy, two excluded.
+    local five={mission_set={[1]=true},missions={{id=1}},slots=3,objective_groups={[1]={list={},set={},
+        kinds={[0]={side=4,tactical=0,rows={},entries={}}}}}}
+    for _,row in ipairs({lidar,artillery,sam,spewer,nest})do
+        five.objective_groups[1].kinds[0].rows[row]=3
+        local e=five.objective_groups[1].kinds[0].entries;e[#e+1]={row=row,role=3,copies=1,mask=0}
+    end
+    assert(C.possible(five,required,{},nil,nil,rules(1,{[lidar]='exclude'})),'One excluded leaves four')
+    ok,why=C.possible(five,required,{},nil,nil,rules(1,{[lidar]='exclude',[sam]='exclude'}))
+    assert(not ok and why:find('Too many excluded'),why)
+    -- A mask bit shared with a row left drops the excluded row from the draw.
+    local masked={mission_set={[1]=true},missions={{id=1}},slots=3,objective_groups={[1]={list={},set={},
+        kinds={[0]={side=0,tactical=2,rows={[broadcast]=2,[larva]=2},entries={{row=broadcast,role=2,copies=1,mask=1},{row=larva,role=2,copies=1,mask=1}}}}}}}
+    assert(C.possible(masked,required,{},nil,nil,rules(1,{[larva]='exclude'})),'Drawing Broadcast drops Larva')
+    masked.objective_groups[1].kinds[0].entries[2].mask=2
+    assert(not C.possible(masked,required,{},nil,nil,rules(1,{[larva]='exclude'})),'Larva stays in the draw')
+    -- Any mission: one type must avoid every excluded row. Type 7 draws none.
+    assert(C.possible(c,{},{},nil,nil,rules(0,{[artillery]='exclude',[nest]='exclude',[lidar]='exclude'})),'Eradicate avoids them')
+    local eradicate7=any.kinds[7];any.kinds[7]=nil
+    ok,why=C.possible(c,{},{},nil,nil,rules(0,{[artillery]='exclude',[nest]='exclude',[lidar]='exclude'}))
+    assert(not ok and why=='Too many excluded side objectives for every mission here',why)
+    any.kinds[7]=eradicate7
     assert(C.possible(c,{},{},nil,nil,rules(0,{[sam]='require',[spewer]='require'})))
     ok,why=C.possible(c,{},{},nil,nil,rules(0,{[jammer]='require'}))
     assert(not ok,'Not offered anywhere')

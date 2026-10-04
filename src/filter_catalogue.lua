@@ -1,4 +1,5 @@
 -- Read eligibility through the same input decoder used by the predictor.
+local bit=require('bit')
 -- Names resolved from build 25480438 modifier metadata +0x38 localization keys.
 local C={names={
     [0xd77ec510]='Poor Intel',[0xda18d5ef]='Complex Stratagem Plotting',
@@ -149,7 +150,8 @@ end
 -- is a title (Prediction.rows) with its role, 3 when any mission type of
 -- the group draws it as a side objective, else 2. Group i covers the eligible mission types of
 -- family i, group 0 every one. Each group keeps, per mission type, its side
--- and tactical slots and the role of each row it offers, for C.possible.
+-- and tactical slots, the role of each row it offers and its drawable
+-- entries (row, role, how many copies a draw can take, mask), for C.possible.
 -- The catalogue changes only after every input decoded.
 function C.objectives(catalogue,inputs,Prediction,planet,difficulty,options)
     local contexts={}
@@ -161,7 +163,7 @@ function C.objectives(catalogue,inputs,Prediction,planet,difficulty,options)
         local mission=inputs.mission(kind)
         local scale=inputs.scale(mission.category)
         local side=scale and math.floor(counts.side*scale+0.5) or counts.side
-        local info={side=side,tactical=counts.tactical,rows={}}
+        local info={side=side,tactical=counts.tactical,rows={},entries={}}
         local environments={}
         for _,context in ipairs(contexts)do
             local _,set=inputs.environments(planet,kind,context.modifiers)
@@ -183,6 +185,12 @@ function C.objectives(catalogue,inputs,Prediction,planet,difficulty,options)
                 if allowed and not banned and not inputs.disabled(record.id)
                     and (record.minimum==0 or record.minimum<=difficulty) and (record.maximum==0 or difficulty<=record.maximum)then
                     info.rows[row]=info.rows[row] or e.role
+                    -- A drawn mask bit drops every entry sharing it, the
+                    -- entry itself included (1757870), so a masked entry is
+                    -- drawn once.
+                    local copies=math.min(e.maximum,record.cap)
+                    if record.mask~=0 then copies=math.min(copies,1)end
+                    if copies>0 then info.entries[#info.entries+1]={row=row,role=e.role,copies=copies,mask=record.mask}end
                     for _,target in ipairs({group,groups[0]})do
                         if not target.set[row]then
                             target.set[row]=true
@@ -213,9 +221,31 @@ function C.objectives(catalogue,inputs,Prediction,planet,difficulty,options)
     end
     catalogue.objective_groups=groups
 end
+-- Whether a mission type can fill its side and tactical slots without an
+-- excluded row. A draw keeps going until the slots are full or no entry is
+-- left, so the entries not excluded must hold enough copies, unless every
+-- excluded entry shares a mask bit with one of them and so can be dropped
+-- (an upper bound: it never refuses a board the game can deal). Returns
+-- false and whether nothing at all is left.
+local function avoids_excluded(info,rules)
+    for role,slots in pairs({[3]=info.side,[2]=info.tactical})do
+        local copies,masks,blocked,any=0,0,false,false
+        for _,e in ipairs(info.entries)do if e.role==role then
+            if rules[e.row]=='exclude' then blocked=true
+            else copies=copies+e.copies;masks=bit.bor(masks,e.mask);any=true end
+        end end
+        if blocked and slots>copies then
+            for _,e in ipairs(info.entries)do
+                if e.role==role and rules[e.row]=='exclude' and bit.band(e.mask,masks)==0 then return false,not any end
+            end
+        end
+    end
+    return true
+end
 -- Whether one mission type of a group can hold every required row and still
--- draw a side and a tactical objective that is not excluded. The reason is
--- the closest type's: too many rows, then all excluded, then rows missing.
+-- fill its side and tactical slots without an excluded row. The reason is
+-- the closest type's: too many rows, then all excluded, then too few left,
+-- then rows missing.
 local function objectives_possible(group,rules)
     local why,rank='This mission cannot draw every required side objective',0
     for _,info in pairs(group.kinds)do
@@ -228,19 +258,14 @@ local function objectives_possible(group,rules)
         end
         if fits and (side>info.side or tactical>info.tactical)then
             fits=false
-            if rank<2 then why,rank='Too many required side objectives for this mission and difficulty',2 end
+            if rank<3 then why,rank='Too many required side objectives for this mission and difficulty',3 end
         end
         if fits then
-            -- A slot always draws from a non-empty pool, so excluding all of
-            -- one role's rows leaves nothing to match.
-            local offered,left={},{}
-            for row,role in pairs(info.rows)do
-                offered[role]=true
-                if rules[row]~='exclude' then left[role]=true end
-            end
-            if (info.side>0 and offered[3] and not left[3]) or (info.tactical>0 and offered[2] and not left[2])then
-                fits=false
-                if rank<1 then why,rank='Every side objective of this mission is excluded',1 end
+            local none
+            fits,none=avoids_excluded(info,rules)
+            if not fits then
+                if none then if rank<2 then why,rank='Every side objective of this mission is excluded',2 end
+                elseif rank<1 then why,rank='Too many excluded side objectives for this mission and difficulty',1 end
             end
         end
         if fits then return true end
@@ -322,6 +347,11 @@ function C.possible(catalogue,required,modifiers,constellations,excluded,objecti
                 for row,mode in pairs(rows)do
                     if mode=='require' and not offered.set[row]then return false,'No mission here can draw that side objective' end
                 end
+                -- Every mission of the operation avoids the excluded rows,
+                -- so at least one mission type must.
+                local avoided=false
+                for _,info in pairs(offered.kinds)do if avoids_excluded(info,rows)then avoided=true;break end end
+                if next(offered.kinds) and not avoided then return false,'Too many excluded side objectives for every mission here' end
             else
                 local ok,why=objectives_possible(offered,rows)
                 if not ok then return false,why end

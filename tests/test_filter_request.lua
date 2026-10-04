@@ -246,11 +246,12 @@ do
         for i,id in ipairs({...})do g.list[i]={id=id,name='Objective '..id};g.set[id]=true end
         return g
     end
-    local survey={[22]={side=1,tactical=1,rows={[lidar]=3,[artillery]=3,[broadcast]=2}}}
+    local survey={[22]={side=1,tactical=1,rows={[lidar]=3,[artillery]=3,[broadcast]=2},entries={{row=lidar,role=3,copies=1,mask=0},
+        {row=artillery,role=3,copies=1,mask=0},{row=broadcast,role=2,copies=1,mask=0}}}}
     local c={faction=2,slots=3,compatibility=nil,missions={{id=2,name='Survey'},{id=4,name='Democracy'}},mission_set={[2]=true,[4]=true},
         modifiers={},modifier_set={},forced={},constellation_groups={[0]=offered(),[2]=offered(),[4]=offered()},
         objective_groups={[0]=group({},lidar,artillery,sam,broadcast),[2]=group(survey,lidar,artillery,broadcast),
-            [4]=group({[28]={side=0,tactical=0,rows={}}})}}
+            [4]=group({[28]={side=0,tactical=0,rows={},entries={}}})}}
     local o=R.new(options,C,labels)
     local function act(...)for _,a in ipairs({...})do assert(o:toggle(a,c)==true,a)end end
     o:navigate('section:objectives')
