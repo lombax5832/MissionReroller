@@ -33,7 +33,7 @@ local cases={
     {'no catalogue, missions',model('missions',{},{faction=false,locked=true,can_start=false,can_clear=false}),10},
     {'no catalogue, modifiers',model('modifiers',{},{faction=false,locked=true,can_start=false,can_clear=false}),10},
     {'no catalogue, enemies',model('enemies',{},{faction=false,locked=true,can_start=false,can_clear=false}),10},
-    {'day',model(nil,{},{time='day',time_note='HOLDS 2H 30M / DAY 15H 42M'}),10},
+    {'day',model(nil,{},{time='day',time_note='DAY 15H 42M',time_hold='2h 30m'}),10},
     {'running night',running(model(nil,{},{time='night'})),10},
     {'paged missions at night',model('missions',list(24),{page=1,pages=2,time='night'}),36},
     {'modifiers by day',model('modifiers',list(13,'modifier:'),{time='day'}),23},
@@ -235,10 +235,10 @@ panel:show({},{},face,nowhere,m)
 assert(r.find('NO PLANET') and r.find('NO PLANET CHOSEN') and r.find('OPEN A PLANET ON THE WAR TABLE FIRST') and not r.find('DIFFICULTY 10'))
 -- The time of day: three sides on its header, the chosen one in ink on
 -- yellow, and the buffer note on the line under it.
-m=model(nil,{},{time='night',time_note='Short days: holds 14m / day 1h 4m'})
+m=model(nil,{},{time='night',time_note='Short days / day 1h 4m',time_hold='14m'})
 panel:show({},{},face,nowhere,m)
 assert(r.find('TIME OF DAY') and r.find('ANY') and r.find('DAY') and r.find('NIGHT') and not r.find('CHOSEN')
-    and r.find('SHORT DAYS: HOLDS 14M / DAY 1H 4M') and r.find('STAYS ON THAT SIDE AFTER THE REROLL'),'Time of day header')
+    and r.find('SHORT DAYS / DAY 1H 4M') and r.find('STAYS ON THAT SIDE FOR AT LEAST 14M'),'Time of day header')
 -- The side drawn in ink, the panel's darkest colour: exactly the chosen one.
 local function inked()
     local found
@@ -248,12 +248,15 @@ local function inked()
     return found
 end
 assert(inked()=='NIGHT','Night is chosen')
+-- Until the sky is known the line cannot say how long.
+m.time_hold=nil;panel:show({},{},face,nowhere,m)
+assert(r.find('STAYS ON THAT SIDE AFTER THE REROLL') and not r.find('FOR AT LEAST'),'No hold before the sky')
 m.time='day';panel:show({},{},face,nowhere,m);assert(inked()=='DAY','Day is chosen')
 local cleared=r.destroyed
 m.time='any';m.time_note=nil;panel:show({},{},face,nowhere,m)
 assert(inked()=='ANY' and r.destroyed==cleared+1,'Any time drops the note line and redraws')
 local hidden=true
-for _,o in ipairs(r.live)do if o.kind=='text' and o.value=='STAYS ON THAT SIDE AFTER THE REROLL' then hidden=false end end
+for _,o in ipairs(r.live)do if o.kind=='text' and o.value:find('^STAYS ON THAT SIDE') then hidden=false end end
 assert(hidden,'No note line at any time')
 old=r.destroyed;panel:clear();assert(r.destroyed==old+1)
 -- The enemy tooltip: left of the panel, level with the hovered row, above

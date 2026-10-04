@@ -162,7 +162,7 @@ function P.new(e)
         end
         local bits={tostring(hover),tostring(hint),tip_key or '',model.status or '',model.tone or '',tostring(model.step),tostring(model.running),
             tostring(model.locked),tostring(model.can_start),tostring(model.can_clear),tostring(model.faction),model.scope or '',
-            tostring(model.difficulty),tostring(model.slots),tostring(model.checked),model.forced or '',model.note or '',model.time_note or '',tostring(model.time)}
+            tostring(model.difficulty),tostring(model.slots),tostring(model.checked),model.forced or '',model.note or '',model.time_note or '',model.time_hold or '',tostring(model.time)}
         for _,section in ipairs(SECTIONS)do bits[#bits+1]=summaries[section.id] or ''end
         for _,group in ipairs(groups)do bits[#bits+1]=tostring(group.selected)end
         for _,item in ipairs(items)do bits[#bits+1]=tostring(item.mode)..tostring(item.enabled)..tostring(selected[item.id]==true)end
@@ -361,7 +361,9 @@ function P.new(e)
                     end
                     if b.time_meta then
                         local used_width=text('time_note',model.time_note or '',right-2*s,at(b.time_meta),15,muted,'right',330*s)
-                        text('time_meta','STAYS ON THAT SIDE AFTER THE REROLL',left+2*s,at(b.time_meta),15,muted,nil,INNER*s-used_width-18*s)
+                        -- How long the side holds, once the sky is known.
+                        local hold=model.time_hold and 'STAYS ON THAT SIDE FOR AT LEAST '..model.time_hold or 'STAYS ON THAT SIDE AFTER THE REROLL'
+                        text('time_meta',hold,left+2*s,at(b.time_meta),15,muted,nil,INNER*s-used_width-18*s)
                     end
                 else
                     rect('head'..i,t.x,t.y,t.w,t.h,992,open and (over and color(255,241,110) or yellow) or glass(over and 43 or 18))

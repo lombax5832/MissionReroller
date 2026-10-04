@@ -196,7 +196,7 @@ end
 local publication=up(up(tick,'advance_prediction_search'),'on_search_match')
 up(ready,'DayNight',stub_day_night(up(ready,'DayNight')),true)
 up(publication,'DayNight',up(ready,'DayNight'),true)
-up(dialog,'sky_view',function()return {note='HOLDS 2H 30M / DAY 15H 42M'}end,true)
+up(dialog,'sky_view',function()return {note='DAY 15H 42M',hold='2h 30m'}end,true)
 map.sky=function()return {env=0,seed=1,viewer=0}end
 jit.flush()
 local filters=up(dialog,'filters');filters.selected={};filters.time='night'

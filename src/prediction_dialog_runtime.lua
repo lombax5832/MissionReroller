@@ -192,22 +192,23 @@ do
                 emit(string.format('DAYNIGHT_PLANET planet=%d day_s=%.0f buffer_s=%.0f band_min=%d',s.planet,planet.day_length,planet.buffer,DayNight.BAND))
             end
             local planet=sky_planet
-            local note=(planet.buffer<DayNight.WANTED and 'SHORT DAYS: ' or '')..'HOLDS '..DayNight.duration(planet.buffer)
-                ..' / DAY '..DayNight.duration(planet.day_length)
+            -- How long the side holds goes on the panel's left, the day on its right.
+            local hold=DayNight.duration(planet.buffer)
+            local note=(planet.buffer<DayNight.WANTED and 'SHORT DAYS / ' or '')..'DAY '..DayNight.duration(planet.day_length)
             local open=not scope and outside_cities(s)
-            if open and filters:possible(open)then return {note=note}end
+            if open and filters:possible(open)then return {note=note,hold=hold}end
             local nodes={}
             for _,op in ipairs(s.decoded.operations)do
                 if op.difficulty==difficulty and op.row>=30 and op.row<110 and (not scope or accepts(op.row))then
                     for _,mission in ipairs(op.missions or {})do nodes[#nodes+1]=mission.level_index end
                 end
             end
-            if #nodes==0 then return {note=note}end
+            if #nodes==0 then return {note=note,hold=hold}end
             local wait=DayNight.wait(planet,nodes,filters.time,DayNight.war_time(read,s.board))
-            if wait==0 then return {note=note}end
+            if wait==0 then return {note=note,hold=hold}end
             local side=filters.time=='day' and 'Day' or 'Night'
-            if not wait then return {note=note,blocked='No city here stays in '..side:lower()..' for '..DayNight.duration(planet.buffer)}end
-            return {note=note,blocked=side..(scope and ' here' or ' at a city here')..' in '..DayNight.duration(wait)}
+            if not wait then return {note=note,hold=hold,blocked='No city here stays in '..side:lower()..' for '..hold}end
+            return {note=note,hold=hold,blocked=side..(scope and ' here' or ' at a city here')..' in '..DayNight.duration(wait)}
         end)
         if ok then sky_error=nil
         elseif tostring(value)~=sky_error then sky_error=tostring(value);emit('DAYNIGHT_BLOCKED '..sky_error)end

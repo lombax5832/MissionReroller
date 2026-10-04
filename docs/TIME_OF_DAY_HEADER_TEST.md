@@ -5,8 +5,10 @@
 Section 5 of the panel, TIME OF DAY, is no longer a dropdown. Its header
 holds three buttons, ANY, DAY and NIGHT, with the chosen one filled yellow.
 While Day or Night is chosen, one line under the header reads
-`STAYS ON THAT SIDE AFTER THE REROLL` on the left and the sky note
-(`HOLDS 2H 30M / DAY <length>`) on the right. When the open section's rows
+`STAYS ON THAT SIDE FOR AT LEAST <hold>` on the left (`2H 30M`, or less
+on short days, such as `14M`) and the planet's day (`DAY <length>`, or
+`SHORT DAYS / DAY <length>`) on the right. Until the planet's sky is
+known the left reads `STAYS ON THAT SIDE AFTER THE REROLL`. When the open section's rows
 would otherwise drop below their 20-unit minimum (side objectives with 14
 or more rows), that line gives way to the list.
 
@@ -31,8 +33,8 @@ router), all through `tests/test_package.py`.
      close.
 2. Click NIGHT.
    - Pass: NIGHT turns yellow, ANY goes grey, and a line appears under the
-     header: `STAYS ON THAT SIDE AFTER THE REROLL` and
-     `HOLDS 2H 30M / DAY <length>`. The log shows
+     header: `STAYS ON THAT SIDE FOR AT LEAST 2H 30M` and
+     `DAY <length>`. The log shows
      `DAYNIGHT_PLANET planet=<n> …` once.
    - Fail: nothing changes, the line overlaps the footer, or a `STOPPED:`
      or `panel` error line.

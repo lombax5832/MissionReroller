@@ -561,7 +561,7 @@ click('clear');frame()
 assert(last_model.time=='any','Any time after clear')
 click('time:night');frame();frame()
 assert(last_model.time=='night' and last_model.summaries.time=='Night' and last_model.rules==1)
-assert(last_model.can_start and last_model.status=='Ready to search' and shown('HOLDS 2H 30M / DAY 15H 42M'),last_model.status)
+assert(last_model.can_start and last_model.status=='Ready to search' and shown('DAY 15H 42M') and shown('STAYS ON THAT SIDE FOR AT LEAST 2H 30M'),last_model.status)
 local sky_logged=false
 for _,line in ipairs(logs)do if line:find('DAYNIGHT_PLANET planet='..planet..' day_s=56553 buffer_s=9000',1,true)then sky_logged=true end end
 assert(loads==1 and sky_logged,'The sky is loaded once and logged')
