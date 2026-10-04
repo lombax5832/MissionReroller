@@ -51,21 +51,28 @@ rectangles, amber and red, labels without icons),
    - Icons wrong: `TIME_ICONS off reason=…` (send the reason), no picture,
      another picture, a picture upside down, or a square that is all white
      or all black. The tiles must still work without them.
-2. Click NIGHT.
+   - First build, 2026-10-04: the icons showed, then vanished after a
+     click or when the pointer left a tile, and a white square appeared in
+     the screen's lower left corner. `Gui.update_bitmap_uv` misplaced them;
+     the panel now deletes and redraws each icon instead.
+2. Point at DAY, then away; point at NIGHT, then away.
+   - Pass: the sun and moon stay on their tiles through every hover, and
+     no square appears anywhere else on the screen.
+3. Click NIGHT.
    - Pass: NIGHT turns yellow with a dark moon badge and reads
      `AT LEAST 2H 30M` (less on a short-day planet), ANY goes dark. The log
      shows `DAYNIGHT_PLANET planet=<n> …` once.
    - Fail: nothing changes, or a `STOPPED:` or panel error line.
-3. Open each of sections 1 to 4 with NIGHT still chosen.
+4. Open each of sections 1 to 4 with NIGHT still chosen.
    - Pass: every row is readable and above the footer; the tiles do not
      move.
-4. Press REROLL OPERATIONS.
+5. Press REROLL OPERATIONS.
    - Pass: `DAYNIGHT_SEARCH side=night …`, then a `DAYNIGHT_MATCH side=night`
      and `PUBLICATION_STATE_VERIFIED`, as in docs/DAY_NIGHT_TEST.md.
    - During the search the three tiles dim and ignore clicks.
-5. Choose City scope on a planet where a city is past its side (see
+6. Choose City scope on a planet where a city is past its side (see
    docs/DAY_NIGHT_TEST.md), DAY chosen.
    - Pass: the DAY tile turns red and reads `NO CITY HOLDS` while the status
      line gives the wait.
-6. Click ANY, then CLEAR with DAY chosen.
+7. Click ANY, then CLEAR with DAY chosen.
    - Pass: each time ANY turns yellow and DAY reads `DAYLIGHT` again.

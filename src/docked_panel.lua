@@ -189,7 +189,9 @@ function P.new(e)
             if ok and made then shapes[id]=made else no_shapes=true end
         end
         -- A day or night icon, size units square with its lower left at x,y.
-        -- One failure turns icons off for good; returns whether it drew.
+        -- One failure turns icons off for good, and the GUI is dropped
+        -- after this draw so no half-made icon stays; returns whether it drew.
+        local broken
         local function icon(id,side,x,y,size,c)
             if icons~=nil and icons~=true then return false end
             local ok,err=pcall(function()
@@ -201,10 +203,12 @@ function P.new(e)
                 local at=ICONS[side]
                 local low,high=e.Vector2(at[1]/ICONS.w,(at[2]+ICONS.px)/ICONS.h),e.Vector2((at[1]+ICONS.px)/ICONS.w,at[2]/ICONS.h)
                 local pos,dim=e.Vector3(x,y,995),e.Vector2(size,size)
-                if bitmaps[id] then e.Gui.update_bitmap_uv(gui,bitmaps[id],icon_material,low,high,pos,dim,c)
-                else bitmaps[id]=assert(e.Gui.bitmap_uv(gui,icon_material,low,high,pos,dim,c))end
+                -- Each draw makes the icon afresh: in game update_bitmap_uv
+                -- left a white square in the screen's corner instead.
+                if bitmaps[id] then e.Gui.destroy_bitmap(gui,bitmaps[id]);bitmaps[id]=nil end
+                bitmaps[id]=assert(e.Gui.bitmap_uv(gui,icon_material,low,high,pos,dim,c))
             end)
-            icons=ok or tostring(err)
+            icons=ok or tostring(err);broken=broken or not ok
             return ok
         end
         local function measure(value,size)
@@ -504,6 +508,8 @@ function P.new(e)
             end
         end
         cache,detail=state,counter
+        -- The next frame draws everything afresh, without icons.
+        if broken then self:clear()end
     end
     return self
 end
