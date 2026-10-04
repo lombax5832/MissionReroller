@@ -306,7 +306,8 @@ function R:model(catalogue,v)
             objectives=count(objective_rules),
             time=self.time=='day' and 'Day' or self.time=='night' and 'Night' or 'Any'},
         time=self.time or 'any',time_hold=v.sky and v.sky.hold or nil,
-        time_sky=sky.blocked and 'blocked' or sky.pending and 'pending' or nil,
+        -- A search shows its own status; the tile stays as it started.
+        time_sky=not busy and (sky.blocked and 'blocked' or sky.pending and 'pending') or nil,
         forced=table.concat(forced,', '),
         note=display and section=='enemies' and group==0 and 'Check a mission to set its own enemies' or nil,
         objective_note=display and section=='objectives' and group==0 and 'ANY MISSION OF THE OPERATION' or nil}

@@ -71,7 +71,8 @@ rectangles, amber and red, labels without icons),
 5. Press REROLL OPERATIONS.
    - Pass: `DAYNIGHT_SEARCH side=night …`, then a `DAYNIGHT_MATCH side=night`
      and `PUBLICATION_STATE_VERIFIED`, as in docs/DAY_NIGHT_TEST.md.
-   - During the search the three tiles dim and ignore clicks.
+   - During the search the three tiles dim and ignore clicks, and NIGHT
+     keeps `AT LEAST 2H 30M`: no amber `WAITING`.
 6. Choose City scope on a planet where a city is past its side (see
    docs/DAY_NIGHT_TEST.md), DAY chosen.
    - Pass: the DAY tile turns red and reads `NO CITY HOLDS` while the status

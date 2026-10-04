@@ -352,7 +352,8 @@ do
         run=reroll_session.view()
         local sky
         if filters.time then
-            if s then sky=sky_view(s,now)elseif retained then sky=sky_state end
+            -- A search keeps the last sky, so its tile keeps the hold.
+            if s then sky=sky_view(s,now)elseif retained or running then sky=sky_state end
         end
         local model=filters:model(catalogue,{shown=s or running or retained,fresh=s~=nil,retained=retained,running=running,
             queued=gap.queued~=nil,fixed=fixed,overdue=overdue,run=run,why=why,report=report,tone=report_tone,
