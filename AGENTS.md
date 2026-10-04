@@ -161,12 +161,12 @@ parts enabled; `test_identity_probe.py`, `test_search_probe.py` and
 
 ```powershell
 $env:BINGUS_LOADER_ROOT = "$PWD\..\..\..\..\BingusSharedLoader"  # in a worktree only
-python -B scripts/build.py          # releases/Mission-Reroller-Dev-v<DEFAULT_VERSION>.zip
+python -B scripts/build.py          # releases/Operation-Reroller-Dev-v<DEFAULT_VERSION>.zip
 python -B tests/test_package.py     # package checks, then tests/test_dialog.py
 ```
 
 - A build without `RELEASE_TAG` is a development package: name
-  `Mission Reroller Dev` and its own `DEVELOPMENT_GUID`, so the mod manager
+  `Operation Reroller Dev` and its own `DEVELOPMENT_GUID`, so the mod manager
   lists it beside the published mod. It shares the release's module, global
   and log; enable only one of them before deploying. Only a tagged build
   carries `RELEASE_GUID`.
@@ -242,7 +242,7 @@ from the `CHANGELOG.md` section for that version through
    change.
 2. **Check the tagged build** from the main checkout:
    `$env:RELEASE_TAG='v<ver>'; python -B scripts/build.py; python -B tests/test_package.py; Remove-Item Env:RELEASE_TAG`.
-   Done when it writes `releases/Mission-Reroller-v<ver>.zip` and prints
+   Done when it writes `releases/Operation-Reroller-v<ver>.zip` and prints
    `test_package: passed`.
 3. **Push `main`.** The workflow builds the tagged commit, so the release
    commit and its `CHANGELOG.md` section must be on it. Done when

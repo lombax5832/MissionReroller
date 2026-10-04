@@ -18,10 +18,10 @@ import build_core
 import build_identity_probe as probe
 
 MODULE = build_core.RELEASE_MODULE
-RELEASE_NAME = 'Mission Reroller'
+RELEASE_NAME = 'Operation Reroller'
 # The GUID and name of untagged (local) builds.
 DEVELOPMENT_GUID = '97a929ab-793e-49e8-b186-f39daa8984e8'
-DEVELOPMENT_NAME = 'Mission Reroller Dev'
+DEVELOPMENT_NAME = 'Operation Reroller Dev'
 DEFAULT_VERSION = '0.33.0'
 # What mod managers show for the mod and its one option.
 DESCRIPTION = ('Rerolls the operations on a planet\'s war table until one has the missions, modifiers, '
