@@ -44,6 +44,7 @@ running game and replays the Lua port on them
 (`docs/SIDE_OBJECTIVE_RESEARCH.md`).
 
 `seed_solver.py`, `seed_solver_oracle.lua` and `prove_seed_solver.py` are the
-research prototype that solves campaign seeds for a mission filter instead of
-searching them (`docs/SEED_SOLVER_RESEARCH.md`); `tests/test_seed_solver.py`
-checks the solver without a capture.
+research prototype that solves campaign seeds for a filter of missions,
+enemy forces and side objectives instead of searching them
+(`docs/SEED_SOLVER_RESEARCH.md`); `tests/test_seed_solver.py` checks the
+solver without a capture.

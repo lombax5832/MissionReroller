@@ -111,4 +111,60 @@ for trial in range(20):
         for _ in range(2 * row):
             rng.next()
         assert rng.index(board.pool) == op_id and forward(rng.next(), constraints)
+
+# Sampling dense systems: every sampled point is a distinct, valid solution.
+for trial in range(10):
+    y = r.randrange(S.M32)
+    constraints = []
+    for position in range(1, 5):
+        kind = r.choice(['direct', 'mission'])
+        v = S.output(y, position)
+        if kind == 'mission':
+            v = S.output((v + y) % S.M32, 1)
+        half = 1 << 29
+        constraints.append((kind, position, max(0, v - half), min(S.M32 - 1, v + half)))
+    system = S.operation_system({'constraints': constraints})
+    assert system.expected() > 1000
+    found = [s['y'] for s in system.solve(limit=20, sample=True, rng=random.Random(trial))]
+    assert len(found) == 20 and len(set(found)) == 20, (trial, len(found))
+    assert all(forward(v, constraints) for v in found)
+
+# Mission-seed constraints: draws on the stream started at the mission seed m
+# (enemy tags, side objectives) and the environment's state1 mod total.
+def mission_forward(y, step):
+    _, position, lo, hi, mission = step
+    m = S.output(y, position)
+    if lo is not None and not lo <= S.output((m + y) % S.M32, 1) <= hi:
+        return False
+    for p, (a, b) in mission['draws'].items():
+        if not a <= S.output(m, p) <= b:
+            return False
+    state1 = (m * S.MUL + S.INC) % S.M64
+    return all(a <= state1 % modulus <= b for modulus, a, b in mission['mods'])
+
+
+checked = 0
+for trial in range(30):
+    y = r.randrange(S.M32)
+    position = r.randint(1, 4)
+    m = S.output(y, position)
+    kind = S.output((m + y) % S.M32, 1)
+    draws = {}
+    for p in r.sample(range(1, 8), r.randint(1, 2)):
+        v = S.output(m, p)
+        draws[p] = (max(0, v - (1 << 20)), min(S.M32 - 1, v + (1 << 20)))
+    modulus = r.randint(1000, 5000)
+    v = ((m * S.MUL + S.INC) % S.M64) % modulus
+    mods = [(modulus, max(0, v - modulus // 16), min(modulus - 1, v + modulus // 16))]
+    wide = r.random() < 0.5  # a forced kind: no kind draw
+    step = ('mission', position, None if wide else max(0, kind - (1 << 18)),
+            None if wide else min(S.M32 - 1, kind + (1 << 18)), {'draws': draws, 'mods': mods})
+    system = S.operation_system({'constraints': [step]})
+    if system.expected() > 3000:
+        continue
+    found = [s['y'] for s in system.solve()]
+    assert y in found, (trial, y, step)
+    assert all(mission_forward(v, step) for v in found)
+    checked += 1
+assert checked >= 10, checked
 print('test_seed_solver: passed')

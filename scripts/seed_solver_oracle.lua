@@ -44,10 +44,25 @@ Planet=H.planet_model(root,{
         end
     end})
 
-local game=ffi.cast('uint8_t*',tonumber(fixture.game));local definitions=tonumber(fixture.definitions)
-local board=definitions-O.board.definitions[1]
-local case=fixture.cases[1];local bytes=raw(case.operations);local planet
-for row=0,109 do if bytes:byte(row*92+53)~=0 then planet=bytes:byte(row*92+17)+bytes:byte(row*92+18)*256 end end
+local game=ffi.cast('uint8_t*',tonumber(fixture.game))
+local board,definitions,planet,case
+if fixture.cases then
+    -- A saved campaign capture (level-capture-oracle.lua): boards of known seeds.
+    definitions=tonumber(fixture.definitions);board=definitions-O.board.definitions[1]
+    case=fixture.cases[1];local bytes=raw(case.operations)
+    for row=0,109 do if bytes:byte(row*92+53)~=0 then planet=bytes:byte(row*92+17)+bytes:byte(row*92+18)*256 end end
+else
+    -- A viewed-planet capture (scripts/check_live_planet.py): the planet the
+    -- map shows and the board's own seed, as tests/check_viewed_planet.lua reads them.
+    board=tonumber(fixture.board)
+    planet=u(read(board+O.board.selection,8),4);assert(planet<512,'No viewed planet')
+    local key=read(board+O.board.campaign+0x1c+planet*O.campaign.definition_stride,4)
+    for _,offset in ipairs(O.board.definitions)do
+        if read(board+offset,4)==key then definitions=board+offset;break end
+    end
+    assert(definitions,'Planet definitions are not cached')
+    case={seed=u(read(board+O.board.seed,4),0)}
+end
 local predict=Planet.bind(read,u,pointer,game,board,planet).predictor(definitions)
 
 local function json(v,depth)
@@ -81,11 +96,49 @@ local function json(v,depth)
 end
 local function write(path,text)local f=assert(io.open(path,'wb'));f:write(text);f:close()end
 
+-- Enemy tags and side objectives, resolved as constellation_runtime.lua and
+-- side_objective_runtime.lua resolve them for a predicted operation.
+local model=Planet.bind(read,u,pointer,game,board,planet)
+local Constellations=H.module(root..'/constellation_prediction.lua')
+local SideObjectives=H.module(root..'/side_objective_prediction.lua')
+local tag_inputs,objective_inputs
+local function per_mission(op)
+    tag_inputs=tag_inputs or model.constellation_inputs()
+    objective_inputs=objective_inputs or model.objective_inputs()
+    local initial=tag_inputs.campaign(planet,op.effect_id)
+    local context=objective_inputs.context(planet,op.effect_id)
+    local counts=objective_inputs.counts(op.difficulty)
+    return function(mission)
+        local kind,seed=mission.native_type,mission.seed
+        local record=tag_inputs.mission(kind);local tags=false
+        if record.faction>=2 and record.faction<=4 then
+            tags=Constellations.resolve(seed,tag_inputs.settings(record.faction,op.difficulty),initial,record,tag_inputs.disabled).list
+        end
+        local srecord=objective_inputs.mission(kind)
+        local environment=objective_inputs.environments(planet,kind,context.modifiers)(seed)
+        local list=SideObjectives.resolve(seed,op.difficulty,srecord,counts,objective_inputs.scale(srecord.category),
+            {objective=objective_inputs.objective,disabled=objective_inputs.disabled,context=context,
+                environment=function()return environment end})
+        local objectives={}
+        for i,o in ipairs(list)do objectives[i]={o.id,o.role}end
+        return tags,objectives,environment
+    end
+end
+
 local function board_of(seed)
     local result={}
     for _,op in ipairs(predict(seed))do
         local missions={}
-        for i,mission in ipairs(op.missions)do missions[i]={mission.native_type,mission.seed,mission.level_index}end
+        -- A capture made before the mission-seed inputs were read has no
+        -- pages for them: those boards carry missions only.
+        local ok,resolve=pcall(per_mission,op)
+        for i,mission in ipairs(op.missions)do
+            missions[i]={mission.native_type,mission.seed,mission.level_index}
+            if ok then
+                local tags,objectives,environment=resolve(mission)
+                missions[i][4],missions[i][5],missions[i][6]=tags,objectives,environment
+            end
+        end
         result[#result+1]={row=op.row,id=op.id,seed=op.seed,difficulty=op.difficulty,valid=op.valid,
             template_index=op.template_index,modifiers=op.modifiers,missions=missions}
     end
@@ -100,6 +153,40 @@ if mode=='predict' then
     end
     write(arg[5],'['..table.concat(out,',\n')..']\n')
     return
+end
+
+-- side_objective_inputs.lua keeps the environment draw's weights in the
+-- closures environments() returns; read them back so the solver can
+-- constrain the draw. A pick is `state1 mod total` against cumulative units.
+local function upvalues(fn)
+    local values={}
+    for i=1,255 do
+        local name,value=debug.getupvalue(fn,i)
+        if not name then break end
+        values[name]=value
+    end
+    return values
+end
+local function weighted_tables(fn)
+    local v=upvalues(fn)
+    if not v.candidates then return {units={},indices={}}end -- no candidates: always 0
+    local indices={}
+    for k,c in ipairs(v.candidates)do indices[k]=c.index end
+    return {units=v.units,indices=indices}
+end
+local function environment_tables(pick)
+    local v=upvalues(pick)
+    if not v.inner then return false end -- planet without a definition: always 0
+    local inner={}
+    for j,fn in pairs(v.inner)do
+        local w=upvalues(fn)
+        local ids={}
+        for s=0,7 do ids[s+1]=w.rows[s].id end
+        local t=weighted_tables(w.pick);t.ids=ids;t.biome=j
+        inner[#inner+1]=t
+    end
+    table.sort(inner,function(a,b)return a.biome<b.biome end)
+    return {biome=weighted_tables(v.biome),inner=inner}
 end
 
 -- tables: every normal (difficulty, operation ID) a seed can produce, with
@@ -121,6 +208,7 @@ for _=1,4000 do
     end
 end
 local operations={}
+local objective_ids,seeded={},true
 for _,base in pairs(bases)do
     local op={row=0,id=base.id,seed=0,difficulty=base.difficulty,category=base.category,faction=base.faction,explicit_hash=base.explicit_hash}
     assert(op.explicit_hash==0,'The prototype expects no explicit template')
@@ -159,15 +247,70 @@ for _,base in pairs(bases)do
             end
         end
     end
-    operations[#operations+1]={difficulty=op.difficulty,id=op.id,category=op.category,faction=op.faction,
+    local entry={difficulty=op.difficulty,id=op.id,category=op.category,faction=op.faction,
         budget=budget,total=total,templates=templates,levels=levels,special=special and true or false,extra=extra,
-        mission_categories=categories}
+        mission_categories=categories,effect_id=op.effect_id}
+    -- Mission-seed draws: enemy tags (constellation_prediction.lua) and side
+    -- objectives (side_objective_prediction.lua) for every candidate kind,
+    -- when the capture holds their inputs.
+    if seeded then
+        seeded=pcall(function()
+            tag_inputs=tag_inputs or model.constellation_inputs()
+            objective_inputs=objective_inputs or model.objective_inputs()
+            local context=objective_inputs.context(planet,op.effect_id)
+            local banned={}
+            for id in pairs(context.banned)do banned[#banned+1]=id end
+            local kinds={}
+            for _,c in ipairs(categories)do
+                local kind=c[1]
+                local record=tag_inputs.mission(kind)
+                local settings=nil
+                if record.faction>=2 and record.faction<=4 then settings=tag_inputs.settings(record.faction,op.difficulty)end
+                local srecord=objective_inputs.mission(kind)
+                local pick,reachable=objective_inputs.environments(planet,kind,context.modifiers)
+                local environments={}
+                for value in pairs(reachable)do environments[#environments+1]=value end
+                table.sort(environments)
+                for _,e in ipairs(srecord.pool)do objective_ids[e.id]=true end
+                kinds[#kinds+1]={kind=kind,faction=record.faction,horde=record.horde,exclusions=record.exclusions,settings=settings,
+                    objectives={lo=srecord.lo,hi=srecord.hi,category=srecord.category,pool=srecord.pool,
+                        scale=objective_inputs.scale(srecord.category) or false},environments=environments,
+                    environment=environment_tables(pick)}
+            end
+            entry.initial_tags=tag_inputs.campaign(planet,op.effect_id)
+            entry.context={banned=banned,extra=context.extra,modifiers=context.modifiers}
+            entry.counts=objective_inputs.counts(op.difficulty);entry.kinds=kinds
+        end)
+    end
+    operations[#operations+1]=entry
 end
+local objectives,disabled_tags={},{}
+if seeded then
+    for id in pairs(objective_ids)do
+        local r=objective_inputs.objective(id)
+        objectives[#objectives+1]={pool_id=id,id=r.id,cap=r.cap,minimum=r.minimum,maximum=r.maximum,mask=r.mask,
+            environments=r.environments,disabled=objective_inputs.disabled(r.id) and true or false}
+    end
+    for tag=0,31 do if tag_inputs.disabled(tag)then disabled_tags[#disabled_tags+1]=tag end end
+else
+    for _,entry in ipairs(operations)do entry.kinds,entry.initial_tags,entry.context,entry.counts=nil end
+end
+-- The filter rows (side_objective_prediction.lua R.rows): id -> row key, name.
+local rows={}
+for id,row in pairs(SideObjectives.row_of)do rows[#rows+1]={id=id,row=row,name=SideObjectives.names[row]}end
+table.sort(rows,function(a,b)return a.id<b.id end)
+local tag_names={}
+for tag,name in pairs(Constellations.names)do tag_names[#tag_names+1]={tag,name}end
+-- Mission family names by kind (search_session.lua options).
+local kind_names={}
+for _,option in ipairs(m.options)do for _,id in ipairs(option.ids)do kind_names[#kind_names+1]={id,option.name}end end
 table.sort(operations,function(a,b)return a.difficulty*100+a.id<b.difficulty*100+b.id end)
 local specials={}
 for i,event in ipairs(identity.specials or {})do specials[i]={id=event.id,minimum=event.minimum,maximum=event.maximum}end
 local active=identity.active
 if active and active.planet==planet then active={row=active.row,id=active.id,seed=active.seed,difficulty=active.difficulty}else active=nil end
 write(arg[4],json({planet=planet,active=active,capture_seed=case.seed,pool_count=identity.pool_count,max_difficulty=identity.max_difficulty,
-    specials=specials,operations=operations})..'\n')
-print(string.format('seed_solver_oracle: %d operations exported for planet %d',#operations,planet))
+    specials=specials,operations=operations,objectives=objectives,disabled_tags=disabled_tags,
+    objective_rows=rows,tag_names=tag_names,kind_names=kind_names})..'\n')
+print(string.format('seed_solver_oracle: %d operations exported for planet %d%s',#operations,planet,
+    seeded and ', with enemy tags and side objectives' or ', missions only (the capture lacks tag and objective inputs)'))
