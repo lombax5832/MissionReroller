@@ -5,6 +5,12 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
+**Not yet validated in game: v0.33.2 brief mod manager description.**
+`DESCRIPTION` and `REQUIREMENT` in `scripts/build.py`, the text Arsenal and
+HD2MM show for the mod and its option, are cut to three sentences: what it
+does, F7 on the galactic map, and Bingus Shared Loader v16+ loaded last.
+Nothing in the entry changed.
+
 **Not yet validated in game: v0.33.1 Operation Reroller package name.**
 The release package is named Operation Reroller: `RELEASE_NAME` in
 `scripts/build.py` sets the mod manager name and `Operation-Reroller-v<ver>.zip`,
