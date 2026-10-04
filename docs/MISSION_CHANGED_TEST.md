@@ -21,7 +21,8 @@ logged: the header is the whole notice.
 
 ## Status
 
-Not validated in game. Offline: `tests/test_filter_request.lua` (marks for
+Tested in game by the user on 2026-10-04 with the brighter red; no log
+lines prove it, since nothing is logged. Offline: `tests/test_filter_request.lua` (marks for
 both sections, only the section that lost rules, no mark without rules,
 cleared by its header and CLEAR, a mission not dimmed by rules it
 discards), `tests/test_docked_panel.lua` (red header, white summary, an
