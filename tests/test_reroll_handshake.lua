@@ -66,7 +66,7 @@ map.back_hint=function()return nil end
 up(dialog,'cursor',{client=function()return 0,0,1200,820 end},true)
 up(dialog,'face',function()return {font='a',material='b',atlas='c'}end,true)
 local shown={}
-up(dialog,'panel',{clear=function()end,show=function(_,_,_,_,_,model)
+up(dialog,'panel',{clear=function()end,icons=function()end,show=function(_,_,_,_,_,model)
     shown[#shown+1]={status=model.status,tone=model.tone,step=model.step,running=model.running,can_start=model.can_start,detail=model.detail}
 end},true)
 stingray={Gui={resolution=function()return 1200,820 end},Script={temp_byte_count=function()return 0 end,set_temp_byte_count=function()end}}
@@ -196,7 +196,7 @@ end
 local publication=up(up(tick,'advance_prediction_search'),'on_search_match')
 up(ready,'DayNight',stub_day_night(up(ready,'DayNight')),true)
 up(publication,'DayNight',up(ready,'DayNight'),true)
-up(dialog,'sky_view',function()return {note='HOLDS 2H 30M / DAY 15H 42M'}end,true)
+up(dialog,'sky_view',function()return {hold='2h 30m'}end,true)
 map.sky=function()return {env=0,seed=1,viewer=0}end
 jit.flush()
 local filters=up(dialog,'filters');filters.selected={};filters.time='night'

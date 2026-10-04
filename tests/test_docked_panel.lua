@@ -19,26 +19,28 @@ end
 local three={{id=2,name='Geological Survey',selected=true},{id=5,name='Evacuate High-Value Assets'},{id=62,name='Neutralize Ground-to-Orbit Defenses'}}
 local function running(m)m.running=true;m.locked=true;m.ready=false;m.can_start=false;m.can_clear=false;m.step=2;return m end
 local cases={
-    {'missions',model('missions',list(22)),30},
-    {'paged missions',model('missions',list(24),{page=1,pages=2}),34},
-    {'one mission',model('missions',list(1)),9},
-    {'modifiers',model('modifiers',list(13,'modifier:')),21},
-    {'enemies',model('enemies',list(11,'constellation:2:'),{groups=three}),22},
-    {'any mission',model('enemies',list(6,'constellation:0:'),{groups={{id=0,name='Any mission',selected=true}},note='Check a mission',forced='Predator Strain'}),15},
-    {'no enemies',model('enemies',{},{groups=three}),11},
-    {'all closed',model(nil,{}),8},
-    {'running missions',running(model('missions',list(24),{page=2,pages=2})),34},
-    {'running modifiers',running(model('modifiers',list(13,'modifier:'))),21},
-    {'running enemies',running(model('enemies',list(11,'constellation:2:'),{groups=three})),22},
-    {'no catalogue, missions',model('missions',{},{faction=false,locked=true,can_start=false,can_clear=false}),8},
-    {'no catalogue, modifiers',model('modifiers',{},{faction=false,locked=true,can_start=false,can_clear=false}),8},
-    {'no catalogue, enemies',model('enemies',{},{faction=false,locked=true,can_start=false,can_clear=false}),8},
-    {'time',model('time',{{id='time:any',name='Any time'},{id='time:day',name='Day',mode='chosen'},{id='time:night',name='Night'}},{time_note='HOLDS 2H 30M / DAY 15H 42M'}),11},
-    {'running time',running(model('time',{{id='time:any',name='Any time'},{id='time:day',name='Day'},{id='time:night',name='Night',mode='chosen'}})),11},
-    {'side objectives',model('objectives',list(22,'objective:2:'),{groups=three,objective_slots='4 SIDE + 1 TACTICAL'}),33},
-    {'many side objectives',model('objectives',roles(list(28,'objective:0:'),12),{groups={{id=0,name='Any mission',selected=true}},objective_note='ANY MISSION OF THE OPERATION'}),37},
-    {'no side objectives',model('objectives',{},{groups=three}),11},
-    {'running side objectives',running(model('objectives',list(9,'objective:2:'),{groups=three})),20},
+    {'missions',model('missions',list(22)),32},
+    {'paged missions',model('missions',list(24),{page=1,pages=2}),36},
+    {'one mission',model('missions',list(1)),11},
+    {'modifiers',model('modifiers',list(13,'modifier:')),23},
+    {'enemies',model('enemies',list(11,'constellation:2:'),{groups=three}),24},
+    {'any mission',model('enemies',list(6,'constellation:0:'),{groups={{id=0,name='Any mission',selected=true}},note='Check a mission',forced='Predator Strain'}),17},
+    {'no enemies',model('enemies',{},{groups=three}),13},
+    {'all closed',model(nil,{}),10},
+    {'running missions',running(model('missions',list(24),{page=2,pages=2})),36},
+    {'running modifiers',running(model('modifiers',list(13,'modifier:'))),23},
+    {'running enemies',running(model('enemies',list(11,'constellation:2:'),{groups=three})),24},
+    {'no catalogue, missions',model('missions',{},{faction=false,locked=true,can_start=false,can_clear=false}),10},
+    {'no catalogue, modifiers',model('modifiers',{},{faction=false,locked=true,can_start=false,can_clear=false}),10},
+    {'no catalogue, enemies',model('enemies',{},{faction=false,locked=true,can_start=false,can_clear=false}),10},
+    {'day',model(nil,{},{time='day',time_hold='2h 30m'}),10},
+    {'running night',running(model(nil,{},{time='night'})),10},
+    {'paged missions at night',model('missions',list(24),{page=1,pages=2,time='night'}),36},
+    {'many side objectives by day',model('objectives',roles(list(28,'objective:0:'),12),{groups={{id=0,name='Any mission',selected=true}},time='day'}),39},
+    {'side objectives',model('objectives',list(22,'objective:2:'),{groups=three,objective_slots='4 SIDE + 1 TACTICAL'}),35},
+    {'many side objectives',model('objectives',roles(list(28,'objective:0:'),12),{groups={{id=0,name='Any mission',selected=true}},objective_note='ANY MISSION OF THE OPERATION'}),39},
+    {'no side objectives',model('objectives',{},{groups=three}),13},
+    {'running side objectives',running(model('objectives',list(9,'objective:2:'),{groups=three})),22},
 }
 for _,size in ipairs({{1280,720},{1920,1080},{3440,1440},{640,480}})do
     for _,case in ipairs(cases)do
@@ -105,6 +107,17 @@ local plain=gap(model('modifiers',list(3,'modifier:')))
 assert(gap(model('enemies',list(3,'constellation:2:'),{groups=three}))==plain,'No gap under enemies without notes')
 assert(gap(model('enemies',list(3,'constellation:2:'),{groups=three,forced='Predator Strain'}))==plain+28,'One note line')
 assert(gap(model('enemies',list(3,'constellation:0:'),{groups=three,forced='Predator Strain',note='Check a mission'}))==plain+48,'Two note lines')
+-- The time of day is no dropdown: three tiles right of its title, inside
+-- its header, at every choice the same.
+b=P.layout(1920,1080,model(nil,{}))
+local head=b.headers[5]
+assert(#b.times==3 and b.times[1].id=='time:any' and b.times[3].id=='time:night','Three tiles')
+for n,tile in ipairs(b.times)do
+    assert(tile.x>=head.x+240 and tile.x+tile.w<=head.x+head.w and tile.y>head.y and tile.y+tile.h<head.y+head.h,'A tile sits right of the title, inside the header')
+    assert(n==1 or tile.x>=b.times[n-1].x+b.times[n-1].w,'Tiles side by side')
+end
+assert(P.layout(1920,1080,model('modifiers',list(13,'modifier:'),{time='night'})).rows[1].h==P.layout(1920,1080,model('modifiers',list(13,'modifier:'))).rows[1].h,
+    'A chosen side takes no room from the open list')
 assert(not pcall(P.layout,1920,1080,model('missions',list(25))),'A page holds 24 missions')
 assert(not pcall(P.layout,639,480,model('missions',list(2))),'Viewport too small')
 local disabled=model('missions',list(3));disabled.items[2].enabled=false
@@ -140,6 +153,13 @@ local function engine(features)
         end
     end
     if features=='full' then
+        r.e.Gui.bitmap_uv=function(_,material,low,high,pos,size,c)
+            if r.fail_bitmap then error('bitmap failed')end
+            local o={kind='bitmap',material=material,low=low,high=high,pos=pos,size=size,color=c};r.live[#r.live+1]=o;return o
+        end
+        -- In game both left a white square in the screen's corner.
+        r.e.Gui.update_bitmap_uv=function()error('update_bitmap_uv is not used')end
+        r.e.Gui.destroy_bitmap=function()error('destroy_bitmap is not used')end
         r.e.Gui.text_extents=function(_,value,_,size)
             r.measured=r.measured+1
             return {-0.02*size},{#value*size*0.5},{#value*size*0.5+0.03*size}
@@ -161,7 +181,7 @@ local r=engine('full');local panel=P.new(r.e)
 local m=model('modifiers',list(3,'modifier:','Modifier'),{summaries={missions='Geological Survey, Launch ICBM',modifiers='Any',enemies='Any'}})
 panel:show({},{},face,nowhere,m);panel:show({},{},face,nowhere,m)
 assert(r.updates==0 and r.created==1,'An unchanged state draws nothing')
-assert(#r.triangles==7,'Five chevrons and two chamfers')
+assert(#r.triangles==6,'Four chevrons and two chamfers')
 local rects,texts,measured=r.rects,r.texts,r.measured
 assert(measured>0)
 for _,o in ipairs(r.live)do
@@ -174,7 +194,7 @@ assert(math.abs(level.pos[1]+#level.value*level.size*0.5+0.05*level.size-(1216+2
 m.items[2].mode='require';m.summaries.modifiers='1 rule'
 panel:show({},{},face,nowhere,m)
 assert(r.updates>0 and r.destroyed==0 and r.rects==rects and r.texts==texts,'A rule updates the existing rows')
-assert(r.find('REQUIRED') and r.find('1 RULE') and #r.triangles==7)
+assert(r.find('REQUIRED') and r.find('1 RULE') and #r.triangles==6)
 m.items[2].mode='exclude';r.updates=0;panel:show({},{},face,nowhere,m);assert(r.updates>0 and r.find('EXCLUDED') and not r.find('REQUIRED') and r.find('ANY'))
 -- Hover and the reason of a row that cannot be chosen.
 local spot=P.layout(1920,1080,m).rows[1]
@@ -200,7 +220,7 @@ local old=r.destroyed
 m=model('enemies',list(11,'constellation:2:','Constellation'),{groups=three,forced='Predator Strain, Gloom Strain'})
 panel:show({},{[2]=true},face,nowhere,m)
 assert(r.destroyed==old+1 and not r.find('MODIFIER 2') and r.find('CONSTELLATION 11'),'A section switch removes the old rows')
-assert(r.find('ALWAYS PRESENT:') and r.find('PREDATOR STRAIN, GLOOM STRAIN') and r.find('GEOLOGICAL SURVEY') and #r.triangles==14)
+assert(r.find('ALWAYS PRESENT:') and r.find('PREDATOR STRAIN, GLOOM STRAIN') and r.find('GEOLOGICAL SURVEY') and #r.triangles==12)
 local cut
 for _,o in ipairs(r.live)do if o.kind=='text' and o.value:find('^NEUTRALIZE') then cut=o end end
 assert(cut and cut.value:find('%.%.%.$') and #cut.value<#'NEUTRALIZE GROUND-TO-ORBIT DEFENSES','Long names are cut to their button')
@@ -214,35 +234,67 @@ assert(r.find('PAGE 1/2   2 OF 3 SLOTS') and r.find('<') and r.find('>') and r.f
 m=model('missions',{},{faction=false,locked=true,can_start=false,can_clear=false,status='Open a planet on the war table first',tone='warn'})
 panel:show({},{},face,nowhere,m)
 assert(r.find('NO PLANET') and r.find('NO PLANET CHOSEN') and r.find('OPEN A PLANET ON THE WAR TABLE FIRST') and not r.find('DIFFICULTY 10'))
--- The time of day: one chosen side, the buffer note, and the summary on its header.
-m=model('time',{{id='time:any',name='Any time'},{id='time:day',name='Day'},{id='time:night',name='Night',mode='chosen'}},
-    {time_note='Short days: holds 14m / day 1h 4m',summaries={missions='Any',modifiers='Any',enemies='Any',time='Night'}})
+-- The time of day: three tiles, the chosen one yellow with how long its
+-- side holds, the galactic map's icons on DAY and NIGHT.
+m=model(nil,{},{time='night',time_hold='14m'})
 panel:show({},{},face,nowhere,m)
-assert(r.find('TIME OF DAY') and r.find('CHOSEN') and r.find('SHORT DAYS: HOLDS 14M / DAY 1H 4M')
-    and r.find('STAYS ON THAT SIDE AFTER THE REROLL') and r.find('ANY TIME') and r.find('NIGHT'),'Time of day rows')
--- Every row holds CHOSEN; only the chosen one shows it, whichever row that is.
-local function chosen()
-    local words,shown={},nil
+assert(r.find('TIME OF DAY') and r.find('ANY') and r.find('DAY') and r.find('NIGHT') and not r.find('CHOSEN')
+    and not r.find('NO SKY CHECK') and r.find('DAYLIGHT') and r.find('AT LEAST 14M') and not r.find('DARK'),'Time of day tiles')
+assert(panel:icons()==true,'The icons drew')
+-- ANY has no second line: its label sits in the middle of its tile.
+do
+    local any,tile=nil,P.layout(1920,1080,m).times[1]
     for _,o in ipairs(r.live)do
-        if o.kind=='text' and o.value=='CHOSEN' then words[#words+1]=o;if o.color[1]>0 then assert(not shown,'one shown');shown=o end end
+        if o.kind=='text' and o.value=='ANY' and o.pos[1]>=tile.x and o.pos[1]<tile.x+tile.w then any=o end
     end
-    return #words,shown
+    assert(any and math.abs(any.pos[2]+any.size*0.35-(tile.y+tile.h/2))<1e-6,'ANY is centred')
 end
--- The row label beside a word: the text of that value on the word's line
--- (the header summary also reads the side).
-local function beside(word,value)
+local function bitmaps()
+    local found={}
+    for _,o in ipairs(r.live)do if o.kind=='bitmap' then found[#found+1]=o end end
+    return found
+end
+local icons_drawn=bitmaps()
+assert(#icons_drawn==2 and icons_drawn[1].material=='57fcf14ad069020b' and icons_drawn[1].size[1]==16 and icons_drawn[1].size[2]==16,'Two 16-unit icons')
+-- The sun and moon squares of the 4096x2048 atlas page, bottom edge first.
+local function near(a,b)return math.abs(a-b)<1e-9 end
+assert(near(icons_drawn[1].low[1],3582/4096) and near(icons_drawn[1].low[2],1896/2048) and near(icons_drawn[1].high[1],3630/4096) and near(icons_drawn[1].high[2],1848/2048),'The sun')
+assert(near(icons_drawn[2].low[1],3742/4096) and near(icons_drawn[2].high[1],3790/4096),'The moon')
+-- The chosen tile's icon is in ink, the panel's darkest colour.
+assert(icons_drawn[2].color[2]==11 and icons_drawn[1].color[2]~=11,'The chosen side inks its icon')
+local function inked()
+    local found
     for _,o in ipairs(r.live)do
-        if o.kind=='text' and o.value==value and math.abs(o.pos[2]-word.pos[2])<5 then return true end
+        if o.kind=='text' and (o.value=='ANY' or o.value=='DAY' or o.value=='NIGHT') and o.color[2]==11 then assert(not found,'one inked');found=o.value end
     end
+    return found
 end
-local count,shown=chosen()
-assert(count==3 and shown and beside(shown,'NIGHT'),'Night shows CHOSEN')
-m.items[3].mode=nil;m.items[2].mode='chosen';panel:show({},{},face,nowhere,m)
-count,shown=chosen()
-assert(count==3 and shown and beside(shown,'DAY'),'Day shows CHOSEN')
-m.items[2].mode=nil;m.items[1].mode='chosen';m.time_note=nil;panel:show({},{},face,nowhere,m)
-count,shown=chosen()
-assert(count==3 and shown and beside(shown,'ANY TIME'),'Any time shows CHOSEN')
+assert(inked()=='NIGHT','Night is chosen')
+-- A hover redraws the panel but leaves both icons as they were made.
+local made,gui_count=icons_drawn,r.created
+local tile=P.layout(1920,1080,m).times[2]
+panel:show({},{},face,{x=tile.x+2,y=tile.y+2},m);panel:show({},{},face,nowhere,m)
+icons_drawn=bitmaps()
+assert(#icons_drawn==2 and icons_drawn[1]==made[1] and icons_drawn[2]==made[2] and r.created==gui_count,'A hover leaves the icons alone')
+-- Another side recreates the GUI, and its icons with their new tints.
+m.time='day';panel:show({},{},face,nowhere,m)
+icons_drawn=bitmaps()
+assert(r.created==gui_count+1 and #icons_drawn==2 and icons_drawn[1].color[2]==11 and icons_drawn[2].color[2]~=11,'A new side makes new icons')
+-- A search dims the labels and leaves the icons.
+m.locked=true;panel:show({},{},face,nowhere,m);assert(r.created==gui_count+1 and bitmaps()[1]==icons_drawn[1],'A search keeps the icons')
+m.locked=nil;panel:show({},{},face,nowhere,m)
+assert(inked()=='DAY' and r.find('DARK') and not r.find('DAYLIGHT') and r.find('AT LEAST 14M'),'Day is chosen')
+-- While the sky loads the tile turns amber; with no city holding, red.
+m.time_sky='pending';panel:show({},{},face,nowhere,m);assert(r.find('WAITING'),'Waiting for the sky')
+m.time_sky='blocked';panel:show({},{},face,nowhere,m);assert(r.find('NO CITY HOLDS'),'No city holds')
+m.time,m.time_sky,m.time_hold='any',nil,nil;panel:show({},{},face,nowhere,m)
+assert(inked()=='ANY' and r.find('DAYLIGHT') and r.find('DARK') and not r.find('AT LEAST 14M'),'Any time')
+-- An icon that cannot be made drops the GUI; the next draw has no icons.
+local dropped=r.destroyed
+r.fail_bitmap=true;m.time='night';panel:show({},{},face,nowhere,m)
+assert(type(panel:icons())=='string' and r.destroyed==dropped+2,'A failed icon drops the GUI')
+r.fail_bitmap=nil;panel:show({},{},face,nowhere,m)
+assert(#bitmaps()==0 and r.find('NIGHT') and r.find('DAY'),'Labels without icons after a failure')
 old=r.destroyed;panel:clear();assert(r.destroyed==old+1)
 -- The enemy tooltip: left of the panel, level with the hovered row, above
 -- Know Your Constellation's box and inside the window at every size.
@@ -334,6 +386,12 @@ end
 -- Triangles and metrics are optional, and a failure turns them off.
 for _,features in ipairs({'none','failing','broken metrics'})do
     r=engine(features);panel=P.new(r.e)
+    if features=='failing' then
+        -- The failed icon drops the GUI; the next draw is labels only.
+        panel:show({},{},face,nowhere,model(nil,{},{time='day'}))
+        panel:show({},{},face,nowhere,model(nil,{},{time='day'}))
+        assert(type(panel:icons())=='string' and r.find('DAY') and r.find('NIGHT'),'No icons, the labels stay')
+    end
     for _,case in ipairs(cases)do panel:show({},{[1]=true},face,nowhere,case[2])end
     assert(r.created>1 and r.texts>0,features)
     assert(features=='broken metrics' or #r.triangles==0,features)

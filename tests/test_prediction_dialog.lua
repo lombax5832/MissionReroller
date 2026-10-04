@@ -51,7 +51,7 @@ local function shown(value)
     for _,o in ipairs(drawn)do if o.value==value then return true end end
     return false
 end
-up(dialog,'panel',{clear=function()real:clear()end,show=function(_,options,s,face,pointer,model)
+up(dialog,'panel',{clear=function()real:clear()end,icons=function()return real:icons()end,show=function(_,options,s,face,pointer,model)
     last_model=model;last_selected=s;real:show(options,s,face,pointer,model)
 end},true)
 up(dialog,'face',function()return {font='a',material='b',atlas='c'}end,true)
@@ -557,14 +557,18 @@ end,true)
 -- Compiled traces keep the replaced functions as constants.
 jit.flush()
 pointed=nil;toggle();assert(held)
-click('clear');click('section:time');frame()
-assert(ids()=='time:any time:day time:night' and last_model.items[1].mode=='chosen')
+click('clear');frame()
+assert(last_model.time=='any','Any time after clear')
 click('time:night');frame();frame()
-assert(last_model.summaries.time=='Night' and last_model.rules==1 and last_model.items[3].mode=='chosen')
-assert(last_model.can_start and last_model.status=='Ready to search' and shown('HOLDS 2H 30M / DAY 15H 42M'),last_model.status)
+assert(last_model.time=='night' and last_model.summaries.time=='Night' and last_model.rules==1)
+assert(last_model.can_start and last_model.status=='Ready to search' and shown('AT LEAST 2H 30M') and last_model.time_hold=='2h 30m',last_model.status)
 local sky_logged=false
 for _,line in ipairs(logs)do if line:find('DAYNIGHT_PLANET planet='..planet..' day_s=56553 buffer_s=9000',1,true)then sky_logged=true end end
 assert(loads==1 and sky_logged,'The sky is loaded once and logged')
+-- The fake engine draws no bitmaps: the icons are off, said once.
+local icon_lines={}
+for _,line in ipairs(logs)do if line:find('TIME_ICONS',1,true)then icon_lines[#icon_lines+1]=line end end
+assert(#icon_lines==1 and icon_lines[1]:find('TIME_ICONS off reason=',1,true),table.concat(icon_lines,' | '))
 toggle();pointed=1;toggle()
 wait=6000;now=now+2;frame()
 assert(last_model.scope=='city' and not last_model.can_start and last_model.status=='Night here in 1h 40m' and last_model.tone=='bad',last_model.status)

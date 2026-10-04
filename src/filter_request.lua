@@ -186,7 +186,7 @@ local function count(n)return n==0 and 'Any' or n..(n==1 and ' rule' or ' rules'
 -- in progress blocks the city), overdue (the gap is shown), run (the
 -- session's view), why (why there is no fresh data), report and tone (the
 -- last outcome), difficulty, scope, limit (seeds per search) and sky: the
--- viewed planet's day and night with a time of day chosen, {note} or
+-- viewed planet's day and night with a time of day chosen, {hold} or
 -- {pending=reason} or {blocked=reason} (src/day_night.lua).
 function R:model(catalogue,v)
     local options,selected,excluded,modifiers,section=self.options,self.selected,self.excluded,self.modifiers,self.section
@@ -272,10 +272,6 @@ function R:model(catalogue,v)
         for i,id in ipairs(groups)do
             tabs[i]={id=id,name=id==0 and 'Any mission' or options[id].name,selected=id==group}
         end
-    elseif display and section=='time' then
-        for _,side in ipairs({{'any','Any time'},{'day','Day'},{'night','Night'}})do
-            items[#items+1]={id='time:'..side[1],name=side[2],mode=(self.time or 'any')==side[1] and 'chosen' or nil}
-        end
     end
     -- The sky decides only when a side is chosen.
     local sky=self.time and (v.sky or {pending='Waiting for the sky of the viewed planet'}) or {}
@@ -309,7 +305,9 @@ function R:model(catalogue,v)
         summaries={missions=#names>0 and table.concat(names,', ') or 'Any',modifiers=count(modifier_rules),enemies=count(tag_rules),
             objectives=count(objective_rules),
             time=self.time=='day' and 'Day' or self.time=='night' and 'Night' or 'Any'},
-        time_note=v.sky and v.sky.note or nil,
+        time=self.time or 'any',time_hold=v.sky and v.sky.hold or nil,
+        -- A search shows its own status; the tile stays as it started.
+        time_sky=not busy and (sky.blocked and 'blocked' or sky.pending and 'pending') or nil,
         forced=table.concat(forced,', '),
         note=display and section=='enemies' and group==0 and 'Check a mission to set its own enemies' or nil,
         objective_note=display and section=='objectives' and group==0 and 'ANY MISSION OF THE OPERATION' or nil}

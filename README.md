@@ -84,11 +84,13 @@ the same GUID, so your manager treats it as the same mod.
      the map difficulty. The line under the buttons shows how many side and
      tactical objectives the mission has; a row that no longer fits, or that
      would leave nothing to draw, is dimmed, and pointing at it says why.
-   - **Time of day.** Any time, Day or Night. With Day or Night, every
-     mission of the match stays on that side for 2.5 hours after the reroll,
-     clear of dusk and dawn. The line under the heading shows how long it
-     holds and how long the planet's day is; on planets and moons with short
-     days it holds for less, and says so.
+   - **Time of day.** ANY, DAY or NIGHT, three tiles on the section's
+     heading, DAY and NIGHT with the galactic map's sun and moon. With Day
+     or Night, every mission of the match stays on that side for 2.5 hours
+     after the reroll, clear of dusk and dawn. The chosen tile says how long
+     it holds (AT LEAST 2H 30M); on planets and moons with short days it
+     holds for less. It turns amber while the planet's sky loads and red
+     when no city can hold that side.
 4. Press **REROLL OPERATIONS**. The mod searches campaign seeds inside the
    game, up to 1,000,000 per request, showing its four steps and the seeds
    searched. On a match it publishes the seed, verifies the regenerated

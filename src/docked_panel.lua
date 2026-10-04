@@ -5,10 +5,21 @@
 local P={}
 local W,H,EDGE,LEFT,INNER,FOOT=664,1008,40,25,610,820
 local SECTIONS={{id='missions',title='MISSIONS'},{id='modifiers',title='MODIFIERS'},{id='enemies',title='ENEMY FORCES'},
-    {id='objectives',title='SIDE OBJECTIVES'},{id='time',title='TIME OF DAY'}}
+    {id='objectives',title='SIDE OBJECTIVES'},{id='time',title='TIME OF DAY',fixed=true}}
+-- The time of day is no dropdown: three tiles of this width on its header,
+-- each a label, DAY and NIGHT over a line saying what that side means.
+local TIMES,TILE={{'any','ANY'},{'day','DAY','DAYLIGHT'},{'night','NIGHT','DARK'}},116
+-- The galactic map's day and night icons for the DAY and NIGHT tiles:
+-- 48-pixel squares on one 4096x2048 page of the ship UI atlas (texture
+-- atlas b4a883566f3f243a in packages/content/atlas_ship), drawn through the
+-- shared UI material gui_diffuse_map with the page on its diffuse_map slot.
+-- Game data of build 25480438, not memory; recheck after an update
+-- (docs/UPDATING.md). A failed draw leaves the labels alone.
+local ICONS={material='57fcf14ad069020b',slot='3aa8b87e',page='18edbed388a3d706',w=4096,h=2048,px=48,
+    day={3582,1848},night={3742,1848}}
 local FACTIONS={[2]={'TERMINIDS',255,179,0},[3]={'AUTOMATONS',255,90,79},[4]={'ILLUMINATE',197,139,255}}
 local STEPS={'1 CHECK PLANET','2 SEARCH SEEDS','3 REFRESH BOARD','4 OPEN OPERATION'}
-local WORDS={require='REQUIRED',accept='ACCEPTED',exclude='EXCLUDED',chosen='CHOSEN'}
+local WORDS={require='REQUIRED',accept='ACCEPTED',exclude='EXCLUDED'}
 -- The enemy tooltip: width, gap to the panel, window margin, padding, and
 -- Know Your Constellation's meter of ten 8-unit ticks 3 units apart.
 local TIP={w=440,gap=12,margin=16,pad=16,ticks=10,tick=8,space=3}
@@ -16,7 +27,7 @@ function P.layout(width,height,model)
     assert(width>=640 and height>=480,'Viewport too small')
     model=model or {}
     local s=math.min(width/1920,height/1080)
-    local b={s=s,w=W*s,h=H*s,targets={},headers={},rows={},groups={},pager={},labels={}}
+    local b={s=s,w=W*s,h=H*s,targets={},headers={},rows={},groups={},pager={},labels={},times={}}
     -- Hang off the real right edge, also on screens wider than 16:9.
     b.x,b.y=width-(EDGE+W)*s,(height-H*s)/2
     local function target(id,left,top,w,h,enabled)
@@ -30,9 +41,14 @@ function P.layout(width,height,model)
     local notes=lines>0 and 8+20*lines or 0
     local function usable(item)return not model.locked and item.enabled~=false end
     for i,section in ipairs(SECTIONS)do
-        b.headers[i]=target('section:'..section.id,LEFT,top,INNER,52,true)
+        if section.fixed then
+            b.headers[i]={id='section:'..section.id,x=b.x+LEFT*s,y=b.y+(H-top-52)*s,w=INNER*s,h=52*s}
+            for n,side in ipairs(TIMES)do
+                b.times[n]=target('time:'..side[1],LEFT+INNER-4-(#TIMES-n+1)*TILE-(#TIMES-n)*4,top+4,TILE,44,not model.locked)
+            end
+        else b.headers[i]=target('section:'..section.id,LEFT,top,INNER,52,true)end
         top=top+58
-        if model.section==section.id then
+        if model.section==section.id and not section.fixed then
             local first,below=top+36,(#SECTIONS-i)*58
             b.meta=top+19
             if section.id=='enemies' or section.id=='objectives' then
@@ -84,17 +100,21 @@ function P.layout(width,height,model)
     return b
 end
 function P.new(e)
-    local gui,world,ids,texts,shapes,cache,detail,identity
+    local gui,world,ids,texts,shapes,cache,detail,identity,bitmaps,icon_material
     local widths,fits,known={},{},0
     -- Triangles and text metrics are optional. After one failure they stay off:
     -- no chevrons, square corners and estimated widths.
     local no_shapes,no_metrics
+    -- The day and night icons: nil until one is drawn, then true, or why
+    -- they are off for good.
+    local icons
     local self={}
+    function self:icons()return icons end
     function self:clear()
         if gui then for _,w in ipairs(e.Application.worlds()) do
             if w==world then e.World.destroy_gui(world,gui);break end
         end end
-        gui,world,ids,texts,shapes,cache,detail,identity=nil,nil,nil,nil,nil,nil,nil,nil
+        gui,world,ids,texts,shapes,cache,detail,identity,bitmaps,icon_material=nil,nil,nil,nil,nil,nil,nil,nil,nil,nil
         widths,fits,known={},{},0
     end
     function self:show(options,selected,face,pointer,model)
@@ -104,17 +124,19 @@ function P.new(e)
         for _,w in ipairs(e.Application.worlds()) do if w~=e.Application.main_world() then target=w;break end end
         assert(target,'UI world unavailable')
         local items,groups,summaries=model.items or {},model.groups or {},model.summaries or {}
-        local key={width,height,face.font,face.material,face.atlas,tostring(model.section),model.page or 1,model.pages or 1}
+        -- The time of day icons are made once per GUI: the chosen side recreates it.
+        local key={width,height,face.font,face.material,face.atlas,tostring(model.section),model.page or 1,model.pages or 1,
+            tostring(model.time)}
         for _,group in ipairs(groups)do key[#key+1]='group:'..group.id..':'..group.name end
         for _,item in ipairs(items)do key[#key+1]=tostring(item.id)..':'..item.name..':'..tostring(item.role) end
         key=table.concat(key,'|')
         if target~=world or key~=identity then self:clear() end
         local font,mat=e.IdString64.from_hex(face.font),e.IdString64.from_hex(face.material)
         local function color(r,g,blue,a)return e.Color(a or 255,r,g,blue)end
+        local function slot(v)return e.IdString64.from_hex(v..'00000000')end
         if not gui then
-            world=target;gui=assert(e.World.create_screen_gui(world,'scale',1,1));ids={};texts={};shapes={};identity=key
+            world=target;gui=assert(e.World.create_screen_gui(world,'scale',1,1));ids={};texts={};shapes={};bitmaps={};identity=key
             local m=assert(e.Gui.material(gui,mat))
-            local function slot(v)return e.IdString64.from_hex(v..'00000000')end
             for _,v in ipairs({'8035c266','5e8455fe','309e7783','82b803a8'}) do e.Material.set_scalar(m,slot(v),0)end
             e.Material.set_vector2(m,slot('e13777ce'),e.Vector2(1,-1))
             e.Material.set_vector4(m,slot('7701209e'),color(0,0,0,0))
@@ -143,7 +165,8 @@ function P.new(e)
         end
         local bits={tostring(hover),tostring(hint),tip_key or '',model.status or '',model.tone or '',tostring(model.step),tostring(model.running),
             tostring(model.locked),tostring(model.can_start),tostring(model.can_clear),tostring(model.faction),model.scope or '',
-            tostring(model.difficulty),tostring(model.slots),tostring(model.checked),model.forced or '',model.note or '',model.time_note or ''}
+            tostring(model.difficulty),tostring(model.slots),tostring(model.checked),model.forced or '',model.note or '',
+            tostring(model.time),model.time_hold or '',tostring(model.time_sky)}
         for _,section in ipairs(SECTIONS)do bits[#bits+1]=summaries[section.id] or ''end
         for _,group in ipairs(groups)do bits[#bits+1]=tostring(group.selected)end
         for _,item in ipairs(items)do bits[#bits+1]=tostring(item.mode)..tostring(item.enabled)..tostring(selected[item.id]==true)end
@@ -166,6 +189,31 @@ function P.new(e)
                 return e.Gui.triangle(gui,e.Vector3(ax,0,ay),e.Vector3(bx,0,by),e.Vector3(cx,0,cy),z,c)
             end)
             if ok and made then shapes[id]=made else no_shapes=true end
+        end
+        -- A day or night icon, size units square with its lower left at x,y.
+        -- Made once per GUI and never changed: in game both update_bitmap_uv
+        -- and destroy_bitmap then bitmap_uv left a white square in the
+        -- screen's corner. An icon depends only on the chosen side, which is
+        -- part of the identity that recreates the GUI. One failure
+        -- turns icons off for good, and the GUI is dropped after this draw so
+        -- no half-made icon stays; returns whether it is drawn.
+        local broken
+        local function icon(id,side,x,y,size,c)
+            if icons~=nil and icons~=true then return false end
+            if bitmaps[id] then return true end
+            local ok,err=pcall(function()
+                if not icon_material then
+                    local name=e.IdString64.from_hex(ICONS.material)
+                    e.Material.set_texture(assert(e.Gui.material(gui,name)),slot(ICONS.slot),e.IdString64.from_hex(ICONS.page))
+                    icon_material=name
+                end
+                local at=ICONS[side]
+                local low,high=e.Vector2(at[1]/ICONS.w,(at[2]+ICONS.px)/ICONS.h),e.Vector2((at[1]+ICONS.px)/ICONS.w,at[2]/ICONS.h)
+                local pos,dim=e.Vector3(x,y,995),e.Vector2(size,size)
+                bitmaps[id]=assert(e.Gui.bitmap_uv(gui,icon_material,low,high,pos,dim,c))
+            end)
+            icons=ok or tostring(err);broken=broken or not ok
+            return ok
         end
         local function measure(value,size)
             local k=size..'|'..value
@@ -327,24 +375,46 @@ function P.new(e)
             text('title','REROLL OPERATIONS',left,at(66),40,white,nil,INNER*s)
             for i,t in ipairs(b.headers)do
                 local section=SECTIONS[i]
-                local open,over,cy=model.section==section.id,hover==t.id,t.y+t.h/2
+                local open,over,cy=model.section==section.id and not section.fixed,hover==t.id,t.y+t.h/2
                 rect('head'..i,t.x,t.y,t.w,t.h,992,open and (over and color(255,241,110) or yellow) or glass(over and 43 or 18))
                 rect('number'..i,t.x+16*s,cy-14*s,28*s,28*s,993,open and ink or glass(36))
                 text('number'..i,i,t.x+30*s,cy,16,open and yellow or white,'centre')
-                text('head'..i,section.title,t.x+58*s,cy,21,open and ink or white,nil,200*s)
-                text('summary'..i,summaries[section.id] or '',t.x+t.w-44*s,cy,15,open and ink or muted,'right',290*s)
-                local cx=t.x+t.w-23*s
-                if open then tri('chevron'..i,cx-7*s,cy-4.5*s,cx+7*s,cy-4.5*s,cx,cy+4.5*s,996,ink)
-                else tri('chevron'..i,cx-7*s,cy+4.5*s,cx,cy-4.5*s,cx+7*s,cy+4.5*s,996,muted)end
+                if section.fixed then
+                    text('head'..i,section.title,t.x+58*s,cy,21,white,nil,b.times[1].x-t.x-68*s)
+                    -- The chosen side's tile is yellow, amber while the sky
+                    -- loads and red when no city holds; its second line says
+                    -- how long the side holds.
+                    local why=model.time_sky=='blocked' and 'NO CITY HOLDS' or model.time_sky=='pending' and 'WAITING'
+                        or model.time_hold and 'AT LEAST '..model.time_hold
+                    for n,tile in ipairs(b.times)do
+                        local side,over=TIMES[n],hover==tile.id
+                        local on=(model.time or 'any')==side[1]
+                        local fill=on and (model.time_sky=='blocked' and red or model.time_sky=='pending' and amber or over and color(255,241,110) or yellow)
+                            or glass(over and 43 or 0)
+                        local label=on and ink or not tile.enabled and dim or white
+                        rect('tile'..n,tile.x,tile.y,tile.w,tile.h,993,on and fill or dark)
+                        if not on and over then rect('tile_hover'..n,tile.x,tile.y,tile.w,tile.h,994,fill)end
+                        -- A tile without a second line (ANY) centres its label.
+                        local top,lx=side[3] and tile.y+tile.h-15*s or tile.y+tile.h/2,tile.x+10*s
+                        if side[1]~='any' and icon('icon'..n,side[1],tile.x+9*s,top-8*s,16*s,on and ink or white)then lx=tile.x+30*s end
+                        text('tile'..n,side[2],lx,top,16,label,nil,tile.x+tile.w-10*s-lx)
+                        if side[3]then
+                            text('tile_line'..n,on and why or side[3],tile.x+10*s,tile.y+12*s,12,on and ink or not tile.enabled and dim or muted,nil,tile.w-20*s)
+                        end
+                    end
+                else
+                    text('head'..i,section.title,t.x+58*s,cy,21,open and ink or white,nil,200*s)
+                    text('summary'..i,summaries[section.id] or '',t.x+t.w-44*s,cy,15,open and ink or muted,'right',290*s)
+                    local cx=t.x+t.w-23*s
+                    if open then tri('chevron'..i,cx-7*s,cy-4.5*s,cx+7*s,cy-4.5*s,cx,cy+4.5*s,996,ink)
+                    else tri('chevron'..i,cx-7*s,cy+4.5*s,cx,cy-4.5*s,cx+7*s,cy+4.5*s,996,muted)end
+                end
             end
             local section=model.section
             local empty=#items==0 and (not faction and 'NO PLANET CHOSEN' or section=='enemies' and 'NO ENEMY FORCES CAN BE CHOSEN HERE'
                 or section=='objectives' and 'NO SIDE OBJECTIVES FOR THIS MISSION HERE'
                 or 'NO ELIGIBLE OPTIONS FOR THIS PLANET AND DIFFICULTY')
-            if section=='time' then
-                text('meta_right',model.time_note or '',right-2*s,at(b.meta),15,muted,'right',330*s)
-                text('meta',hint or 'STAYS ON THAT SIDE AFTER THE REROLL',left+2*s,at(b.meta),15,hint and white or muted,nil,270*s)
-            elseif section=='missions' or section=='modifiers' then
+            if section=='missions' or section=='modifiers' then
                 local limit=b.pager[1] and b.pager[1].x-10*s or right-2*s
                 for n,t in ipairs(b.pager)do
                     rect('pager'..n,t.x,t.y,t.w,t.h,992,glass(hover==t.id and 51 or 18))
@@ -393,16 +463,14 @@ function P.new(e)
                     else rect('mark'..n,t.x+13*s,cy-4*s,8*s,8*s,995,picked and yellow or none)end
                     text('label'..n,item.name,t.x+34*s,cy,15,picked and yellow or out and red or off and dim or white,nil,t.w-43*s)
                 else
-                    local on,out=item.mode=='require' or item.mode=='accept' or item.mode=='chosen',item.mode=='exclude'
+                    local on,out=item.mode=='require' or item.mode=='accept',item.mode=='exclude'
                     local rule=on and yellow or out and red
                     rect('row'..n,t.x,t.y,t.w,t.h,992,off and glass(5) or on and wash(YELLOW,over and 56 or 28)
                         or out and wash(RED,over and 52 or 26) or glass(over and 41 or 13))
                     rect('box'..n,t.x+14*s,cy-10*s,20*s,20*s,993,rule or outline)
                     rect('gap'..n,t.x+16*s,cy-8*s,16*s,16*s,994,on and yellow or dark)
                     rect('mark'..n,t.x+19*s,cy-1.5*s,10*s,3*s,995,out and red or none)
-                    -- A time of day row always holds its word, clear unless chosen.
-                    local word=section=='time' and text('word'..n,WORDS.chosen,t.x+t.w-14*s,cy,14,on and rule or color(0,0,0,0),'right',120*s)
-                        or text('word'..n,WORDS[item.mode] or 'ANY',t.x+t.w-14*s,cy,14,rule or muted,'right',120*s)
+                    local word=text('word'..n,WORDS[item.mode] or 'ANY',t.x+t.w-14*s,cy,14,rule or muted,'right',120*s)
                     text('label'..n,item.name,t.x+43*s,cy,19,off and dim or rule or white,nil,t.w-73*s-word)
                 end
             end
@@ -446,6 +514,8 @@ function P.new(e)
             end
         end
         cache,detail=state,counter
+        -- The next frame draws everything afresh, without icons.
+        if broken then self:clear()end
     end
     return self
 end
