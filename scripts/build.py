@@ -24,11 +24,9 @@ DEVELOPMENT_GUID = '97a929ab-793e-49e8-b186-f39daa8984e8'
 DEVELOPMENT_NAME = 'Operation Reroller Dev'
 DEFAULT_VERSION = '0.33.1'
 # What mod managers show for the mod and its one option.
-DESCRIPTION = ('Rerolls the operations on a planet\'s war table until one has the missions, modifiers, '
-               'enemy forces and time of day you choose. Press F7 on the galactic map to open the panel '
-               '(rebindable on the MODS tab with Mod Bindings Menu).')
-REQUIREMENT = ('Requires Bingus Shared Loader v16 or newer: enable both, keep the loader last in the '
-               'load order, then deploy.')
+DESCRIPTION = ("Rerolls a planet's operations until one matches your filters. "
+               'Press F7 on the galactic map.')
+REQUIREMENT = 'Requires Bingus Shared Loader v16+, loaded last.'
 ROOT = build_core.ROOT
 
 
