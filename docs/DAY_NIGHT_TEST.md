@@ -45,8 +45,8 @@ ship.
      `STOPPED:` line.
 2. **Day, whole planet.** View a planet with a long day, press F7 and
    click DAY on the TIME OF DAY header (a dropdown before
-   docs/TIME_OF_DAY_HEADER_TEST.md). The line under it reads
-   `STAYS ON THAT SIDE FOR AT LEAST 2H 30M` and `DAY <length>`. Check nothing else and press REROLL
+   docs/TIME_OF_DAY_HEADER_TEST.md). The DAY tile reads
+   `AT LEAST 2H 30M`. Check nothing else and press REROLL
    OPERATIONS.
    - Pass: `DAYNIGHT_PLANET planet=<n> day_s=… buffer_s=9000 band_min=30`,
      `DAYNIGHT_SEARCH side=day …`, `DAYNIGHT_MATCH side=day … holds=true
@@ -83,8 +83,8 @@ ship.
    30-minute band (`DayNight.BAND` in `src/day_night.lua`).
 7. **Short days.** View a planet or moon whose day is short (a moon's
    operations change side within the hour). Choose Night.
-   - Pass: the line reads `STAYS ON THAT SIDE FOR AT LEAST <less than
-     2h 30m>` and `SHORT DAYS / DAY <length>`, and a search that matches logs `buffer_s=` with the same
+   - Pass: the NIGHT tile reads `AT LEAST <less than 2h 30m>`, and a
+     search that matches logs `buffer_s=` with the same
      value.
 
 Send the mod's log after the run, with the SEST readings and what each

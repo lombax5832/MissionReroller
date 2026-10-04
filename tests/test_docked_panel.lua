@@ -33,10 +33,9 @@ local cases={
     {'no catalogue, missions',model('missions',{},{faction=false,locked=true,can_start=false,can_clear=false}),10},
     {'no catalogue, modifiers',model('modifiers',{},{faction=false,locked=true,can_start=false,can_clear=false}),10},
     {'no catalogue, enemies',model('enemies',{},{faction=false,locked=true,can_start=false,can_clear=false}),10},
-    {'day',model(nil,{},{time='day',time_note='DAY 15H 42M',time_hold='2h 30m'}),10},
+    {'day',model(nil,{},{time='day',time_hold='2h 30m'}),10},
     {'running night',running(model(nil,{},{time='night'})),10},
     {'paged missions at night',model('missions',list(24),{page=1,pages=2,time='night'}),36},
-    {'modifiers by day',model('modifiers',list(13,'modifier:'),{time='day'}),23},
     {'many side objectives by day',model('objectives',roles(list(28,'objective:0:'),12),{groups={{id=0,name='Any mission',selected=true}},time='day'}),39},
     {'side objectives',model('objectives',list(22,'objective:2:'),{groups=three,objective_slots='4 SIDE + 1 TACTICAL'}),35},
     {'many side objectives',model('objectives',roles(list(28,'objective:0:'),12),{groups={{id=0,name='Any mission',selected=true}},objective_note='ANY MISSION OF THE OPERATION'}),39},
@@ -108,22 +107,17 @@ local plain=gap(model('modifiers',list(3,'modifier:')))
 assert(gap(model('enemies',list(3,'constellation:2:'),{groups=three}))==plain,'No gap under enemies without notes')
 assert(gap(model('enemies',list(3,'constellation:2:'),{groups=three,forced='Predator Strain'}))==plain+28,'One note line')
 assert(gap(model('enemies',list(3,'constellation:0:'),{groups=three,forced='Predator Strain',note='Check a mission'}))==plain+48,'Two note lines')
--- The time of day is no dropdown: three sides on its header, and a note
--- line under it, above the footer, only while a side is chosen.
+-- The time of day is no dropdown: three tiles right of its title, inside
+-- its header, at every choice the same.
 b=P.layout(1920,1080,model(nil,{}))
-assert(#b.times==3 and b.times[1].id=='time:any' and b.times[3].id=='time:night' and not b.time_meta,'Three sides, no note at any time')
 local head=b.headers[5]
-for _,side in ipairs(b.times)do
-    assert(side.x>=head.x+300 and side.x+side.w<=head.x+head.w and side.y>head.y and side.y+side.h<head.y+head.h,'A side sits right of the title, inside the header')
+assert(#b.times==3 and b.times[1].id=='time:any' and b.times[3].id=='time:night','Three tiles')
+for n,tile in ipairs(b.times)do
+    assert(tile.x>=head.x+240 and tile.x+tile.w<=head.x+head.w and tile.y>head.y and tile.y+tile.h<head.y+head.h,'A tile sits right of the title, inside the header')
+    assert(n==1 or tile.x>=b.times[n-1].x+b.times[n-1].w,'Tiles side by side')
 end
-b=P.layout(1920,1080,model(nil,{},{time='night'}))
-assert(b.time_meta and b.time_meta+10<820,'The note line ends above the footer')
-local plain,noted=P.layout(1920,1080,model('modifiers',list(13,'modifier:'))),P.layout(1920,1080,model('modifiers',list(13,'modifier:'),{time='day'}))
-assert(noted.rows[1].h<plain.rows[1].h,'The note line takes its room from the open list')
--- Fourteen rows of side objectives need that room: the note line gives way.
-b=P.layout(1920,1080,model('objectives',roles(list(28,'objective:0:'),12),{groups=three,time='day'}))
-assert(not b.time_meta and #b.rows==28 and b.rows[1].y-b.rows[2].y>=20,'The note line gives way to a long list')
-assert(P.layout(1920,1080,model('objectives',roles(list(20,'objective:0:'),8),{groups=three,time='day'})).time_meta,'A shorter list keeps it')
+assert(P.layout(1920,1080,model('modifiers',list(13,'modifier:'),{time='night'})).rows[1].h==P.layout(1920,1080,model('modifiers',list(13,'modifier:'))).rows[1].h,
+    'A chosen side takes no room from the open list')
 assert(not pcall(P.layout,1920,1080,model('missions',list(25))),'A page holds 24 missions')
 assert(not pcall(P.layout,639,480,model('missions',list(2))),'Viewport too small')
 local disabled=model('missions',list(3));disabled.items[2].enabled=false
@@ -159,6 +153,12 @@ local function engine(features)
         end
     end
     if features=='full' then
+        r.e.Gui.bitmap_uv=function(_,material,low,high,pos,size,c)
+            local o={kind='bitmap',material=material,low=low,high=high,pos=pos,size=size,color=c};r.live[#r.live+1]=o;return o
+        end
+        r.e.Gui.update_bitmap_uv=function(_,o,material,low,high,pos,size,c)
+            r.updates=r.updates+1;o.material,o.low,o.high,o.pos,o.size,o.color=material,low,high,pos,size,c
+        end
         r.e.Gui.text_extents=function(_,value,_,size)
             r.measured=r.measured+1
             return {-0.02*size},{#value*size*0.5},{#value*size*0.5+0.03*size}
@@ -233,13 +233,26 @@ assert(r.find('PAGE 1/2   2 OF 3 SLOTS') and r.find('<') and r.find('>') and r.f
 m=model('missions',{},{faction=false,locked=true,can_start=false,can_clear=false,status='Open a planet on the war table first',tone='warn'})
 panel:show({},{},face,nowhere,m)
 assert(r.find('NO PLANET') and r.find('NO PLANET CHOSEN') and r.find('OPEN A PLANET ON THE WAR TABLE FIRST') and not r.find('DIFFICULTY 10'))
--- The time of day: three sides on its header, the chosen one in ink on
--- yellow, and the buffer note on the line under it.
-m=model(nil,{},{time='night',time_note='Short days / day 1h 4m',time_hold='14m'})
+-- The time of day: three tiles, the chosen one yellow with how long its
+-- side holds, the galactic map's icons on DAY and NIGHT.
+m=model(nil,{},{time='night',time_hold='14m'})
 panel:show({},{},face,nowhere,m)
 assert(r.find('TIME OF DAY') and r.find('ANY') and r.find('DAY') and r.find('NIGHT') and not r.find('CHOSEN')
-    and r.find('SHORT DAYS / DAY 1H 4M') and r.find('STAYS ON THAT SIDE FOR AT LEAST 14M'),'Time of day header')
--- The side drawn in ink, the panel's darkest colour: exactly the chosen one.
+    and r.find('NO SKY CHECK') and r.find('DAYLIGHT') and r.find('AT LEAST 14M') and not r.find('DARK'),'Time of day tiles')
+assert(panel:icons()==true,'The icons drew')
+local function bitmaps()
+    local found={}
+    for _,o in ipairs(r.live)do if o.kind=='bitmap' then found[#found+1]=o end end
+    return found
+end
+local icons_drawn=bitmaps()
+assert(#icons_drawn==2 and icons_drawn[1].material=='57fcf14ad069020b' and icons_drawn[1].size[1]==16 and icons_drawn[1].size[2]==16,'Two 16-unit icons')
+-- The sun and moon squares of the 4096x2048 atlas page, bottom edge first.
+local function near(a,b)return math.abs(a-b)<1e-9 end
+assert(near(icons_drawn[1].low[1],3582/4096) and near(icons_drawn[1].low[2],1896/2048) and near(icons_drawn[1].high[1],3630/4096) and near(icons_drawn[1].high[2],1848/2048),'The sun')
+assert(near(icons_drawn[2].low[1],3742/4096) and near(icons_drawn[2].high[1],3790/4096),'The moon')
+-- The chosen tile's icon is in ink, the panel's darkest colour.
+assert(icons_drawn[2].color[2]==11 and icons_drawn[1].color[2]~=11,'The chosen side inks its icon')
 local function inked()
     local found
     for _,o in ipairs(r.live)do
@@ -248,16 +261,13 @@ local function inked()
     return found
 end
 assert(inked()=='NIGHT','Night is chosen')
--- Until the sky is known the line cannot say how long.
-m.time_hold=nil;panel:show({},{},face,nowhere,m)
-assert(r.find('STAYS ON THAT SIDE AFTER THE REROLL') and not r.find('FOR AT LEAST'),'No hold before the sky')
-m.time='day';panel:show({},{},face,nowhere,m);assert(inked()=='DAY','Day is chosen')
-local cleared=r.destroyed
-m.time='any';m.time_note=nil;panel:show({},{},face,nowhere,m)
-assert(inked()=='ANY' and r.destroyed==cleared+1,'Any time drops the note line and redraws')
-local hidden=true
-for _,o in ipairs(r.live)do if o.kind=='text' and o.value:find('^STAYS ON THAT SIDE') then hidden=false end end
-assert(hidden,'No note line at any time')
+m.time='day';panel:show({},{},face,nowhere,m)
+assert(inked()=='DAY' and r.find('DARK') and not r.find('DAYLIGHT') and r.find('AT LEAST 14M'),'Day is chosen')
+-- While the sky loads the tile turns amber; with no city holding, red.
+m.time_sky='pending';panel:show({},{},face,nowhere,m);assert(r.find('WAITING'),'Waiting for the sky')
+m.time_sky='blocked';panel:show({},{},face,nowhere,m);assert(r.find('NO CITY HOLDS'),'No city holds')
+m.time,m.time_sky,m.time_hold='any',nil,nil;panel:show({},{},face,nowhere,m)
+assert(inked()=='ANY' and r.find('DAYLIGHT') and r.find('DARK') and not r.find('AT LEAST 14M'),'Any time')
 old=r.destroyed;panel:clear();assert(r.destroyed==old+1)
 -- The enemy tooltip: left of the panel, level with the hovered row, above
 -- Know Your Constellation's box and inside the window at every size.
@@ -349,6 +359,10 @@ end
 -- Triangles and metrics are optional, and a failure turns them off.
 for _,features in ipairs({'none','failing','broken metrics'})do
     r=engine(features);panel=P.new(r.e)
+    if features=='failing' then
+        panel:show({},{},face,nowhere,model(nil,{},{time='day'}))
+        assert(type(panel:icons())=='string' and r.find('DAY') and r.find('NIGHT'),'No icons, the labels stay')
+    end
     for _,case in ipairs(cases)do panel:show({},{[1]=true},face,nowhere,case[2])end
     assert(r.created>1 and r.texts>0,features)
     assert(features=='broken metrics' or #r.triangles==0,features)

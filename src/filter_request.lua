@@ -186,7 +186,7 @@ local function count(n)return n==0 and 'Any' or n..(n==1 and ' rule' or ' rules'
 -- in progress blocks the city), overdue (the gap is shown), run (the
 -- session's view), why (why there is no fresh data), report and tone (the
 -- last outcome), difficulty, scope, limit (seeds per search) and sky: the
--- viewed planet's day and night with a time of day chosen, {note} or
+-- viewed planet's day and night with a time of day chosen, {hold} or
 -- {pending=reason} or {blocked=reason} (src/day_night.lua).
 function R:model(catalogue,v)
     local options,selected,excluded,modifiers,section=self.options,self.selected,self.excluded,self.modifiers,self.section
@@ -305,7 +305,8 @@ function R:model(catalogue,v)
         summaries={missions=#names>0 and table.concat(names,', ') or 'Any',modifiers=count(modifier_rules),enemies=count(tag_rules),
             objectives=count(objective_rules),
             time=self.time=='day' and 'Day' or self.time=='night' and 'Night' or 'Any'},
-        time=self.time or 'any',time_note=v.sky and v.sky.note or nil,time_hold=v.sky and v.sky.hold or nil,
+        time=self.time or 'any',time_hold=v.sky and v.sky.hold or nil,
+        time_sky=sky.blocked and 'blocked' or sky.pending and 'pending' or nil,
         forced=table.concat(forced,', '),
         note=display and section=='enemies' and group==0 and 'Check a mission to set its own enemies' or nil,
         objective_note=display and section=='objectives' and group==0 and 'ANY MISSION OF THE OPERATION' or nil}

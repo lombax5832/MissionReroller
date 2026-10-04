@@ -109,6 +109,14 @@ step 3).
    startup line must show `hashes=verified` and the signature and anchor
    counts.
 
+7. **Check the time of day icons.** `ICONS` in `src/docked_panel.lua` is
+   game data, not memory: the ship UI atlas page and where the sun and moon
+   sit on it (docs/TIME_OF_DAY_HEADER_TEST.md says how they were found). An
+   update can move them without changing `game.dll`. Open the panel: the
+   log must show `TIME_ICONS drawn` and the DAY and NIGHT tiles a sun and a
+   moon. `TIME_ICONS off reason=…` or the wrong pictures mean the atlas
+   changed; find the icons again or leave them off.
+
 ## Adding an offset
 
 Add the entry to `src/offsets.lua` and read it through `O`
