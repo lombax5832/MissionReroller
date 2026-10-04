@@ -237,6 +237,19 @@ local function solving(e)
     local v=fresh({running=true});v.run={caption='Searching seeds',step=2,progress=3,estimate=e}
     return g:model(terminids,v).detail
 end
+-- Before a search, the request's estimate replaces the general line once
+-- worked out (src/solver_estimate.lua).
+for _,case in ipairs({
+    {nil,'Rerolls every unstarted operation of the campaign'},
+    {'pending','Working out how strict this is'},
+    {{match=1/23456,seconds=4.4},'1 in 23,000 seeds match - expect about 4 s'},
+    {{match=0,seconds=math.huge},'No seed gives this now'},
+    {{impossible=true},'No seed gives this now'},
+    {{unavailable='no required mission'},'Rerolls every unstarted operation of the campaign'},
+})do
+    local text=g:model(terminids,fresh({estimate=case[1]})).detail
+    assert(text==case[2],tostring(text))
+end
 for _,case in ipairs({
     {{match=0.6,seconds=0.4,elapsed=0.1},'Most seeds match - expect under a second'},
     {{match=1/23456,seconds=4.4,elapsed=1},'1 in 23,000 seeds match - expect about 4 s'},

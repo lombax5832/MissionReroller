@@ -288,7 +288,9 @@ advance_prediction_search=function(action,now)
     if job.source and job.source.estimate and job.solving~=false then
         local e,steps=job.source.estimate,job.source.steps()
         local work=elapsed-(job.source.setup or 0)
-        local rate=steps>=200000 and work>0.5 and steps/work or solver_rate
+        local rate=solver_rate
+        -- A measured rate also serves the dialog's next estimates.
+        if steps>=200000 and work>0.5 then rate=steps/work;solver_rate=rate end
         reroll_session.estimate({match=e.match,seconds=(job.source.setup or 0)+e.steps/rate+0.3,elapsed=elapsed})
     else reroll_session.estimate(nil)end
     local compiled=rawget(_G,'jit') and type(jit.status)=='function' and jit.status()
@@ -372,4 +374,4 @@ advance_prediction_search=function(action,now)
 end
 emit('Lua search checkpoint: ICBM + Geological Survey + Eradicate, difficulty 10; same shortcut cancels; alt-tab supported; '..config.search_outcome)
 return {on_prediction_ready=on_prediction_ready,advance_prediction_search=advance_prediction_search,
-    search_clock=search_clock,default_limit=default_limit}
+    search_clock=search_clock,default_limit=default_limit,solver_rate=function()return solver_rate end}

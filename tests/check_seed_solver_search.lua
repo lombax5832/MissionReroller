@@ -141,7 +141,31 @@ local Timed=setmetatable({source=function(spec)
     source_ms=(now-started)*1000
     return result,why
 end},{__index=SeedSolver})
+-- The dialog's estimate before the search (src/solver_estimate.lua, as the
+-- built dialog makes it): worked out a slice at a time on the capture, it
+-- must give the numbers the search then logs.
+local dialog=up(tick,'dialog_tick')
+local estimate_for=up(dialog,'estimate_for')
+local make_estimate=up(estimate_for,'make')
+local function before(r)
+    local E=make_estimate({read=read,clock=clock,slice=0.004,options=Search.options,
+        row_of=up(estimate_for,'objectives').row_of,identity=up(estimate_for,'identity'),rate=function()return 1 end,setup=0,
+        bind=function(rd,at)return Planet.bind(rd,u,pointer,game,at.board,at.planet)end})
+    local daynight
+    if r.time then
+        local checker=DayNight.checker(sky_planet(),r.time);checker.refresh(NOW)
+        daynight={key=r.time,accepts=checker.accepts}
+    end
+    local frames=0
+    repeat
+        E.update(snapshot,r.difficulty,r.scope,{required=r.required,constellations=r.constellations,objectives=r.objectives},daynight)
+        frames=frames+1
+    until E.view() or frames>100000
+    return E.view(),frames
+end
 local function search(name,r,solver,bounded)
+    local early,frames
+    if solver~=false then early,frames=before(r)end
     request=r;logs={};session.status=nil;source_ms,gap_ms,gap_at=0,0,nil;estimate=nil
     set(ready,'SeedSolver',solver~=false and Timed or nil)
     local started=clock()
@@ -165,6 +189,20 @@ local function search(name,r,solver,bounded)
     print(string.format('  %s: %s (paths and chain %.0f ms, longest stretch without a pause %.0f ms at %s); matched seed %u row %s after %d candidates in %.2f s, %s, longest slice %s ms',
         name,line,source_ms,gap_ms,tostring(gap_at),found,match:match('row=(%d+)'),attempts,took,match:match('mode=%w+') or 'mode=none',
         match:match('max_slice_ms=([%d.]+)')))
+    if early then
+        local logged=text:match('SEED_SOLVER paths=[^\n]*')
+        if early.match then
+            local steps=tonumber(logged:match('expected_steps=(%d+)'))
+            local share=tonumber(logged:match('match=1/(%d+)'))
+            assert(math.abs(early.seconds-0.3-steps)<=1 and math.abs(1/early.match-share)<=1,
+                name..': the estimate before the search differs from the search: '..logged)
+            print(string.format('    before the search: 1 in %.0f seeds match, %.0f walk steps, after %d slices of 4 ms',
+                1/early.match,early.seconds-0.3,frames))
+        else
+            assert(not logged,name..': no estimate before a solved search')
+            print('    before the search: '..(early.impossible and 'no seed gives this' or 'unavailable: '..tostring(early.unavailable)))
+        end
+    end
     if estimate then
         print(string.format('    dialog estimate: 1 in %.0f seeds match, usually %.2f s (took %.2f s, %s walk steps, %s expected)',
             1/estimate.match,estimate.seconds,took,match:match('walk_steps=(%d+)'),

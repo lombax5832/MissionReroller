@@ -56,6 +56,14 @@ return function(m)
         function planet.predictor(definitions)
             return assert(make_predictor,'Candidate predictor unavailable')(read,u,pointer,game,board,definitions,index,planet.inputs())
         end
+        -- The cached level definitions of this planet, found by its key as
+        -- the identity probe finds them (identity_probe.lua), or nil.
+        function planet.definitions()
+            local key=read(board+O.board.campaign+0x1c+index*O.campaign.definition_stride,4)
+            for _,offset in ipairs(O.board.definitions)do
+                if read(board+offset,4)==key then return board+offset end
+            end
+        end
         -- The seed solver's inputs for every normal operation ID of one
         -- difficulty, or with region for that city's operation only
         -- (seed_solver_inputs.lua; seeded adds the enemy-tag and

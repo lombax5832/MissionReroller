@@ -201,6 +201,7 @@ local function count(n)return n==0 and 'Any' or n..(n==1 and ' rule' or ' rules'
 -- How strict a solved search's filter is and how long it usually takes
 -- (prediction_search_runtime.lua: {match, seconds, elapsed}).
 local function estimate_text(e)
+    if e.match<=0 then return 'No seed gives this now' end
     local strict
     if e.match>=0.5 then strict='Most seeds match'
     else
@@ -215,6 +216,14 @@ local function estimate_text(e)
         or 'over the 3 min limit'
     local late=(e.elapsed or 0)>math.max(2,2*s) and s<=180 and ', running long' or ''
     return strict..' - '..usual..late
+end
+-- Under a request ready to search: its estimate (solver_estimate.lua) once
+-- worked out.
+local function before_search(e)
+    if e=='pending' then return 'Working out how strict this is' end
+    if type(e)=='table' and e.impossible then return 'No seed gives this now' end
+    if type(e)=='table' and e.match then return estimate_text(e)end
+    return 'Rerolls every unstarted operation of the campaign'
 end
 local CHANGED=' - Mission changed'
 -- The panel's model. catalogue is the last one built, used for compatibility
@@ -336,7 +345,7 @@ function R:model(catalogue,v)
         step=busy and (running and run.step or 1) or nil,
         detail=busy and (running and run.estimate and estimate_text(run.estimate)
             or grouped(running and run.progress or 0)..' of '..grouped(v.limit)..' seeds searched')
-            or ready and rules>0 and tone=='idle' and 'Rerolls every unstarted operation of the campaign' or '',
+            or ready and rules>0 and tone=='idle' and before_search(v.estimate) or '',
         faction=display and catalogue.faction or nil,scope=v.scope and 'city' or 'planet',
         section=section,items=items,page=self.page,pages=pages,groups=tabs,group=group,
         slots=display and catalogue.slots or nil,checked=checked,rules=rules,

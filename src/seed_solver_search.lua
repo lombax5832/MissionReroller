@@ -33,7 +33,8 @@ return function(Math,Paths,Chain,Time,Inputs)
     -- options (search_session.lua S.options), constellations and objectives
     -- ({groups}) or nil, scope, daynight (checker.accepts) or nil, row_of
     -- (side_objective_prediction.lua), random() returning a 32-bit start,
-    -- checkpoint() called often while the paths and walks are set up.
+    -- checkpoint() called often while the paths and walks are set up,
+    -- estimate_only to stop once the estimate is known (no next or steps).
     -- Returns {next(budget) -> seed | nil, done; steps(); paths; rows;
     -- valid, ids: how many operation IDs the Day / Night window passes, of
     -- how many; estimate={match, steps}} or nil, reason. estimate.match is
@@ -128,8 +129,6 @@ return function(Math,Paths,Chain,Time,Inputs)
             _,valid,ids=Time.valid_ids(operations,difficulty,spec.daynight) -- set, count, total
             accept=Time.accept(operations,difficulty,spec.daynight,spec.identity,input,'any')
         end
-        local chain=Chain.new({paths=paths,rows=rows,planet=input.planet,random=spec.random,accept=accept,
-            checkpoint=spec.checkpoint})
         -- Paths are disjoint outcomes of the draws, so their probabilities add.
         local share=accept and ids>0 and valid/ids or 1
         local q=0
@@ -139,6 +138,10 @@ return function(Math,Paths,Chain,Time,Inputs)
         -- longer than independent draws would: 0.8 to 3.4 times as long on
         -- the captures' filters (tests/test_seed_solver_chain.lua).
         local estimate={match=1-(1-q)^#rows,steps=2*Chain.expected_steps(paths,#rows,4096,share)}
+        -- The dialog's estimate before a search needs no walks.
+        if spec.estimate_only then return {paths=#paths,rows=#rows,valid=valid,ids=ids,estimate=estimate}end
+        local chain=Chain.new({paths=paths,rows=rows,planet=input.planet,random=spec.random,accept=accept,
+            checkpoint=spec.checkpoint})
         return {next=chain.next,steps=function()return chain.steps end,paths=#paths,rows=#rows,valid=valid,ids=ids,
             estimate=estimate}
     end

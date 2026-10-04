@@ -454,6 +454,22 @@ long` once a search has taken twice its estimate).
 - **Log.** `SEED_SOLVER ... match=1/<n> expected_steps=<n>`; the match line's
   `walk_steps=` is the actual count.
 - The scan has no estimate: it runs only for requests without paths.
+- **Before the search.** `src/solver_estimate.lua` works the same estimate
+  out while the player edits the filter: one coroutine, 4 ms a frame,
+  yielding inside its live reads and the path building. The planet's
+  solver inputs are kept per snapshot, difficulty, scope and whether rules
+  need the seeded inputs, so most edits rebuild only the paths; an edit
+  during the paths restarts them, one during the input read retargets it.
+  The line under a request ready to search reads `Working out how strict
+  this is`, then the estimate, or `No seed gives this now` when there is no
+  path and no other operation could match (a city, or no campaign event at
+  the difficulty; Day / Night with no valid ID). The time uses the walk rate
+  the last search measured. The dialog logs `ESTIMATE match=1/<n>
+  seconds=<s>` (or `none` / `unavailable`) when it changes.
+  `tests/check_seed_solver_search.lua` runs the built dialog's estimator on
+  both captures before each search: its share and steps equal the search's
+  `SEED_SOLVER` line in every solved case (night, day and the city
+  included), worked out in 6 to 79 slices of 4 ms from cold inputs.
 
 ## Next steps, if pursued
 

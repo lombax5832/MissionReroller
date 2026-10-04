@@ -141,6 +141,9 @@ def source(search=False,publish=False,dialog=False,version=None):
                 +'\nreturn '+chunk('seed_solver_search.lua')+'(Math,Paths,Chain,Time,'+chunk('seed_solver_inputs.lua')+')'
                 +'\nend)()')
         planet['solver_inputs']='SeedSolver.inputs'
+        if dialog:
+            # The dialog's estimate before a search (src/solver_estimate.lua).
+            derived('make_solver_estimate',chunk('solver_estimate.lua')+'(SeedSolver)')
     # One construction path for every planet's prediction (src/planet_model.lua).
     derived('Planet','(function(...)\n'+(root/'planet_model.lua').read_text()+'\nend)(O)({'
             +','.join(f'{key}={value}' for key,value in sorted(planet.items()))+'})')
@@ -181,7 +184,7 @@ def source(search=False,publish=False,dialog=False,version=None):
         parts.append('local search='+factory(root,'prediction_search_runtime.lua',inputs,'host,lib,search_hooks'))
         identity_hooks+=[f'{name}=search.{name}' for name in ('on_prediction_ready','advance_prediction_search','search_clock')]
     if dialog:
-        parts.append('local dialog='+factory(root,'prediction_dialog_runtime.lua',inputs,'host,lib,{default_limit=search.default_limit}'))
+        parts.append('local dialog='+factory(root,'prediction_dialog_runtime.lua',inputs,'host,lib,{default_limit=search.default_limit,search_clock=search.search_clock,solver_rate=search.solver_rate}'))
         # The search validates a request against the dialog's catalogue.
         parts.append('search_hooks.validate_search_request=dialog.validate_search_request')
         identity_hooks+=[f'{name}=dialog.{name}' for name in ('dialog_tick','dialog_release')]

@@ -17,7 +17,8 @@ Steps 1 to 3, 5 and 6 (then the fallback) passed on planet 268, difficulty
 `DAYNIGHT_VERIFIED holds=true` (`daynight_ids=5/35`). The city search on
 planet 100 region 2 logged `SEED_SOLVER_OFF reason=city scope` and matched
 by scan. `max_slice_ms` was 22 to 27 for the solver and the scan alike.
-Cities are solved since; step 6 now checks that, step 7 the fallback.
+Cities are solved since; step 7 now checks that, step 8 the fallback, and
+step 4 the estimate shown while editing.
 
 ## Setup
 
@@ -72,14 +73,23 @@ ran out (not expected). Send the whole log after the session.
      The `SEED_SOLVER` line's `match=1/<n> expected_steps=<n>` and the
      match line's `walk_steps=` give the numbers behind it. The text fits
      on one line inside the panel.
-4. **Frame rate.** During steps 2 and 3 the game keeps running smoothly
+4. **Estimate while editing.** Before pressing REROLL in step 3, watch the
+   line under the button as you check missions and rules.
+   - Pass: it reads `WORKING OUT HOW STRICT THIS IS` for a moment (well
+     under a second), then `1 IN <n> SEEDS MATCH - EXPECT ...`, and changes
+     with each edit; the map stays smooth while you edit. The log has an
+     `ESTIMATE match=1/<n> seconds=<s>` line per change, and the search's
+     `SEED_SOLVER ... match=1/<n>` agrees with the last one.
+   - Fail: the line stays on `WORKING OUT` for seconds, a hitch on each
+     click, or `ESTIMATE_BLOCKED`.
+5. **Frame rate.** During steps 2 and 3 the game keeps running smoothly
    (the map can be panned while it searches).
    - Pass: `max_slice_ms=` in each `LUA_SEARCH_MATCH` line about what a
      scanned search shows (22 to 27 on 2026-10-04) and `setup_ms=` on the `SEED_SOLVER` line under a few hundred ms (it
      is spread over frames).
    - Fail: a visible hitch when the search starts, or `max_slice_ms=`
      above 40.
-5. **Night.** Choose NIGHT on the TIME OF DAY header, check two mission
+6. **Night.** Choose NIGHT on the TIME OF DAY header, check two mission
    types and press REROLL OPERATIONS.
    - Pass: `DAYNIGHT_SEARCH side=night ...`, `SEED_SOLVER ...
      daynight_ids=<valid>/<total>` with valid above 0, `DAYNIGHT_MATCH ...
@@ -89,7 +99,7 @@ ran out (not expected). Send the whole log after the session.
    - Also fine: `daynight_ids=0/<total>`: no operation of that difficulty
      can be at night now; the search runs to its limit without a match.
      Try DAY, or another planet.
-6. **City.** With the cursor on a city or megafactory marker, open the
+7. **City.** With the cursor on a city or megafactory marker, open the
    dialog (it reads `This city or megafactory only`), check two of its
    missions, choose DAY or NIGHT and press REROLL OPERATIONS.
    - Pass: `SEED_SOLVER paths=<n> rows=1 ...`, `LUA_SEARCH_MATCH ...
@@ -101,7 +111,7 @@ ran out (not expected). Send the whole log after the session.
      to its limit without a match; try the other side.
    - Fail: `SEED_SOLVER_OFF` with any other reason, or a match outside the
      city.
-7. **Fallback.** Check no mission, exclude one in its section, and press
+8. **Fallback.** Check no mission, exclude one in its section, and press
    REROLL OPERATIONS.
    - Pass: `SEED_SOLVER_OFF reason=no required mission ...; scanning seeds
      in order`, then the usual match lines without `mode=`.
@@ -109,9 +119,9 @@ ran out (not expected). Send the whole log after the session.
 
 ## Log lines
 
-Pass: `SEED_SOLVER paths=` for steps 2, 3, 5 and 6; `mode=solver` on their
-`LUA_SEARCH_MATCH` lines; `SEED_SOLVER_OFF reason=no required mission` for
-step 7;
+Pass: `SEED_SOLVER paths=` for steps 2, 3, 6 and 7; `ESTIMATE` lines for
+step 4; `mode=solver` on the `LUA_SEARCH_MATCH` lines; `SEED_SOLVER_OFF
+reason=no required mission` for step 8;
 `PUBLICATION_STATE_VERIFIED` after every match.
 
 Fail, and send the log: `SEED_SOLVER_OFF reason=` with a Lua error or

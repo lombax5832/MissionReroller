@@ -182,6 +182,46 @@ do
         end
         return open_catalogue
     end
+    -- The estimate under a request ready to search, worked out a few
+    -- milliseconds a frame while the player edits it (src/solver_estimate.lua):
+    -- nil, 'pending' or the estimator's view.
+    local estimate_for
+    do
+        local make,identity,objectives=lib.make_solver_estimate,lib.predict_identity,lib.SideObjectives
+        local clock,rate=hooks.search_clock,hooks.solver_rate
+        local estimator,failure,window,logged
+        estimate_for=function(s,now,sky,compatible,fixed)
+            if not (make and s and catalogue and compatible and not fixed and not running and filters:rule_count()>0)then return end
+            if sky and (sky.blocked or sky.pending) or filters.time and not sky_planet then return end
+            local estimate
+            local ok,err=pcall(function()
+                estimator=estimator or make({read=read,clock=clock,slice=0.004,options=Search.options,
+                    row_of=objectives and objectives.row_of,identity=identity,rate=rate,
+                    bind=function(r,at)return Planet.bind(r,u,api.pointer,game,at.board,at.planet)end})
+                -- The Day / Night window moves with war time: a new checker every 30 s.
+                local daynight
+                if filters.time then
+                    local key=filters.time..':'..s.planet..':'..sky_planet.sky.seed..':'..math.floor(now/30)
+                    if not window or window.key~=key then
+                        local checker=DayNight.checker(sky_planet,filters.time)
+                        checker.refresh(DayNight.war_time(read,s.board))
+                        window={key=key,accepts=checker.accepts}
+                    end
+                    daynight=window
+                end
+                estimator.update(s,difficulty,scope,filters:to_request(scope,difficulty),daynight)
+                estimate=estimator.view() or 'pending'
+                if type(estimate)=='table' then
+                    local line=estimate.match and string.format('ESTIMATE match=1/%.0f seconds=%.1f',1/math.max(estimate.match,1e-12),
+                        estimate.seconds) or estimate.impossible and 'ESTIMATE none: no draw path'
+                        or 'ESTIMATE unavailable: '..tostring(estimate.unavailable)
+                    if line~=logged then logged=line;emit(line)end
+                end
+            end)
+            if not ok and tostring(err)~=failure then failure=tostring(err);emit('ESTIMATE_BLOCKED '..failure)end
+            return estimate
+        end
+    end
     local function sky_view(s,now)
         local key=s.fingerprint..':'..difficulty..':'..(scope and scope.region or 'planet')..':'..filters.time
         if sky_state and key==sky_key and now-sky_at<1 then return sky_state end
@@ -355,9 +395,10 @@ do
             -- A search keeps the last sky, so its tile keeps the hold.
             if s then sky=sky_view(s,now)elseif retained or running then sky=sky_state end
         end
+        local estimate=estimate_for(s,now,sky,compatible,fixed)
         local model=filters:model(catalogue,{shown=s or running or retained,fresh=s~=nil,retained=retained,running=running,
             queued=gap.queued~=nil,fixed=fixed,overdue=overdue,run=run,why=why,report=report,tone=report_tone,
-            difficulty=difficulty,scope=scope,limit=default_limit,sky=sky})
+            difficulty=difficulty,scope=scope,limit=default_limit,sky=sky,estimate=estimate})
         if model.section=='enemies' then
             local shown,forced=catalogue,model.forced
             model.tooltip=function(item)return forecaster:tip(item,shown,forced)end
