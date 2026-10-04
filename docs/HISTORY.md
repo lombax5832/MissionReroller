@@ -5,6 +5,14 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
+**Not yet validated in game: v0.33.1 Operation Reroller package name.**
+The release package is named Operation Reroller: `RELEASE_NAME` in
+`scripts/build.py` sets the mod manager name and `Operation-Reroller-v<ver>.zip`,
+and the release workflow uses it for the GitHub release title and the Nexus
+file name. The module, `RELEASE_GUID`, global and log are unchanged, so mod
+managers treat it as an update of the published mod. The in-game banner and
+the MODS tab heading still say Mission Reroller.
+
 **Not yet validated in game: v0.33.0 time of day tiles and mission
 changed headers.** The release carries three changes since v0.32.1. Time of
 day moved from a dropdown to ANY, DAY and NIGHT tiles on the section's

@@ -6,6 +6,12 @@ GitHub release notes and, as one plain-text line each, the Nexus Mods
 changelog. How each change was
 made and tested is in the development log, [docs/HISTORY.md](docs/HISTORY.md).
 
+## v0.33.1 Operation Reroller name
+
+- The mod is now called Operation Reroller in Arsenal and HD2MM, and its
+  download is Operation-Reroller-v0.33.1.zip. It replaces Mission Reroller
+  in your mod manager as an update; nothing in game changes.
+
 ## v0.33.0 Time of day tiles
 
 - Time of day is now picked with three tiles on its section heading, Any,
