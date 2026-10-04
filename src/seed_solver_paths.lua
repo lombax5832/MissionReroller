@@ -25,9 +25,13 @@ local M32=2^32
 local LAST=M32-1
 local EXTRA_OBJECTIVE=0x68bfbb59 -- side_objective_prediction.lua: the context's extra tactical entry
 
+-- Called before each partition, so a caller inside a coroutine can yield
+-- within its frame budget (R.new's planet.checkpoint); one search at a time.
+local checkpoint=function()end
 -- {{key, value, first, last}} for a choice monotone in the output: choice(o)
 -- returns a key (never nil) and a value.
 local function partition(choice)
+    checkpoint()
     local parts,seen,at={},{},0
     while at<=LAST do
         local key,value=choice(at)
@@ -343,6 +347,7 @@ return function(choose_category,make_choose_mission,make_finalize)
     local finalize=make_finalize(function()return stub_rng()end)
 
     function R.new(planet)
+        checkpoint=planet.checkpoint or function()end
         local P={}
         local O=objectives(planet.records,planet.row_of)
         P.objectives=O
@@ -668,6 +673,7 @@ return function(choose_category,make_choose_mission,make_finalize)
             local signature,sample
             for _,op in ipairs(operations)do
                 if op.difficulty==difficulty then
+                    checkpoint()
                     local plain={levels=#op.levels}
                     for k,v in pairs(op)do if not derived[k]then plain[k]=v end end
                     local text=canon(plain)

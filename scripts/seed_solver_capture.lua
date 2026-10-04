@@ -144,40 +144,6 @@ return function(here,root,capture)
         return result
     end
 
-    -- side_objective_inputs.lua keeps the environment draw's weights in the
-    -- closures environments() returns; read them back so the solver can
-    -- constrain the draw. A pick is `state1 mod total` against cumulative units.
-    local function upvalues(fn)
-        local values={}
-        for i=1,255 do
-            local name,value=debug.getupvalue(fn,i)
-            if not name then break end
-            values[name]=value
-        end
-        return values
-    end
-    local function weighted_tables(fn)
-        local v=upvalues(fn)
-        if not v.candidates then return {units={},indices={}}end -- no candidates: always 0
-        local indices={}
-        for k,c in ipairs(v.candidates)do indices[k]=c.index end
-        return {units=v.units,indices=indices}
-    end
-    local function environment_tables(pick)
-        local v=upvalues(pick)
-        if not v.inner then return false end -- planet without a definition: always 0
-        local inner={}
-        for j,fn in pairs(v.inner)do
-            local w=upvalues(fn)
-            local ids={}
-            for s=0,7 do ids[s+1]=w.rows[s].id end
-            local t=weighted_tables(w.pick);t.ids=ids;t.biome=j
-            inner[#inner+1]=t
-        end
-        table.sort(inner,function(a,b)return a.biome<b.biome end)
-        return {biome=weighted_tables(v.biome),inner=inner}
-    end
-
     -- Every normal (difficulty, operation ID) a seed can produce, and the
     -- solver's inputs for them; missions only when the capture lacks the
     -- mission-seed inputs.
@@ -205,9 +171,9 @@ return function(here,root,capture)
         local base_list={}
         for _,base in pairs(bases)do base_list[#base_list+1]=base end
         local ok,solver=pcall(function()
-            return Inputs(planet,base_list,inputs,level_graph,model.constellation_inputs(),model.objective_inputs(),environment_tables)
+            return Inputs(planet,base_list,inputs,level_graph,model.constellation_inputs(),model.objective_inputs())
         end)
-        if not ok then solver=Inputs(planet,base_list,inputs,level_graph,nil,nil,environment_tables)end
+        if not ok then solver=Inputs(planet,base_list,inputs,level_graph)end
         return solver,identity
     end
     return {H=H,O=O,planet=planet,case=case,predict=predict,board_of=board_of,solver_inputs=solver_inputs,read=read,definitions=definitions,

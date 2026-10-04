@@ -6,6 +6,7 @@ local M,emit,read,u,snapshot,config=host.M,host.emit,host.read,host.u,host.snaps
 local reroll_session,O,map=host.reroll_session,host.O,host.map
 local Search,Planet,make_search_job,DayNight=lib.Search,lib.Planet,lib.make_search_job,lib.DayNight
 local ExternalEdits,SideObjectives=lib.ExternalEdits,lib.SideObjectives
+local SeedSolver,predict_identity=lib.SeedSolver,lib.predict_identity
 local bind_constellations,on_existing_match,on_search_match=hooks.bind_constellations,hooks.on_existing_match,hooks.on_search_match
 local bind_objectives=hooks.bind_objectives
 local api,game,ffi,kernel
@@ -135,13 +136,37 @@ on_prediction_ready=function(s,definitions,now)
     local first=(s.seed+1)%4294967296
     local resumed=resume and resume.key==key and resume.planet==s.planet and resume.baseline==s.seed
     if resumed then first=resume.next end
-    current_search=make_search_job(read,baseline,function(frozen_read)
+    current_search=make_search_job(read,baseline,function(frozen_read,pause)
         local planet=Planet.bind(frozen_read,u,api.pointer,game,s.board,s.planet)
         local predict=planet.predictor(definitions)
         -- Tag inputs join the frozen read set and are revalidated with it.
         local annotate=constellations and bind_constellations(planet)
         local annotate_objectives=objectives and bind_objectives(planet)
         local function accepts(row)return Search.in_scope(row,scope)end
+        -- The seed solver proposes the candidates when it can seed this
+        -- request (src/seed_solver_search.lua); its inputs are read through
+        -- the frozen reads, so they are revalidated with the predictor's.
+        local source
+        if SeedSolver then
+            local started=search_clock()
+            local ok,result,why=pcall(function()
+                local solver,input=planet.solver(definitions,request.difficulty,constellations~=nil or objectives~=nil)
+                if not solver then return nil,input end
+                return SeedSolver.source({solver=solver,input=input,identity=predict_identity,difficulty=request.difficulty,
+                    required=required,options=Search.options,constellations=constellations,objectives=objectives,scope=scope,
+                    daynight=daynight and daynight.accepts,row_of=SideObjectives and SideObjectives.row_of,
+                    random=SeedSolver.starts(s.seed+math.floor(started*1000000)),checkpoint=pause})
+            end)
+            local ms=(search_clock()-started)*1000
+            if ok and result then
+                source=result
+                emit(string.format('SEED_SOLVER paths=%d rows=%d setup_ms=%.0f%s',result.paths,result.rows,ms,
+                    result.ids and string.format(' daynight_ids=%d/%d',result.valid,result.ids) or ''))
+            else
+                emit(string.format('SEED_SOLVER_OFF reason=%s setup_ms=%.0f; scanning seeds in order',
+                    tostring(ok and why or result),ms))
+            end
+        end
         local function evaluate(seed,difficulty)
             local operations=predict(seed,difficulty,accepts)
             if annotate then for _,op in ipairs(operations)do annotate(op)end end
@@ -149,7 +174,7 @@ on_prediction_ready=function(s,definitions,now)
             return operations
         end
         -- Search the requested difficulty; confirm a match on the whole board.
-        return function(seed)return evaluate(seed,request.difficulty)end,function(seed)return evaluate(seed)end
+        return function(seed)return evaluate(seed,request.difficulty)end,function(seed)return evaluate(seed)end,source
     end,{seed=first,limit=limit,difficulty=request.difficulty,required=required,excluded=excluded,modifiers=modifiers,
         constellations=constellations,objectives=objectives,scope=scope,daynight=daynight and daynight.accepts,
         quantum=4096,clock=search_clock,slice=0.016,batch=256,revalidate=1})
@@ -255,6 +280,9 @@ advance_prediction_search=function(action,now)
     local compiled=rawget(_G,'jit') and type(jit.status)=='function' and jit.status()
     local timing=string.format('elapsed_s=%.2f slices=%d work_ms=%.0f context_ms=%.0f jit=%s',elapsed,slices,
         (step_time-context_time)*1000,context_time*1000,tostring(compiled))
+    if job.source then
+        timing=timing..string.format(' mode=%s walk_steps=%.0f',job.solving and 'solver' or 'scan',job.source.steps())
+    end
     if job.status=='running' then
         if job.waiting then
             reroll_session.advance('search_waiting_backend')

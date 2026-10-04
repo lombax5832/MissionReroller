@@ -253,8 +253,8 @@ modifiers, city scope and special operations are not covered, as above.
 
 ## The LuaJIT port, 2026-10-04
 
-Four library modules in `src/`, not yet in the release build (nothing calls
-them in game):
+Four library modules in `src/`, which the search uses since the next
+section's change (**In the search**):
 
 | Module | Port of | What it does |
 | --- | --- | --- |
@@ -321,20 +321,78 @@ per seed offline against 0.003 s without it.
 
 Not ported: the sampling lattice (offline reference only), per-ID paths
 (`shared_paths` returns nil when operations of a difficulty differ in more
-than level tiles), mission families, operation-level rules, modifiers, city
-scope and special operations (whose levels are drawn, so Day / Night would
-need their level draws constrained too).
+than level tiles), operation-level rules (group 0), city scope and special
+operations (whose levels are drawn, so Day / Night would need their level
+draws constrained too).
+
+## In the search, 2026-10-04
+
+The release build's search takes its candidates from the chain when it can
+seed the request, and scans seeds in order otherwise. Nothing else about a
+search changed: each candidate is predicted from the frozen reads and judged
+by `search_session.find`, a match is confirmed on the complete board and
+revalidated, then published as before.
+
+- **Inputs.** `planet_model.lua` `planet.solver(definitions, difficulty,
+  seeded)` builds `seed_solver_inputs` for one difficulty through the
+  search's frozen reads, so its bytes are revalidated with the predictor's.
+  The operation bases are every ID below the definitions' pool count, with
+  the category and faction `operation_base_inputs.lua` gives its normal
+  rows (it now also returns its identity input). The environment weights
+  come from `side_objective_inputs.lua` `environment_tables`, which keeps
+  the tables the oracle used to read from closures with `debug.getupvalue`
+  (identical on the 1,530 operation and kind pairs of the planet 173
+  capture). Enemy-tag and side-objective inputs are read only when the
+  request has such rules.
+- **Request.** `src/seed_solver_search.lua` `source(spec)` maps each
+  required family to the kinds the difficulty's operations can draw (one
+  path set per choice of kind), gives each kind its family's enemy-force
+  and side-objective groups as rules, solves the difficulty's generated
+  rows (the operation in progress excluded) and, with Day / Night, adds the
+  ID check of `seed_solver_time.lua` with the live checker. Excluded
+  missions, modifier rules and the window's movement are left to the
+  predictor: they make candidates less selective, never wrong.
+- **Fallback.** `source` returns nil and a reason, and the search scans in
+  order, for a city scope, a request without a required mission (group-0
+  rules, exclusions or modifiers only), operations of the difficulty that
+  differ in more than their level tiles, special levels or modifier
+  missions, a pool smaller than the rows, a difficulty above the cap, a
+  draw path set that is empty (special operations may still match), or any
+  error while building. If the chain ever ran out, the search would carry
+  on in order (`seed_search.lua` `options.source`).
+- **Frame budget.** The chain gets 4,096 walk steps per search step (about
+  1 ms). Building the paths yields at the slice deadline: `partition`, the
+  signature comparison of `shared_paths` and each chain job call the job's
+  `pause`, and the job yields once after the set-up. Walk starts come from
+  `SeedSolver.starts`, the generator's output of successive values from the
+  baseline seed and the clock.
+- **Log.** `SEED_SOLVER paths=<n> rows=<r> setup_ms=<ms>` (with
+  `daynight_ids=<valid>/<total>` for Day / Night), or `SEED_SOLVER_OFF
+  reason=<why> setup_ms=<ms>; scanning seeds in order`; progress and result
+  lines end in `mode=solver|scan walk_steps=<n>` when the solver was built.
+- **Build.** `source()` in `scripts/build_identity_probe.py` joins the five
+  modules into one local, `SeedSolver`, in every search build.
+
+`python -B tests/test_seed_solver_search.py` builds the release entry and
+runs its own `on_prediction_ready` / `advance_prediction_search` on the
+planet 173 capture (`tests/check_seed_solver_search.lua`), with requests
+from the displayed board at difficulty 9 (the operation in progress is at
+10): one, two and three missions, an enemy force, a side objective, night
+and day on a synthetic sky, and three missions with an enemy force and up to
+two side objectives all matched through the solver, each on its first
+candidate, and an exclusion-only request fell back to scanning. Set-up took
+5 to 65 ms with at most 2 ms between pauses; the longest slice was 16 to
+17 ms, as scanning's. The frozen inputs grew from 1,883 to at most 2,225
+ranges and 60 KB (limits 20,000 and 2 MB). On this capture every request
+was also common enough for scanning to match within 23 candidates; the
+speed-up on rare requests is the measurement above. The in-game test is
+[SEED_SOLVER_TEST.md](SEED_SOLVER_TEST.md).
 
 ## Next steps, if pursued
 
-1. A compiled lattice enumerator (fpylll, or C) for the joined-row systems,
+1. The in-game test ([SEED_SOLVER_TEST.md](SEED_SOLVER_TEST.md)).
+2. A compiled lattice enumerator (fpylll, or C) for the joined-row systems,
    which would let every operation of a difficulty be solved in one lattice
    instead of sampled and checked.
-2. Operation-level rules, mission families and modifier filters, to cover
-   every filter the dialog offers.
-3. Wire the LuaJIT modules into the search: build `seed_solver_inputs`
-   from the frozen prediction context (the operation bases and the
-   environment weight tables, which the oracle reads from closures), map
-   the dialog's families and rules to kinds, run the chain as a search mode
-   within the 16 ms slice with brute force as the fallback, and check each
-   candidate with the existing board prediction and `search_session.find`.
+3. Operation-level rules (group 0) and per-ID paths, so fewer requests fall
+   back to scanning.

@@ -53,4 +53,5 @@ follow (chained 1-D inversions, 64-bit arithmetic in its loops);
 in LuaJIT with `seed_chain_bench.lua`; `tests/test_seed_chain.py` checks it.
 `seed_solver_capture.lua` replays a capture through `src` for the oracle and
 for `tests/test_seed_solver_lua.py`, which checks the LuaJIT port
-(`src/seed_solver_*.lua`) against the Python prototype.
+(`src/seed_solver_*.lua`) against the Python prototype. `tests/test_seed_solver_search.py` runs the
+release entry's own search with the solver on the viewed-planet capture.

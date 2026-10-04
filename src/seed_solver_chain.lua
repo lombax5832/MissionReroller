@@ -154,12 +154,15 @@ return function(Math)
 
     -- spec: {paths, rows={{row, seed_position}}, others={seed positions of
     -- rows an "every operation" filter checks}, planet, random=function()
-    -- returning a 32-bit start, accept=optional function(seed, row)}. Jobs
+    -- returning a 32-bit start, accept=optional function(seed, row),
+    -- checkpoint=optional function called before each job is set up}. Jobs
     -- take turns of `quantum` walk steps.
     function R.new(spec)
         local jobs={}
+        local checkpoint=spec.checkpoint or function()end
         for _,path in ipairs(spec.paths)do
             for _,row in ipairs(spec.rows)do
+                checkpoint()
                 jobs[#jobs+1]=job(path,row.row,row.seed_position,spec.planet,spec.random(),spec.others or {},spec.paths,
                     spec.accept)
             end

@@ -6,10 +6,9 @@
 --   bases: {{difficulty, id, category, faction, explicit_hash}}
 --   inputs: composition_inputs.lua's object; level_graph(op) -> levels, special
 --   tags, objectives: constellation_inputs.lua and side_objective_inputs.lua
---     objects, or nil for missions only
---   environment_tables(pick): the weight tables behind an environment pick
---     ({biome={units,indices}, inner={{biome,units,indices,ids}}} or false)
-return function(planet,bases,inputs,level_graph,tags,objectives,environment_tables)
+--     objects, or nil for missions only; objectives.environment_tables gives
+--     the weights behind each environment pick
+return function(planet,bases,inputs,level_graph,tags,objectives)
     local operations,records,used={},{},{}
     for _,base in ipairs(bases)do
         local op={row=0,id=base.id,seed=0,difficulty=base.difficulty,category=base.category,faction=base.faction,
@@ -61,7 +60,7 @@ return function(planet,bases,inputs,level_graph,tags,objectives,environment_tabl
                 local settings=false
                 if record.faction>=2 and record.faction<=4 then settings=tags.settings(record.faction,op.difficulty)end
                 local srecord=objectives.mission(kind)
-                local pick,reachable=objectives.environments(planet,kind,context.modifiers)
+                local _,reachable=objectives.environments(planet,kind,context.modifiers)
                 local environments={}
                 for value in pairs(reachable)do environments[#environments+1]=value end
                 table.sort(environments)
@@ -69,7 +68,7 @@ return function(planet,bases,inputs,level_graph,tags,objectives,environment_tabl
                 kind_of[kind]={kind=kind,faction=record.faction,horde=record.horde,exclusions=record.exclusions,
                     settings=settings,objectives={lo=srecord.lo,hi=srecord.hi,category=srecord.category,pool=srecord.pool,
                         scale=objectives.scale(srecord.category) or false},
-                    environments=environments,environment=environment_tables(pick)}
+                    environments=environments,environment=objectives.environment_tables(planet,kind,context.modifiers)}
             end
             entry.kind_of=kind_of
             entry.initial_tags=tags.campaign(planet,op.effect_id)

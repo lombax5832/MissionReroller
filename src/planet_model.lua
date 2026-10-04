@@ -56,6 +56,30 @@ return function(m)
         function planet.predictor(definitions)
             return assert(make_predictor,'Candidate predictor unavailable')(read,u,pointer,game,board,definitions,index,planet.inputs())
         end
+        -- The seed solver's inputs for every normal operation ID of one
+        -- difficulty (seed_solver_inputs.lua; seeded adds the enemy-tag and
+        -- side-objective inputs), and the identity input its rows are drawn
+        -- from (operation_identity.lua). Nil and a reason when the planet's
+        -- normal rows cannot be solved.
+        function planet.solver(definitions,difficulty,seeded)
+            local Inputs=assert(m.solver_inputs,'Seed solver unavailable')
+            local inputs=planet.inputs()
+            local rows,_,input=make_bases(read,u,pointer,game,board,definitions,index,inputs)(0)
+            if difficulty>input.max_difficulty then return nil,'difficulty above the cap'end
+            local category,faction
+            for _,op in ipairs(rows)do
+                if not op.special and not op.preserved then category,faction=op.category,op.faction;break end
+            end
+            if not category then return nil,'no normal operation'end
+            local bases={}
+            for id=0,input.pool_count-1 do
+                bases[#bases+1]={difficulty=difficulty,id=id,category=category,faction=faction,explicit_hash=0}
+            end
+            local levels=m.levels(read,u,game)
+            local solver=Inputs(index,bases,inputs,function(op)return levels(definitions,op)end,
+                seeded and planet.constellation_inputs() or nil,seeded and planet.objective_inputs() or nil)
+            return solver,input
+        end
         -- The filter options of one difficulty, optionally one city's rows.
         -- Mission and modifier options survive a tag or side-objective
         -- input failure, returned as the second and third values.
