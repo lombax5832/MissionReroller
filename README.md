@@ -25,7 +25,7 @@ Download the latest release from
 
 ## Install
 
-1. Import the loader ZIP and the `Mission-Reroller-v<version>.zip` into your mod
+1. Import the loader ZIP and the `Operation-Reroller-v<version>.zip` into your mod
    manager and enable both.
 2. Keep the loader last in the load order, then Purge and Deploy.
 3. Launch the game. `BingusSharedLoader.log` in
@@ -186,11 +186,11 @@ Requires Python 3, the `BingusSharedLoader` source next to this folder (or
 recorded seeds from a `KnowYourConstellation` checkout next to this folder.
 
 ```powershell
-python -B scripts/build.py          # releases/Mission-Reroller-Dev-v<version>.zip
+python -B scripts/build.py          # releases/Operation-Reroller-Dev-v<version>.zip
 python -B tests/test_package.py     # package checks, then the dialog tests
 ```
 
-A local build is named Mission Reroller Dev and has its own GUID, so your mod
+A local build is named Operation Reroller Dev and has its own GUID, so your mod
 manager lists it beside the published mod; enable only one of the two. Setting
 `RELEASE_TAG=v<version>` builds the published package instead.
 

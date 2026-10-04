@@ -119,7 +119,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create $env:GITHUB_REF_NAME "${{ steps.build.outputs.zip }}" `
-            --title "Mission Reroller $env:GITHUB_REF_NAME" --notes-file "$env:RUNNER_TEMP\notes.md" --verify-tag
+            --title "Operation Reroller $env:GITHUB_REF_NAME" --notes-file "$env:RUNNER_TEMP\notes.md" --verify-tag
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
       # Nexus Mods renders no Markdown: one line of plain text per change.
@@ -144,7 +144,7 @@ jobs:
           file_id: ${{ vars.NEXUSMODS_FILE_ID }}
           filename: ${{ steps.build.outputs.zip }}
           version: ${{ steps.build.outputs.version }}
-          display_name: Mission Reroller
+          display_name: Operation Reroller
           category: main
           archive_existing_version: true
           update_mod_version: true
