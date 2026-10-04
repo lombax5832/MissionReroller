@@ -186,6 +186,71 @@ later than they suggest.
   search already freezes, and a port to LuaJIT (exact 128-bit integer
   arithmetic for the LLL) or precomputation outside the game.
 
+## A solver LuaJIT can run: chained 1-D inversions, 2026-10-04
+
+The mod must run the solver itself, on players' machines, with nothing
+installed. The lattice above needs exact integers far wider than 64 bits;
+`scripts/seed_chain.py` needs only 64-bit arithmetic in its loops:
+
+1. **Root.** For one draw path, take its most selective draw on a mission
+   seed m and walk every m in [0, 2^32) whose draw lands in the interval,
+   from a random start. By the three-gap theorem consecutive solutions
+   differ by one of three fixed steps, so the walk (`Walk`) is one to three
+   wrapping uint64 adds per solution. The mission's other draws and
+   environment constraints are checked forward on m.
+2. **Operation seed.** The y whose position-th draw is m lie in a 2^32 by
+   2^32 square of the lattice {(y, A*y mod 2^64)}. A Gauss-reduced basis of
+   it is fixed per position, so `Inverter` rounds the square's centre to
+   basis coordinates in floating point and checks about 32 nearby points
+   exactly (wrapping int64). The whole path is then checked forward on y.
+3. **Campaign seed.** The same inversion gives the campaign seeds behind y
+   (about 2.3), and the board is predicted as the search predicts it.
+
+Only the setup (the first solution and the two steps of a walk, the reduced
+bases) needs the 128-bit Euclid, once per path. `tests/test_seed_chain.py`
+checks the walk and the inversion against the exact solver, and the chain's
+solutions against the lattice's on paths with mission-seed draws: equal
+sets.
+
+`python -B scripts/measure_seed_chain.py` counts the chain's work per filter,
+confirms every seed with the Lua predictor, counts brute-force matches over
+consecutive seeds, and times the units in LuaJIT
+(`scripts/seed_chain_bench.lua`, checked against the Python port's answers
+first): 3 ns per walk step, 9 ns per draw check, 190 ns per inversion with
+the JIT on, which the v0.16.1 log reports in game. With the JIT off these
+are about 25 to 50 times slower. The in-game estimate charges the units at
+these timings divided by the share of wall time the search works in game
+(389 ms in 1.73 s, v0.16.1), and each board at the measured 1,214 seeds/s.
+
+The search matches one operation, so these filters ask for one matching
+operation at difficulty 10. Every solved seed was confirmed by the Lua
+predictor (8/8 each).
+
+| Planet 173 filter | Per seed: roots, inversions, boards | Chain in game | Brute force in game |
+| --- | --- | --- | --- |
+| 59 with Bile Bugs | 3, 4, 1 | 0.001 s | 3 seeds, 0.003 s |
+| 59 with Bile Bugs, Upload and Lidar Station | 4,539, 11, 1 | 0.001 s | 28 seeds, 0.02 s |
+| 59 (Bile, Upload) with 84 (Hunter, Larva, no Spore) | 25,538, 5,741, 3 | 0.009 s | 4,336 seeds, 3.6 s |
+| the same and 65 with Armored Bugs | 403,829, 90,748, 2 | 0.11 s | 47,823 seeds, 39 s |
+| 65 with Spore Spewer | no draw path | at once | never |
+
+Planet 268 (missions only): ICBM and Survey 0.001 s against 12 seeds;
+ICBM, Survey and Eradicate 0.001 s against 28 seeds. Its "every operation"
+filter, outside the use case, takes 0.018 s against 42,659 seeds (35 s)
+once the other rows' seed draws are checked against the paths before a
+board is predicted.
+
+The rarer the filter, the larger the gain: about 400 times at one match in
+4,000 seeds and 350 times at one in 48,000, where brute force takes
+seconds to a minute. Almost all of the chain's time is inversions; the
+board predictions it still makes are one to three per seed.
+
+Limits that carry over to a port: only one draw narrows the search, so a
+filter whose rarity is spread over many wide draws gains less; a path with
+no mission-seed draw and no composition draw has no root and scans y (still
+with cheap checks); per-ID paths, operation-level rules, families,
+modifiers, city scope and special operations are not covered, as above.
+
 ## Next steps, if pursued
 
 1. A compiled lattice enumerator (fpylll, or C) for the joined-row systems,
@@ -193,5 +258,7 @@ later than they suggest.
    instead of sampled and checked.
 2. Operation-level rules, mission families and modifier filters, to cover
    every filter the dialog offers.
-3. Decide how it would run for players: precomputed outside the game from a
-   captured context, or ported to LuaJIT inside the 16 ms frame budget.
+3. Port the chain (`seed_chain.py`) to LuaJIT as library modules fed by
+   the inputs the search already freezes, as a search mode inside the 16 ms
+   frame budget with brute force as the fallback; the lattice stays an
+   offline reference.

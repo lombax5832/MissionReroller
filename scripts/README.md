@@ -47,4 +47,7 @@ running game and replays the Lua port on them
 research prototype that solves campaign seeds for a filter of missions,
 enemy forces and side objectives instead of searching them
 (`docs/SEED_SOLVER_RESEARCH.md`); `tests/test_seed_solver.py` checks the
-solver without a capture.
+solver without a capture. `seed_chain.py` is the variant a LuaJIT port would
+follow (chained 1-D inversions, 64-bit arithmetic in its loops);
+`measure_seed_chain.py` measures it against brute force and times its units
+in LuaJIT with `seed_chain_bench.lua`; `tests/test_seed_chain.py` checks it.
