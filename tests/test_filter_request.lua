@@ -214,12 +214,11 @@ m=g:model(terminids,fresh({scope={region=1}}));assert(m.scope=='city')
 
 -- The time of day: one side, a rule of its own, and the sky decides the start.
 local t=R.new(options,C,labels)
-t.section='time'
 m=t:model(terminids,fresh())
-assert(ids(m)=='time:any time:day time:night' and m.items[1].mode=='chosen' and not m.items[2].mode and m.summaries.time=='Any')
+assert(m.time=='any' and m.summaries.time=='Any','The time of day sits on its header, outside the sections')
 assert(t:toggle('time:night',terminids) and t.time=='night' and t:rule_count()==1)
 m=t:model(terminids,fresh())
-assert(m.items[3].mode=='chosen' and m.summaries.time=='Night' and m.rules==1)
+assert(m.time=='night' and m.summaries.time=='Night' and m.rules==1)
 assert(not m.can_start and m.status=='Waiting for the sky of the viewed planet' and m.tone=='warn','Without the sky nothing starts')
 m=t:model(terminids,fresh({sky={note='HOLDS 2H 30M / DAY 15H 42M'}}))
 assert(m.can_start and m.status=='Ready to search' and m.time_note=='HOLDS 2H 30M / DAY 15H 42M','A night-only request can start')

@@ -43,8 +43,9 @@ ship.
      `build=25480438 hashes=verified signatures=37 anchors=24 verified`.
    - Fail: `STOPPED: … offset signature sky_<name> mismatch` or any other
      `STOPPED:` line.
-2. **Day, whole planet.** View a planet with a long day, press F7, open
-   TIME OF DAY and click DAY. The section's line reads
+2. **Day, whole planet.** View a planet with a long day, press F7 and
+   click DAY on the TIME OF DAY header (a dropdown before
+   docs/TIME_OF_DAY_HEADER_TEST.md). The line under it reads
    `HOLDS 2H 30M / DAY <length>`. Check nothing else and press REROLL
    OPERATIONS.
    - Pass: `DAYNIGHT_PLANET planet=<n> day_s=… buffer_s=9000 band_min=30`,

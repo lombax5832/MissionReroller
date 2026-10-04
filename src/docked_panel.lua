@@ -5,18 +5,21 @@
 local P={}
 local W,H,EDGE,LEFT,INNER,FOOT=664,1008,40,25,610,820
 local SECTIONS={{id='missions',title='MISSIONS'},{id='modifiers',title='MODIFIERS'},{id='enemies',title='ENEMY FORCES'},
-    {id='objectives',title='SIDE OBJECTIVES'},{id='time',title='TIME OF DAY'}}
+    {id='objectives',title='SIDE OBJECTIVES'},{id='time',title='TIME OF DAY',fixed=true}}
+-- The time of day is no dropdown: its header holds one button per side,
+-- each this wide, and a note line under it while a side is chosen.
+local TIMES,SIDE,NOTE={{'any','ANY'},{'day','DAY'},{'night','NIGHT'}},96,24
 local FACTIONS={[2]={'TERMINIDS',255,179,0},[3]={'AUTOMATONS',255,90,79},[4]={'ILLUMINATE',197,139,255}}
 local STEPS={'1 CHECK PLANET','2 SEARCH SEEDS','3 REFRESH BOARD','4 OPEN OPERATION'}
-local WORDS={require='REQUIRED',accept='ACCEPTED',exclude='EXCLUDED',chosen='CHOSEN'}
+local WORDS={require='REQUIRED',accept='ACCEPTED',exclude='EXCLUDED'}
 -- The enemy tooltip: width, gap to the panel, window margin, padding, and
 -- Know Your Constellation's meter of ten 8-unit ticks 3 units apart.
 local TIP={w=440,gap=12,margin=16,pad=16,ticks=10,tick=8,space=3}
-function P.layout(width,height,model)
-    assert(width>=640 and height>=480,'Viewport too small')
-    model=model or {}
+-- The layout with a note line of this height under the time of day, or
+-- nil and why when the open section's rows do not fit.
+local function build(width,height,model,note)
     local s=math.min(width/1920,height/1080)
-    local b={s=s,w=W*s,h=H*s,targets={},headers={},rows={},groups={},pager={},labels={}}
+    local b={s=s,w=W*s,h=H*s,targets={},headers={},rows={},groups={},pager={},labels={},times={}}
     -- Hang off the real right edge, also on screens wider than 16:9.
     b.x,b.y=width-(EDGE+W)*s,(height-H*s)/2
     local function target(id,left,top,w,h,enabled)
@@ -30,10 +33,17 @@ function P.layout(width,height,model)
     local notes=lines>0 and 8+20*lines or 0
     local function usable(item)return not model.locked and item.enabled~=false end
     for i,section in ipairs(SECTIONS)do
-        b.headers[i]=target('section:'..section.id,LEFT,top,INNER,52,true)
+        if section.fixed then
+            b.headers[i]={id='section:'..section.id,x=b.x+LEFT*s,y=b.y+(H-top-52)*s,w=INNER*s,h=52*s}
+            for n,side in ipairs(TIMES)do
+                b.times[n]=target('time:'..side[1],LEFT+INNER-6-(#TIMES-n+1)*SIDE-(#TIMES-n)*4,top+6,SIDE,40,not model.locked)
+            end
+        else b.headers[i]=target('section:'..section.id,LEFT,top,INNER,52,true)end
         top=top+58
-        if model.section==section.id then
-            local first,below=top+36,(#SECTIONS-i)*58
+        if section.fixed then
+            if note>0 then b.time_meta=top+6;top=top+note end
+        elseif model.section==section.id then
+            local first,below=top+36,(#SECTIONS-i)*58+note
             b.meta=top+19
             if section.id=='enemies' or section.id=='objectives' then
                 local groups=model.groups or {}
@@ -58,7 +68,7 @@ function P.layout(width,height,model)
                 local rows=0
                 for _,block in ipairs(blocks)do block.rows=math.ceil(block.count/2);rows=rows+block.rows end
                 local pitch=math.min(35,math.floor((FOOT-14-below-first-label*#blocks)/rows))
-                assert(rows<=(section.id=='missions' and 12 or 16) and pitch>=20,'Too many rows in one section')
+                if rows>(section.id=='missions' and 12 or 16) or pitch<20 then return nil,'Too many rows in one section' end
                 local y=first
                 for _,block in ipairs(blocks)do
                     if block.role then b.labels[#b.labels+1]={text=block.role=='side' and 'SIDE' or 'TACTICAL',top=y};y=y+label end
@@ -83,6 +93,15 @@ function P.layout(width,height,model)
     b.close=target('close',LEFT+510,931,100,56,true)
     return b
 end
+function P.layout(width,height,model)
+    assert(width>=640 and height>=480,'Viewport too small')
+    model=model or {}
+    local chosen=model.time=='day' or model.time=='night'
+    local b,why=build(width,height,model,chosen and NOTE or 0)
+    -- The note line gives way when the open list needs its room.
+    if not b and chosen then b,why=build(width,height,model,0)end
+    return assert(b,why)
+end
 function P.new(e)
     local gui,world,ids,texts,shapes,cache,detail,identity
     local widths,fits,known={},{},0
@@ -104,7 +123,7 @@ function P.new(e)
         for _,w in ipairs(e.Application.worlds()) do if w~=e.Application.main_world() then target=w;break end end
         assert(target,'UI world unavailable')
         local items,groups,summaries=model.items or {},model.groups or {},model.summaries or {}
-        local key={width,height,face.font,face.material,face.atlas,tostring(model.section),model.page or 1,model.pages or 1}
+        local key={width,height,face.font,face.material,face.atlas,tostring(model.section),model.page or 1,model.pages or 1,tostring(b.time_meta)}
         for _,group in ipairs(groups)do key[#key+1]='group:'..group.id..':'..group.name end
         for _,item in ipairs(items)do key[#key+1]=tostring(item.id)..':'..item.name..':'..tostring(item.role) end
         key=table.concat(key,'|')
@@ -143,7 +162,7 @@ function P.new(e)
         end
         local bits={tostring(hover),tostring(hint),tip_key or '',model.status or '',model.tone or '',tostring(model.step),tostring(model.running),
             tostring(model.locked),tostring(model.can_start),tostring(model.can_clear),tostring(model.faction),model.scope or '',
-            tostring(model.difficulty),tostring(model.slots),tostring(model.checked),model.forced or '',model.note or '',model.time_note or ''}
+            tostring(model.difficulty),tostring(model.slots),tostring(model.checked),model.forced or '',model.note or '',model.time_note or '',tostring(model.time)}
         for _,section in ipairs(SECTIONS)do bits[#bits+1]=summaries[section.id] or ''end
         for _,group in ipairs(groups)do bits[#bits+1]=tostring(group.selected)end
         for _,item in ipairs(items)do bits[#bits+1]=tostring(item.mode)..tostring(item.enabled)..tostring(selected[item.id]==true)end
@@ -327,24 +346,39 @@ function P.new(e)
             text('title','REROLL OPERATIONS',left,at(66),40,white,nil,INNER*s)
             for i,t in ipairs(b.headers)do
                 local section=SECTIONS[i]
-                local open,over,cy=model.section==section.id,hover==t.id,t.y+t.h/2
-                rect('head'..i,t.x,t.y,t.w,t.h,992,open and (over and color(255,241,110) or yellow) or glass(over and 43 or 18))
-                rect('number'..i,t.x+16*s,cy-14*s,28*s,28*s,993,open and ink or glass(36))
-                text('number'..i,i,t.x+30*s,cy,16,open and yellow or white,'centre')
-                text('head'..i,section.title,t.x+58*s,cy,21,open and ink or white,nil,200*s)
-                text('summary'..i,summaries[section.id] or '',t.x+t.w-44*s,cy,15,open and ink or muted,'right',290*s)
-                local cx=t.x+t.w-23*s
-                if open then tri('chevron'..i,cx-7*s,cy-4.5*s,cx+7*s,cy-4.5*s,cx,cy+4.5*s,996,ink)
-                else tri('chevron'..i,cx-7*s,cy+4.5*s,cx,cy-4.5*s,cx+7*s,cy+4.5*s,996,muted)end
+                local open,over,cy=model.section==section.id and not section.fixed,hover==t.id,t.y+t.h/2
+                if section.fixed then
+                    rect('head'..i,t.x,t.y,t.w,t.h,992,glass(18))
+                    rect('number'..i,t.x+16*s,cy-14*s,28*s,28*s,993,glass(36))
+                    text('number'..i,i,t.x+30*s,cy,16,white,'centre')
+                    text('head'..i,section.title,t.x+58*s,cy,21,white,nil,200*s)
+                    local first,last=b.times[1],b.times[#b.times]
+                    rect('track',first.x-3*s,first.y-3*s,last.x+last.w-first.x+6*s,first.h+6*s,993,dark)
+                    for n,side in ipairs(b.times)do
+                        local on,over=(model.time or 'any')==TIMES[n][1],hover==side.id
+                        rect('side'..n,side.x,side.y,side.w,side.h,994,on and (over and color(255,241,110) or yellow) or glass(over and 43 or 0))
+                        text('side'..n,TIMES[n][2],side.x+side.w/2,side.y+side.h/2,16,on and ink or not side.enabled and dim or over and white or muted,'centre',side.w-12*s)
+                    end
+                    if b.time_meta then
+                        local used_width=text('time_note',model.time_note or '',right-2*s,at(b.time_meta),15,muted,'right',330*s)
+                        text('time_meta','STAYS ON THAT SIDE AFTER THE REROLL',left+2*s,at(b.time_meta),15,muted,nil,INNER*s-used_width-18*s)
+                    end
+                else
+                    rect('head'..i,t.x,t.y,t.w,t.h,992,open and (over and color(255,241,110) or yellow) or glass(over and 43 or 18))
+                    rect('number'..i,t.x+16*s,cy-14*s,28*s,28*s,993,open and ink or glass(36))
+                    text('number'..i,i,t.x+30*s,cy,16,open and yellow or white,'centre')
+                    text('head'..i,section.title,t.x+58*s,cy,21,open and ink or white,nil,200*s)
+                    text('summary'..i,summaries[section.id] or '',t.x+t.w-44*s,cy,15,open and ink or muted,'right',290*s)
+                    local cx=t.x+t.w-23*s
+                    if open then tri('chevron'..i,cx-7*s,cy-4.5*s,cx+7*s,cy-4.5*s,cx,cy+4.5*s,996,ink)
+                    else tri('chevron'..i,cx-7*s,cy+4.5*s,cx,cy-4.5*s,cx+7*s,cy+4.5*s,996,muted)end
+                end
             end
             local section=model.section
             local empty=#items==0 and (not faction and 'NO PLANET CHOSEN' or section=='enemies' and 'NO ENEMY FORCES CAN BE CHOSEN HERE'
                 or section=='objectives' and 'NO SIDE OBJECTIVES FOR THIS MISSION HERE'
                 or 'NO ELIGIBLE OPTIONS FOR THIS PLANET AND DIFFICULTY')
-            if section=='time' then
-                text('meta_right',model.time_note or '',right-2*s,at(b.meta),15,muted,'right',330*s)
-                text('meta',hint or 'STAYS ON THAT SIDE AFTER THE REROLL',left+2*s,at(b.meta),15,hint and white or muted,nil,270*s)
-            elseif section=='missions' or section=='modifiers' then
+            if section=='missions' or section=='modifiers' then
                 local limit=b.pager[1] and b.pager[1].x-10*s or right-2*s
                 for n,t in ipairs(b.pager)do
                     rect('pager'..n,t.x,t.y,t.w,t.h,992,glass(hover==t.id and 51 or 18))
@@ -393,16 +427,14 @@ function P.new(e)
                     else rect('mark'..n,t.x+13*s,cy-4*s,8*s,8*s,995,picked and yellow or none)end
                     text('label'..n,item.name,t.x+34*s,cy,15,picked and yellow or out and red or off and dim or white,nil,t.w-43*s)
                 else
-                    local on,out=item.mode=='require' or item.mode=='accept' or item.mode=='chosen',item.mode=='exclude'
+                    local on,out=item.mode=='require' or item.mode=='accept',item.mode=='exclude'
                     local rule=on and yellow or out and red
                     rect('row'..n,t.x,t.y,t.w,t.h,992,off and glass(5) or on and wash(YELLOW,over and 56 or 28)
                         or out and wash(RED,over and 52 or 26) or glass(over and 41 or 13))
                     rect('box'..n,t.x+14*s,cy-10*s,20*s,20*s,993,rule or outline)
                     rect('gap'..n,t.x+16*s,cy-8*s,16*s,16*s,994,on and yellow or dark)
                     rect('mark'..n,t.x+19*s,cy-1.5*s,10*s,3*s,995,out and red or none)
-                    -- A time of day row always holds its word, clear unless chosen.
-                    local word=section=='time' and text('word'..n,WORDS.chosen,t.x+t.w-14*s,cy,14,on and rule or color(0,0,0,0),'right',120*s)
-                        or text('word'..n,WORDS[item.mode] or 'ANY',t.x+t.w-14*s,cy,14,rule or muted,'right',120*s)
+                    local word=text('word'..n,WORDS[item.mode] or 'ANY',t.x+t.w-14*s,cy,14,rule or muted,'right',120*s)
                     text('label'..n,item.name,t.x+43*s,cy,19,off and dim or rule or white,nil,t.w-73*s-word)
                 end
             end

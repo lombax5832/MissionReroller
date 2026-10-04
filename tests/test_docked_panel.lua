@@ -19,26 +19,29 @@ end
 local three={{id=2,name='Geological Survey',selected=true},{id=5,name='Evacuate High-Value Assets'},{id=62,name='Neutralize Ground-to-Orbit Defenses'}}
 local function running(m)m.running=true;m.locked=true;m.ready=false;m.can_start=false;m.can_clear=false;m.step=2;return m end
 local cases={
-    {'missions',model('missions',list(22)),30},
-    {'paged missions',model('missions',list(24),{page=1,pages=2}),34},
-    {'one mission',model('missions',list(1)),9},
-    {'modifiers',model('modifiers',list(13,'modifier:')),21},
-    {'enemies',model('enemies',list(11,'constellation:2:'),{groups=three}),22},
-    {'any mission',model('enemies',list(6,'constellation:0:'),{groups={{id=0,name='Any mission',selected=true}},note='Check a mission',forced='Predator Strain'}),15},
-    {'no enemies',model('enemies',{},{groups=three}),11},
-    {'all closed',model(nil,{}),8},
-    {'running missions',running(model('missions',list(24),{page=2,pages=2})),34},
-    {'running modifiers',running(model('modifiers',list(13,'modifier:'))),21},
-    {'running enemies',running(model('enemies',list(11,'constellation:2:'),{groups=three})),22},
-    {'no catalogue, missions',model('missions',{},{faction=false,locked=true,can_start=false,can_clear=false}),8},
-    {'no catalogue, modifiers',model('modifiers',{},{faction=false,locked=true,can_start=false,can_clear=false}),8},
-    {'no catalogue, enemies',model('enemies',{},{faction=false,locked=true,can_start=false,can_clear=false}),8},
-    {'time',model('time',{{id='time:any',name='Any time'},{id='time:day',name='Day',mode='chosen'},{id='time:night',name='Night'}},{time_note='HOLDS 2H 30M / DAY 15H 42M'}),11},
-    {'running time',running(model('time',{{id='time:any',name='Any time'},{id='time:day',name='Day'},{id='time:night',name='Night',mode='chosen'}})),11},
-    {'side objectives',model('objectives',list(22,'objective:2:'),{groups=three,objective_slots='4 SIDE + 1 TACTICAL'}),33},
-    {'many side objectives',model('objectives',roles(list(28,'objective:0:'),12),{groups={{id=0,name='Any mission',selected=true}},objective_note='ANY MISSION OF THE OPERATION'}),37},
-    {'no side objectives',model('objectives',{},{groups=three}),11},
-    {'running side objectives',running(model('objectives',list(9,'objective:2:'),{groups=three})),20},
+    {'missions',model('missions',list(22)),32},
+    {'paged missions',model('missions',list(24),{page=1,pages=2}),36},
+    {'one mission',model('missions',list(1)),11},
+    {'modifiers',model('modifiers',list(13,'modifier:')),23},
+    {'enemies',model('enemies',list(11,'constellation:2:'),{groups=three}),24},
+    {'any mission',model('enemies',list(6,'constellation:0:'),{groups={{id=0,name='Any mission',selected=true}},note='Check a mission',forced='Predator Strain'}),17},
+    {'no enemies',model('enemies',{},{groups=three}),13},
+    {'all closed',model(nil,{}),10},
+    {'running missions',running(model('missions',list(24),{page=2,pages=2})),36},
+    {'running modifiers',running(model('modifiers',list(13,'modifier:'))),23},
+    {'running enemies',running(model('enemies',list(11,'constellation:2:'),{groups=three})),24},
+    {'no catalogue, missions',model('missions',{},{faction=false,locked=true,can_start=false,can_clear=false}),10},
+    {'no catalogue, modifiers',model('modifiers',{},{faction=false,locked=true,can_start=false,can_clear=false}),10},
+    {'no catalogue, enemies',model('enemies',{},{faction=false,locked=true,can_start=false,can_clear=false}),10},
+    {'day',model(nil,{},{time='day',time_note='HOLDS 2H 30M / DAY 15H 42M'}),10},
+    {'running night',running(model(nil,{},{time='night'})),10},
+    {'paged missions at night',model('missions',list(24),{page=1,pages=2,time='night'}),36},
+    {'modifiers by day',model('modifiers',list(13,'modifier:'),{time='day'}),23},
+    {'many side objectives by day',model('objectives',roles(list(28,'objective:0:'),12),{groups={{id=0,name='Any mission',selected=true}},time='day'}),39},
+    {'side objectives',model('objectives',list(22,'objective:2:'),{groups=three,objective_slots='4 SIDE + 1 TACTICAL'}),35},
+    {'many side objectives',model('objectives',roles(list(28,'objective:0:'),12),{groups={{id=0,name='Any mission',selected=true}},objective_note='ANY MISSION OF THE OPERATION'}),39},
+    {'no side objectives',model('objectives',{},{groups=three}),13},
+    {'running side objectives',running(model('objectives',list(9,'objective:2:'),{groups=three})),22},
 }
 for _,size in ipairs({{1280,720},{1920,1080},{3440,1440},{640,480}})do
     for _,case in ipairs(cases)do
@@ -105,6 +108,22 @@ local plain=gap(model('modifiers',list(3,'modifier:')))
 assert(gap(model('enemies',list(3,'constellation:2:'),{groups=three}))==plain,'No gap under enemies without notes')
 assert(gap(model('enemies',list(3,'constellation:2:'),{groups=three,forced='Predator Strain'}))==plain+28,'One note line')
 assert(gap(model('enemies',list(3,'constellation:0:'),{groups=three,forced='Predator Strain',note='Check a mission'}))==plain+48,'Two note lines')
+-- The time of day is no dropdown: three sides on its header, and a note
+-- line under it, above the footer, only while a side is chosen.
+b=P.layout(1920,1080,model(nil,{}))
+assert(#b.times==3 and b.times[1].id=='time:any' and b.times[3].id=='time:night' and not b.time_meta,'Three sides, no note at any time')
+local head=b.headers[5]
+for _,side in ipairs(b.times)do
+    assert(side.x>=head.x+300 and side.x+side.w<=head.x+head.w and side.y>head.y and side.y+side.h<head.y+head.h,'A side sits right of the title, inside the header')
+end
+b=P.layout(1920,1080,model(nil,{},{time='night'}))
+assert(b.time_meta and b.time_meta+10<820,'The note line ends above the footer')
+local plain,noted=P.layout(1920,1080,model('modifiers',list(13,'modifier:'))),P.layout(1920,1080,model('modifiers',list(13,'modifier:'),{time='day'}))
+assert(noted.rows[1].h<plain.rows[1].h,'The note line takes its room from the open list')
+-- Fourteen rows of side objectives need that room: the note line gives way.
+b=P.layout(1920,1080,model('objectives',roles(list(28,'objective:0:'),12),{groups=three,time='day'}))
+assert(not b.time_meta and #b.rows==28 and b.rows[1].y-b.rows[2].y>=20,'The note line gives way to a long list')
+assert(P.layout(1920,1080,model('objectives',roles(list(20,'objective:0:'),8),{groups=three,time='day'})).time_meta,'A shorter list keeps it')
 assert(not pcall(P.layout,1920,1080,model('missions',list(25))),'A page holds 24 missions')
 assert(not pcall(P.layout,639,480,model('missions',list(2))),'Viewport too small')
 local disabled=model('missions',list(3));disabled.items[2].enabled=false
@@ -161,7 +180,7 @@ local r=engine('full');local panel=P.new(r.e)
 local m=model('modifiers',list(3,'modifier:','Modifier'),{summaries={missions='Geological Survey, Launch ICBM',modifiers='Any',enemies='Any'}})
 panel:show({},{},face,nowhere,m);panel:show({},{},face,nowhere,m)
 assert(r.updates==0 and r.created==1,'An unchanged state draws nothing')
-assert(#r.triangles==7,'Five chevrons and two chamfers')
+assert(#r.triangles==6,'Four chevrons and two chamfers')
 local rects,texts,measured=r.rects,r.texts,r.measured
 assert(measured>0)
 for _,o in ipairs(r.live)do
@@ -174,7 +193,7 @@ assert(math.abs(level.pos[1]+#level.value*level.size*0.5+0.05*level.size-(1216+2
 m.items[2].mode='require';m.summaries.modifiers='1 rule'
 panel:show({},{},face,nowhere,m)
 assert(r.updates>0 and r.destroyed==0 and r.rects==rects and r.texts==texts,'A rule updates the existing rows')
-assert(r.find('REQUIRED') and r.find('1 RULE') and #r.triangles==7)
+assert(r.find('REQUIRED') and r.find('1 RULE') and #r.triangles==6)
 m.items[2].mode='exclude';r.updates=0;panel:show({},{},face,nowhere,m);assert(r.updates>0 and r.find('EXCLUDED') and not r.find('REQUIRED') and r.find('ANY'))
 -- Hover and the reason of a row that cannot be chosen.
 local spot=P.layout(1920,1080,m).rows[1]
@@ -200,7 +219,7 @@ local old=r.destroyed
 m=model('enemies',list(11,'constellation:2:','Constellation'),{groups=three,forced='Predator Strain, Gloom Strain'})
 panel:show({},{[2]=true},face,nowhere,m)
 assert(r.destroyed==old+1 and not r.find('MODIFIER 2') and r.find('CONSTELLATION 11'),'A section switch removes the old rows')
-assert(r.find('ALWAYS PRESENT:') and r.find('PREDATOR STRAIN, GLOOM STRAIN') and r.find('GEOLOGICAL SURVEY') and #r.triangles==14)
+assert(r.find('ALWAYS PRESENT:') and r.find('PREDATOR STRAIN, GLOOM STRAIN') and r.find('GEOLOGICAL SURVEY') and #r.triangles==12)
 local cut
 for _,o in ipairs(r.live)do if o.kind=='text' and o.value:find('^NEUTRALIZE') then cut=o end end
 assert(cut and cut.value:find('%.%.%.$') and #cut.value<#'NEUTRALIZE GROUND-TO-ORBIT DEFENSES','Long names are cut to their button')
@@ -214,35 +233,28 @@ assert(r.find('PAGE 1/2   2 OF 3 SLOTS') and r.find('<') and r.find('>') and r.f
 m=model('missions',{},{faction=false,locked=true,can_start=false,can_clear=false,status='Open a planet on the war table first',tone='warn'})
 panel:show({},{},face,nowhere,m)
 assert(r.find('NO PLANET') and r.find('NO PLANET CHOSEN') and r.find('OPEN A PLANET ON THE WAR TABLE FIRST') and not r.find('DIFFICULTY 10'))
--- The time of day: one chosen side, the buffer note, and the summary on its header.
-m=model('time',{{id='time:any',name='Any time'},{id='time:day',name='Day'},{id='time:night',name='Night',mode='chosen'}},
-    {time_note='Short days: holds 14m / day 1h 4m',summaries={missions='Any',modifiers='Any',enemies='Any',time='Night'}})
+-- The time of day: three sides on its header, the chosen one in ink on
+-- yellow, and the buffer note on the line under it.
+m=model(nil,{},{time='night',time_note='Short days: holds 14m / day 1h 4m'})
 panel:show({},{},face,nowhere,m)
-assert(r.find('TIME OF DAY') and r.find('CHOSEN') and r.find('SHORT DAYS: HOLDS 14M / DAY 1H 4M')
-    and r.find('STAYS ON THAT SIDE AFTER THE REROLL') and r.find('ANY TIME') and r.find('NIGHT'),'Time of day rows')
--- Every row holds CHOSEN; only the chosen one shows it, whichever row that is.
-local function chosen()
-    local words,shown={},nil
+assert(r.find('TIME OF DAY') and r.find('ANY') and r.find('DAY') and r.find('NIGHT') and not r.find('CHOSEN')
+    and r.find('SHORT DAYS: HOLDS 14M / DAY 1H 4M') and r.find('STAYS ON THAT SIDE AFTER THE REROLL'),'Time of day header')
+-- The side drawn in ink, the panel's darkest colour: exactly the chosen one.
+local function inked()
+    local found
     for _,o in ipairs(r.live)do
-        if o.kind=='text' and o.value=='CHOSEN' then words[#words+1]=o;if o.color[1]>0 then assert(not shown,'one shown');shown=o end end
+        if o.kind=='text' and (o.value=='ANY' or o.value=='DAY' or o.value=='NIGHT') and o.color[2]==11 then assert(not found,'one inked');found=o.value end
     end
-    return #words,shown
+    return found
 end
--- The row label beside a word: the text of that value on the word's line
--- (the header summary also reads the side).
-local function beside(word,value)
-    for _,o in ipairs(r.live)do
-        if o.kind=='text' and o.value==value and math.abs(o.pos[2]-word.pos[2])<5 then return true end
-    end
-end
-local count,shown=chosen()
-assert(count==3 and shown and beside(shown,'NIGHT'),'Night shows CHOSEN')
-m.items[3].mode=nil;m.items[2].mode='chosen';panel:show({},{},face,nowhere,m)
-count,shown=chosen()
-assert(count==3 and shown and beside(shown,'DAY'),'Day shows CHOSEN')
-m.items[2].mode=nil;m.items[1].mode='chosen';m.time_note=nil;panel:show({},{},face,nowhere,m)
-count,shown=chosen()
-assert(count==3 and shown and beside(shown,'ANY TIME'),'Any time shows CHOSEN')
+assert(inked()=='NIGHT','Night is chosen')
+m.time='day';panel:show({},{},face,nowhere,m);assert(inked()=='DAY','Day is chosen')
+local cleared=r.destroyed
+m.time='any';m.time_note=nil;panel:show({},{},face,nowhere,m)
+assert(inked()=='ANY' and r.destroyed==cleared+1,'Any time drops the note line and redraws')
+local hidden=true
+for _,o in ipairs(r.live)do if o.kind=='text' and o.value=='STAYS ON THAT SIDE AFTER THE REROLL' then hidden=false end end
+assert(hidden,'No note line at any time')
 old=r.destroyed;panel:clear();assert(r.destroyed==old+1)
 -- The enemy tooltip: left of the panel, level with the hovered row, above
 -- Know Your Constellation's box and inside the window at every size.

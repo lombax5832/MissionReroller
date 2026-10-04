@@ -557,10 +557,10 @@ end,true)
 -- Compiled traces keep the replaced functions as constants.
 jit.flush()
 pointed=nil;toggle();assert(held)
-click('clear');click('section:time');frame()
-assert(ids()=='time:any time:day time:night' and last_model.items[1].mode=='chosen')
+click('clear');frame()
+assert(last_model.time=='any','Any time after clear')
 click('time:night');frame();frame()
-assert(last_model.summaries.time=='Night' and last_model.rules==1 and last_model.items[3].mode=='chosen')
+assert(last_model.time=='night' and last_model.summaries.time=='Night' and last_model.rules==1)
 assert(last_model.can_start and last_model.status=='Ready to search' and shown('HOLDS 2H 30M / DAY 15H 42M'),last_model.status)
 local sky_logged=false
 for _,line in ipairs(logs)do if line:find('DAYNIGHT_PLANET planet='..planet..' day_s=56553 buffer_s=9000',1,true)then sky_logged=true end end
