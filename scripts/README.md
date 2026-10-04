@@ -51,3 +51,6 @@ solver without a capture. `seed_chain.py` is the variant a LuaJIT port would
 follow (chained 1-D inversions, 64-bit arithmetic in its loops);
 `measure_seed_chain.py` measures it against brute force and times its units
 in LuaJIT with `seed_chain_bench.lua`; `tests/test_seed_chain.py` checks it.
+`seed_solver_capture.lua` replays a capture through `src` for the oracle and
+for `tests/test_seed_solver_lua.py`, which checks the LuaJIT port
+(`src/seed_solver_*.lua`) against the Python prototype.

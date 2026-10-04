@@ -251,6 +251,52 @@ no mission-seed draw and no composition draw has no root and scans y (still
 with cheap checks); per-ID paths, operation-level rules, families,
 modifiers, city scope and special operations are not covered, as above.
 
+## The LuaJIT port, 2026-10-04
+
+Four library modules in `src/`, not yet in the release build (nothing calls
+them in game):
+
+| Module | Port of | What it does |
+| --- | --- | --- |
+| `seed_solver_math.lua` | `seed_chain.py` `Walk`, `Inverter`; `seed_solver.py` `_first` | Jump-ahead tables, the 128-bit Euclid (setup only), the three-gap walk, the per-position inversion |
+| `seed_solver_inputs.lua` | the oracle's `tables` export | Every normal operation's finalization, composition, enemy-tag, side-objective and environment inputs, from the input objects the predictor uses |
+| `seed_solver_paths.lua` | `Planet.paths`, `mission_paths` and the `Objectives` walk | Draw paths for a filter; template, category and kind draws run the real choice modules on a one-output stub generator |
+| `seed_solver_chain.lua` | `seed_chain.Chain` | Candidate campaign seeds, resumable in budgets of walk steps for the 16 ms frame slice |
+
+The chain returns candidates; the caller predicts each candidate's board and
+keeps the matches, so the mod's predictor remains the judge.
+`scripts/seed_solver_capture.lua` replays a capture through `src` for the
+oracle and the tests; the oracle's JSON export is unchanged (same inputs
+and the same Python paths for every filter on both captures).
+
+`python -B tests/test_seed_solver_lua.py` runs the LuaJIT tests on cases the
+Python prototype computes:
+
+- `test_seed_solver_math.lua`: 3,000 Euclid solves, 400 walks from random
+  starts and 3,000 inversions at positions 1 to 128 equal Python's.
+- `test_seed_solver_paths.lua` (needs the captures): the step-wise enemy-tag
+  and side-objective draws resolve 12,240 missions (every kind of every
+  operation on planet 173, 8 random seeds each) exactly as
+  `constellation_prediction.lua` and `side_objective_prediction.lua` do,
+  and the draw paths of every filter equal Python's (3,938 paths).
+- `test_seed_solver_chain.lua` (needs the captures): solves each filter in
+  LuaJIT and predicts every candidate with the mod's own predictor: 16 seeds
+  on planet 173 and 9 on planet 268, all matching; the two impossible
+  filters have no path.
+
+LuaJIT work per seed offline, predictor boards included: 2 ms for 59 with
+Bile Bugs, Upload and Lidar Station, 6 ms for 59 with 84, 7 ms for 59, 84
+and 65, about one to three boards each. In game, with the search working
+about a quarter of each frame, that is some tens of milliseconds where the
+brute-force search takes 4 s and 39 s for the last two. The planet 173
+"every operation" filter (outside the use case) took 38 s per seed, so the
+chain test leaves it out.
+
+Not ported: the sampling lattice (offline reference only), per-ID paths
+(`shared_paths` returns nil when operations of a difficulty differ in more
+than level tiles), mission families, operation-level rules, modifiers, city
+scope and special operations.
+
 ## Next steps, if pursued
 
 1. A compiled lattice enumerator (fpylll, or C) for the joined-row systems,
@@ -258,7 +304,9 @@ modifiers, city scope and special operations are not covered, as above.
    instead of sampled and checked.
 2. Operation-level rules, mission families and modifier filters, to cover
    every filter the dialog offers.
-3. Port the chain (`seed_chain.py`) to LuaJIT as library modules fed by
-   the inputs the search already freezes, as a search mode inside the 16 ms
-   frame budget with brute force as the fallback; the lattice stays an
-   offline reference.
+3. Wire the LuaJIT modules into the search: build `seed_solver_inputs`
+   from the frozen prediction context (the operation bases and the
+   environment weight tables, which the oracle reads from closures), map
+   the dialog's families and rules to kinds, run the chain as a search mode
+   within the 16 ms slice with brute force as the fallback, and check each
+   candidate with the existing board prediction and `search_session.find`.
