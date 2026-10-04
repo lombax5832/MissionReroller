@@ -292,10 +292,38 @@ brute-force search takes 4 s and 39 s for the last two. The planet 173
 "every operation" filter (outside the use case) took 38 s per seed, so the
 chain test leaves it out.
 
+### Time of day
+
+The Day / Night filter (`src/day_night.lua`) passes an operation when every
+mission's level node stays on the chosen side for the buffer. A normal
+operation's missions take its level nodes slot by slot
+(`mission_level_choice.lua` draws a level only for special graphs), and
+every slot below min(total, #levels) holds a mission whenever the template
+has candidates. So where an operation's missions stand is fixed by its ID,
+not by the seed, and `src/seed_solver_time.lua` decides before the search
+which IDs of the difficulty can pass: those whose nodes the checker's
+`accepts` passes in the current window. None valid means no seed can match
+now. The paths come from the valid operations, and the chain keeps a
+candidate only when the identity stage (`operation_identity.lua`) gives
+its row a valid ID; with "every operation", every generated row. The check
+goes through `accepts`, so it follows the window as the search refreshes it.
+
+`test_seed_solver_chain.lua` adds a night and a day variant of each filter
+on a synthetic sky (15.7-hour spin) with the captures' real node
+longitudes. On 200 random boards per filter the IDs found valid before the
+search agree with the checker on every predicted operation (400 on planet
+173, 600 on planet 268). At the test's war time 6 of 30 IDs were valid at
+night and 9 by day on planet 173, 9 and 8 of 34 on planet 268; every
+solved seed passed the predictor and the checker (73 seeds over both
+captures, with and without Day / Night). The cost grows with the share of
+IDs ruled out, as brute force's does: 59, 84 and 65 at night took 0.12 s
+per seed offline against 0.003 s without it.
+
 Not ported: the sampling lattice (offline reference only), per-ID paths
 (`shared_paths` returns nil when operations of a difficulty differ in more
 than level tiles), mission families, operation-level rules, modifiers, city
-scope and special operations.
+scope and special operations (whose levels are drawn, so Day / Night would
+need their level draws constrained too).
 
 ## Next steps, if pursued
 

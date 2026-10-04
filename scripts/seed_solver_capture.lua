@@ -210,6 +210,6 @@ return function(here,root,capture)
         if not ok then solver=Inputs(planet,base_list,inputs,level_graph,nil,nil,environment_tables)end
         return solver,identity
     end
-    return {H=H,O=O,planet=planet,case=case,predict=predict,board_of=board_of,solver_inputs=solver_inputs,
+    return {H=H,O=O,planet=planet,case=case,predict=predict,board_of=board_of,solver_inputs=solver_inputs,read=read,definitions=definitions,
         m=m,Constellations=Constellations,SideObjectives=SideObjectives,json=json,write=write,model=model}
 end

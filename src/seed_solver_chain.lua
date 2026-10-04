@@ -83,8 +83,10 @@ return function(Math)
         return 2*before+1,2*before+2
     end
 
-    -- One job: a path solved for one row, from a random start s0.
-    local function job(path,seed_position,planet,s0,others,paths)
+    -- One job: a path solved for one row, from a random start s0. accept,
+    -- when given, is a last check on a candidate (seed, row), such as the
+    -- Day / Night filter's ID check (src/seed_solver_time.lua).
+    local function job(path,row,seed_position,planet,s0,others,paths,accept)
         local root=R.plan(path)
         local pending,count={},0
         local invert_seed=Math.inverter(seed_position)
@@ -101,7 +103,10 @@ return function(Math)
         local function campaign(y)
             local n=invert_seed(y,xs)
             for i=1,n do
-                if others_ok(xs[i])then count=count+1;pending[count]=(xs[i]-planet)%M32 end
+                if others_ok(xs[i])then
+                    local seed=(xs[i]-planet)%M32
+                    if not accept or accept(seed,row)then count=count+1;pending[count]=seed end
+                end
             end
         end
         local walk,step,invert_m
@@ -149,12 +154,14 @@ return function(Math)
 
     -- spec: {paths, rows={{row, seed_position}}, others={seed positions of
     -- rows an "every operation" filter checks}, planet, random=function()
-    -- returning a 32-bit start}. Jobs take turns of `quantum` walk steps.
+    -- returning a 32-bit start, accept=optional function(seed, row)}. Jobs
+    -- take turns of `quantum` walk steps.
     function R.new(spec)
         local jobs={}
         for _,path in ipairs(spec.paths)do
             for _,row in ipairs(spec.rows)do
-                jobs[#jobs+1]=job(path,row.seed_position,spec.planet,spec.random(),spec.others or {},spec.paths)
+                jobs[#jobs+1]=job(path,row.row,row.seed_position,spec.planet,spec.random(),spec.others or {},spec.paths,
+                    spec.accept)
             end
         end
         local quantum=spec.quantum or 4096
