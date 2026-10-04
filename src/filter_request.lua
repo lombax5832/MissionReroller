@@ -9,9 +9,12 @@ R.__index=R
 local PAGE=24
 function R.new(options,catalogue,labels,stamped)
     -- One section is open at a time, or none. The enemy section shows the
-    -- rules of one group: a checked mission, or 0 for any mission.
+    -- rules of one group: a checked mission, or 0 for any mission. changed
+    -- marks the sections whose rules a mission click discarded, until their
+    -- header is clicked.
     return setmetatable({options=options,catalogue=catalogue,labels=labels,stamped=stamped or {},
-        selected={},excluded={},modifiers={},constellations={},objectives={},time=nil,section='missions',page=1,pages=1,group_choice=0},R)
+        selected={},excluded={},modifiers={},constellations={},objectives={},time=nil,section='missions',page=1,pages=1,group_choice=0,
+        changed={}},R)
 end
 -- A copy of a set, with id set to value when given.
 local function copy(set,id,value)
@@ -22,36 +25,46 @@ end
 -- Opening the dialog starts on the first page of the missions.
 function R:open()self.section,self.page='missions',1 end
 -- Constellation rules belong to a checked mission. Without checked
--- missions the single group 0 applies to the operation.
-function R:groups()
+-- missions the single group 0 applies to the operation. selected defaults
+-- to the request's own.
+function R:groups(selected)
     local list={}
-    for id=1,#self.options do if self.selected[id]then list[#list+1]=id end end
+    for id=1,#self.options do if (selected or self.selected)[id]then list[#list+1]=id end end
     if #list==0 then list[1]=0 end
     return list
 end
+-- Drops the groups no longer active. Returns the sections that lost rules,
+-- as {enemies=true,objectives=true}.
 local function prune_groups(self)
-    local active={};for _,group in ipairs(self:groups())do active[group]=true end
-    for group in pairs(self.constellations)do if not active[group]then self.constellations[group]=nil end end
-    for group in pairs(self.objectives)do if not active[group]then self.objectives[group]=nil end end
+    local active,lost={},{}
+    for _,group in ipairs(self:groups())do active[group]=true end
+    for group,tags in pairs(self.constellations)do
+        if not active[group]then
+            if next(tags)then lost.enemies=true end
+            self.constellations[group]=nil
+        end
+    end
+    for group,rows in pairs(self.objectives)do
+        if not active[group]then
+            if next(rows)then lost.objectives=true end
+            self.objectives[group]=nil
+        end
+    end
+    return lost
+end
+-- The rules of field in the active groups of selected, as a copy.
+local function group_rules(self,field,selected)
+    local groups={}
+    for _,group in ipairs(self:groups(selected))do
+        local copy={};for key,mode in pairs(self[field][group] or {})do copy[key]=mode end
+        if next(copy)then groups[group]=copy end
+    end
+    return {groups=groups}
 end
 -- The constellation rules of the active groups, as a copy.
-function R:tag_filter()
-    local groups={}
-    for _,group in ipairs(self:groups())do
-        local copy={};for tag,mode in pairs(self.constellations[group] or {})do copy[tag]=mode end
-        if next(copy)then groups[group]=copy end
-    end
-    return {groups=groups}
-end
+function R:tag_filter(selected)return group_rules(self,'constellations',selected)end
 -- The side-objective rules of the active groups, as a copy.
-function R:objective_filter()
-    local groups={}
-    for _,group in ipairs(self:groups())do
-        local copy={};for row,mode in pairs(self.objectives[group] or {})do copy[row]=mode end
-        if next(copy)then groups[group]=copy end
-    end
-    return {groups=groups}
-end
+function R:objective_filter(selected)return group_rules(self,'objectives',selected)end
 -- Checked and excluded missions, modifier rules, constellation rules and the
 -- time of day.
 function R:rule_count()
@@ -104,19 +117,23 @@ function R:navigate(action)
     if action=='previous_page' then self.page=math.max(1,self.page-1)
     elseif action=='next_page' then self.page=math.min(self.pages,self.page+1)
     elseif type(action)=='string' and action:match('^section:')then
-        -- Clicking the open section closes it.
+        -- Clicking the open section closes it. Clicking a header marked
+        -- changed shows the player saw it.
         local name=action:sub(9);self.section=self.section~=name and name or nil
+        self.changed[name]=nil
     elseif type(action)=='string' and action:match('^group:')then self.group_choice=tonumber(action:sub(7))
     else return false end
     return true
 end
 -- Whether a mission that is neither required nor excluded could be required,
--- with the reason when not; and whether it could be excluded.
-function R:can_require(id,catalogue,filter)
-    return self.catalogue.possible(catalogue,copy(self.selected,id,true),self.modifiers,filter,self.excluded,self:objective_filter())
+-- with the reason when not; and whether it could be excluded. Requiring the
+-- first mission discards the any-mission rules, so they do not count.
+function R:can_require(id,catalogue)
+    local selected=copy(self.selected,id,true)
+    return self.catalogue.possible(catalogue,selected,self.modifiers,self:tag_filter(selected),self.excluded,self:objective_filter(selected))
 end
-function R:can_exclude(id,catalogue,filter)
-    return self.catalogue.possible(catalogue,self.selected,self.modifiers,filter,copy(self.excluded,id,true),self:objective_filter())
+function R:can_exclude(id,catalogue)
+    return self.catalogue.possible(catalogue,self.selected,self.modifiers,self:tag_filter(),copy(self.excluded,id,true),self:objective_filter())
 end
 -- Whether a side-objective row of a group could take a mode, with the
 -- reason when not.
@@ -131,10 +148,12 @@ end
 -- 'time:any|day|night'. A mission cycles any, required, excluded. One the
 -- catalogue cannot require with the rest stays unchecked; a required one
 -- that cannot be excluded goes back to any. A side objective cycles the
--- same way, skipping a mode the catalogue rules out.
+-- same way, skipping a mode the catalogue rules out. A mission click that
+-- discards enemy or side-objective rules marks those sections changed.
 -- Returns whether the action was an edit.
 function R:toggle(action,catalogue)
-    if action=='clear' then self.selected={};self.excluded={};self.modifiers={};self.constellations={};self.objectives={};self.time=nil
+    if action=='clear' then
+        self.selected={};self.excluded={};self.modifiers={};self.constellations={};self.objectives={};self.time=nil;self.changed={}
     elseif action=='time:any' then self.time=nil
     elseif action=='time:day' or action=='time:night' then self.time=action:sub(6)
     elseif type(action)=='number' then
@@ -142,13 +161,13 @@ function R:toggle(action,catalogue)
         if excluded[action]then excluded[action]=nil
         else
             -- Unchecking drops the mission's constellations before the next step is tried.
-            local was=selected[action];selected[action]=nil;prune_groups(self)
-            local filter=self:tag_filter()
+            local was=selected[action];selected[action]=nil
+            for name in pairs(prune_groups(self))do self.changed[name]=true end
             if not was then
-                if self:can_require(action,catalogue,filter)then selected[action]=true end
-            elseif self:can_exclude(action,catalogue,filter)then excluded[action]=true end
+                if self:can_require(action,catalogue)then selected[action]=true end
+            elseif self:can_exclude(action,catalogue)then excluded[action]=true end
         end
-        prune_groups(self)
+        for name in pairs(prune_groups(self))do self.changed[name]=true end
     elseif type(action)=='string' and action:match('^modifier:')then
         local id=tonumber(action:sub(10))
         local modifiers=self.modifiers
@@ -179,6 +198,7 @@ local function grouped(n)
     return digits
 end
 local function count(n)return n==0 and 'Any' or n..(n==1 and ' rule' or ' rules')end
+local CHANGED=' - Mission changed'
 -- The panel's model. catalogue is the last one built, used for compatibility
 -- even while not shown. v: shown (the catalogue may be displayed), fresh
 -- (planet data of this frame), retained (the catalogue is kept through a
@@ -218,7 +238,7 @@ function R:model(catalogue,v)
             -- A mission that cannot join the required ones is disabled; it
             -- is excluded only by clicking it again once required.
             local enabled,reason=true,nil
-            if not mode then enabled,reason=self:can_require(option.id,catalogue,filter)end
+            if not mode then enabled,reason=self:can_require(option.id,catalogue)end
             items[#items+1]={id=option.id,name=option.name,mode=mode,enabled=enabled,reason=reason}
         end
     elseif display and section=='modifiers' then
@@ -302,8 +322,12 @@ function R:model(catalogue,v)
         section=section,items=items,page=self.page,pages=pages,groups=tabs,group=group,
         slots=display and catalogue.slots or nil,checked=checked,rules=rules,
         objective_slots=slots,
-        summaries={missions=#names>0 and table.concat(names,', ') or 'Any',modifiers=count(modifier_rules),enemies=count(tag_rules),
-            objectives=count(objective_rules),
+        -- A section whose rules a mission click discarded says so until its
+        -- header is clicked; the panel paints that header red.
+        changed={enemies=self.changed.enemies,objectives=self.changed.objectives},
+        summaries={missions=#names>0 and table.concat(names,', ') or 'Any',modifiers=count(modifier_rules),
+            enemies=count(tag_rules)..(self.changed.enemies and CHANGED or ''),
+            objectives=count(objective_rules)..(self.changed.objectives and CHANGED or ''),
             time=self.time=='day' and 'Day' or self.time=='night' and 'Night' or 'Any'},
         time=self.time or 'any',time_hold=v.sky and v.sky.hold or nil,
         -- A search shows its own status; the tile stays as it started.

@@ -376,7 +376,11 @@ function P.new(e)
             for i,t in ipairs(b.headers)do
                 local section=SECTIONS[i]
                 local open,over,cy=model.section==section.id and not section.fixed,hover==t.id,t.y+t.h/2
-                rect('head'..i,t.x,t.y,t.w,t.h,992,open and (over and color(255,241,110) or yellow) or glass(over and 43 or 18))
+                -- A header whose rules a mission click discarded takes the
+                -- excluded rows' red, brighter, until it is clicked.
+                local changed=not open and (model.changed or {})[section.id]
+                rect('head'..i,t.x,t.y,t.w,t.h,992,open and (over and color(255,241,110) or yellow)
+                    or changed and wash(RED,over and 96 or 64) or glass(over and 43 or 18))
                 rect('number'..i,t.x+16*s,cy-14*s,28*s,28*s,993,open and ink or glass(36))
                 text('number'..i,i,t.x+30*s,cy,16,open and yellow or white,'centre')
                 if section.fixed then
@@ -404,7 +408,7 @@ function P.new(e)
                     end
                 else
                     text('head'..i,section.title,t.x+58*s,cy,21,open and ink or white,nil,200*s)
-                    text('summary'..i,summaries[section.id] or '',t.x+t.w-44*s,cy,15,open and ink or muted,'right',290*s)
+                    text('summary'..i,summaries[section.id] or '',t.x+t.w-44*s,cy,15,open and ink or changed and white or muted,'right',290*s)
                     local cx=t.x+t.w-23*s
                     if open then tri('chevron'..i,cx-7*s,cy-4.5*s,cx+7*s,cy-4.5*s,cx,cy+4.5*s,996,ink)
                     else tri('chevron'..i,cx-7*s,cy+4.5*s,cx,cy-4.5*s,cx+7*s,cy+4.5*s,996,muted)end

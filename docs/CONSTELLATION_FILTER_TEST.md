@@ -66,7 +66,9 @@ each checked mission separately.
   constellation of this mission is excluded`, because a mission always draws
   one. It is allowed when the game can remove a drawn constellation again.
 - Unchecking a mission discards its rules. Checking the first mission
-  discards the rules of the operation page.
+  discards the rules of the operation page. The section's header then turns
+  red and reads `- MISSION CHANGED` until it is clicked
+  (docs/MISSION_CHANGED_TEST.md).
 
 Each page lists only what that mission can draw: the weighted base
 constellations of the mission's own faction at the map difficulty, without any
