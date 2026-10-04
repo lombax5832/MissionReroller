@@ -154,15 +154,12 @@ local function engine(features)
     end
     if features=='full' then
         r.e.Gui.bitmap_uv=function(_,material,low,high,pos,size,c)
+            if r.fail_bitmap then error('bitmap failed')end
             local o={kind='bitmap',material=material,low=low,high=high,pos=pos,size=size,color=c};r.live[#r.live+1]=o;return o
         end
-        -- In game update_bitmap_uv moved the icon to the corner as a white square.
+        -- In game both left a white square in the screen's corner.
         r.e.Gui.update_bitmap_uv=function()error('update_bitmap_uv is not used')end
-        r.e.Gui.destroy_bitmap=function(_,o)
-            if r.fail_destroy then error('destroy failed')end
-            for i,live in ipairs(r.live)do if live==o then table.remove(r.live,i);return end end
-            error('destroyed twice')
-        end
+        r.e.Gui.destroy_bitmap=function()error('destroy_bitmap is not used')end
         r.e.Gui.text_extents=function(_,value,_,size)
             r.measured=r.measured+1
             return {-0.02*size},{#value*size*0.5},{#value*size*0.5+0.03*size}
@@ -265,27 +262,31 @@ local function inked()
     return found
 end
 assert(inked()=='NIGHT','Night is chosen')
--- A redraw (here a hover) makes both icons afresh where they were.
-local before={icons_drawn[1].pos[1],icons_drawn[1].pos[2],icons_drawn[2].pos[1],icons_drawn[2].pos[2]}
+-- A hover redraws the panel but leaves both icons as they were made.
+local made,gui_count=icons_drawn,r.created
 local tile=P.layout(1920,1080,m).times[2]
-panel:show({},{},face,{x=tile.x+2,y=tile.y+2},m)
+panel:show({},{},face,{x=tile.x+2,y=tile.y+2},m);panel:show({},{},face,nowhere,m)
 icons_drawn=bitmaps()
-assert(#icons_drawn==2 and icons_drawn[1].pos[1]==before[1] and icons_drawn[1].pos[2]==before[2]
-    and icons_drawn[2].pos[1]==before[3] and icons_drawn[2].pos[2]==before[4] and near(icons_drawn[1].low[1],3582/4096),'Icons stay put on a redraw')
+assert(#icons_drawn==2 and icons_drawn[1]==made[1] and icons_drawn[2]==made[2] and r.created==gui_count,'A hover leaves the icons alone')
+-- Another side recreates the GUI, and its icons with their new tints.
 m.time='day';panel:show({},{},face,nowhere,m)
+icons_drawn=bitmaps()
+assert(r.created==gui_count+1 and #icons_drawn==2 and icons_drawn[1].color[2]==11 and icons_drawn[2].color[2]~=11,'A new side makes new icons')
+-- A search dims the labels and leaves the icons.
+m.locked=true;panel:show({},{},face,nowhere,m);assert(r.created==gui_count+1 and bitmaps()[1]==icons_drawn[1],'A search keeps the icons')
+m.locked=nil;panel:show({},{},face,nowhere,m)
 assert(inked()=='DAY' and r.find('DARK') and not r.find('DAYLIGHT') and r.find('AT LEAST 14M'),'Day is chosen')
 -- While the sky loads the tile turns amber; with no city holding, red.
 m.time_sky='pending';panel:show({},{},face,nowhere,m);assert(r.find('WAITING'),'Waiting for the sky')
 m.time_sky='blocked';panel:show({},{},face,nowhere,m);assert(r.find('NO CITY HOLDS'),'No city holds')
 m.time,m.time_sky,m.time_hold='any',nil,nil;panel:show({},{},face,nowhere,m)
 assert(inked()=='ANY' and r.find('DAYLIGHT') and r.find('DARK') and not r.find('AT LEAST 14M'),'Any time')
--- An icon that cannot be remade drops the GUI; the next draw has no icons.
+-- An icon that cannot be made drops the GUI; the next draw has no icons.
 local dropped=r.destroyed
-r.fail_destroy=true;m.time='night';panel:show({},{},face,nowhere,m)
-assert(type(panel:icons())=='string' and r.destroyed==dropped+1,'A failed icon drops the GUI')
-panel:show({},{},face,nowhere,m)
+r.fail_bitmap=true;m.time='night';panel:show({},{},face,nowhere,m)
+assert(type(panel:icons())=='string' and r.destroyed==dropped+2,'A failed icon drops the GUI')
+r.fail_bitmap=nil;panel:show({},{},face,nowhere,m)
 assert(#bitmaps()==0 and r.find('NIGHT') and r.find('DAY'),'Labels without icons after a failure')
-r.fail_destroy=nil
 old=r.destroyed;panel:clear();assert(r.destroyed==old+1)
 -- The enemy tooltip: left of the panel, level with the hovered row, above
 -- Know Your Constellation's box and inside the window at every size.

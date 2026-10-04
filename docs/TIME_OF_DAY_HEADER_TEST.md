@@ -53,8 +53,10 @@ rectangles, amber and red, labels without icons),
      or all black. The tiles must still work without them.
    - First build, 2026-10-04: the icons showed, then vanished after a
      click or when the pointer left a tile, and a white square appeared in
-     the screen's lower left corner. `Gui.update_bitmap_uv` misplaced them;
-     the panel now deletes and redraws each icon instead.
+     the screen's lower left corner. `Gui.update_bitmap_uv` misplaced them.
+     The second build deleted (`Gui.destroy_bitmap`) and redrew each icon
+     instead, with the same result. The third draws each icon once per
+     panel GUI and never changes it; choosing another side rebuilds the GUI.
 2. Point at DAY, then away; point at NIGHT, then away.
    - Pass: the sun and moon stay on their tiles through every hover, and
      no square appears anywhere else on the screen.

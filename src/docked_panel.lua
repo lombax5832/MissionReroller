@@ -124,7 +124,9 @@ function P.new(e)
         for _,w in ipairs(e.Application.worlds()) do if w~=e.Application.main_world() then target=w;break end end
         assert(target,'UI world unavailable')
         local items,groups,summaries=model.items or {},model.groups or {},model.summaries or {}
-        local key={width,height,face.font,face.material,face.atlas,tostring(model.section),model.page or 1,model.pages or 1}
+        -- The time of day icons are made once per GUI: the chosen side recreates it.
+        local key={width,height,face.font,face.material,face.atlas,tostring(model.section),model.page or 1,model.pages or 1,
+            tostring(model.time)}
         for _,group in ipairs(groups)do key[#key+1]='group:'..group.id..':'..group.name end
         for _,item in ipairs(items)do key[#key+1]=tostring(item.id)..':'..item.name..':'..tostring(item.role) end
         key=table.concat(key,'|')
@@ -189,11 +191,16 @@ function P.new(e)
             if ok and made then shapes[id]=made else no_shapes=true end
         end
         -- A day or night icon, size units square with its lower left at x,y.
-        -- One failure turns icons off for good, and the GUI is dropped
-        -- after this draw so no half-made icon stays; returns whether it drew.
+        -- Made once per GUI and never changed: in game both update_bitmap_uv
+        -- and destroy_bitmap then bitmap_uv left a white square in the
+        -- screen's corner. An icon depends only on the chosen side, which is
+        -- part of the identity that recreates the GUI. One failure
+        -- turns icons off for good, and the GUI is dropped after this draw so
+        -- no half-made icon stays; returns whether it is drawn.
         local broken
         local function icon(id,side,x,y,size,c)
             if icons~=nil and icons~=true then return false end
+            if bitmaps[id] then return true end
             local ok,err=pcall(function()
                 if not icon_material then
                     local name=e.IdString64.from_hex(ICONS.material)
@@ -203,9 +210,6 @@ function P.new(e)
                 local at=ICONS[side]
                 local low,high=e.Vector2(at[1]/ICONS.w,(at[2]+ICONS.px)/ICONS.h),e.Vector2((at[1]+ICONS.px)/ICONS.w,at[2]/ICONS.h)
                 local pos,dim=e.Vector3(x,y,995),e.Vector2(size,size)
-                -- Each draw makes the icon afresh: in game update_bitmap_uv
-                -- left a white square in the screen's corner instead.
-                if bitmaps[id] then e.Gui.destroy_bitmap(gui,bitmaps[id]);bitmaps[id]=nil end
                 bitmaps[id]=assert(e.Gui.bitmap_uv(gui,icon_material,low,high,pos,dim,c))
             end)
             icons=ok or tostring(err);broken=broken or not ok
@@ -391,7 +395,7 @@ function P.new(e)
                         rect('tile'..n,tile.x,tile.y,tile.w,tile.h,993,on and fill or dark)
                         if not on and over then rect('tile_hover'..n,tile.x,tile.y,tile.w,tile.h,994,fill)end
                         local top,lx=tile.y+tile.h-15*s,tile.x+10*s
-                        if side[1]~='any' and icon('icon'..n,side[1],tile.x+9*s,top-8*s,16*s,label)then lx=tile.x+30*s end
+                        if side[1]~='any' and icon('icon'..n,side[1],tile.x+9*s,top-8*s,16*s,on and ink or white)then lx=tile.x+30*s end
                         text('tile'..n,side[2],lx,top,16,label,nil,tile.x+tile.w-10*s-lx)
                         local line=on and side[1]~='any' and why or side[3]
                         text('tile_line'..n,line,tile.x+10*s,tile.y+12*s,12,on and ink or not tile.enabled and dim or muted,nil,tile.w-20*s)
