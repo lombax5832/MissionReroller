@@ -201,7 +201,8 @@ local function grouped(n)
 end
 local function count(n)return n==0 and 'Any' or n..(n==1 and ' rule' or ' rules')end
 -- How strict a solved search's filter is and how long it usually takes
--- (prediction_search_runtime.lua: {match, seconds, elapsed}).
+-- (prediction_search_runtime.lua: {match, seconds, elapsed}); without
+-- seconds (this machine's walk rate not yet measured) only how strict.
 -- running: the shorter form a running search shows after its clock.
 local function estimate_text(e,running)
     if e.match<=0 then return 'No seed gives this now' end
@@ -213,6 +214,7 @@ local function estimate_text(e,running)
         strict='1 in '..grouped(math.floor(n/scale+0.5)*scale)..' seeds match'
     end
     local s=e.seconds
+    if not s then return strict end
     -- One unmeasured text redrawn every frame: kept under the panel's width.
     local expect=running and '' or 'expect '
     local usual=s<1 and expect..'under a second' or s<90 and string.format('%sabout %d s',expect,math.floor(s+0.5))

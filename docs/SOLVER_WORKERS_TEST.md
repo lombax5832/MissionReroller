@@ -116,9 +116,16 @@ Changes after the first result:
   request showed before the search, or reads `Starting search`, until the
   search has its own count or estimate.
 - **Set-up off the main thread**, as above.
+- **No time until measured.** The estimate under a request no longer
+  guesses a time from a fixed rate: it reads like `1 in 28,000,000 seeds
+  match` until a solver search in this game has walked at least 200,000
+  steps over more than half a second of work, and from then on adds
+  `expect about ...` at the rate measured on this machine. The log reads
+  `ESTIMATE match=1/<k> seconds=unmeasured` until then.
 
 Check: the line under a running solver search shows seeds covered growing;
-the start shows no zero count; the hard request still matches;
+the start shows no zero count; before the first long search the request
+shows no time, and after it shows one; the hard request still matches;
 `LUA_SEARCH_MATCH ... covered=` is about `walk_steps` times the match odds
 over the expected steps (as a rough check: the 2026-10-05 search would have
 read about 350 million).

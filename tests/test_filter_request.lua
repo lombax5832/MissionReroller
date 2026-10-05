@@ -244,6 +244,8 @@ for _,case in ipairs({
     {nil,'Rerolls every unstarted operation of the campaign'},
     {'pending','Working out how strict this is'},
     {{match=1/23456,seconds=4.4},'1 in 23,000 seeds match - expect about 4 s'},
+    -- No walk rate measured yet on this machine: no time.
+    {{match=1/23456},'1 in 23,000 seeds match'},
     {{match=0,seconds=math.huge},'No seed gives this now'},
     {{impossible=true},'No seed gives this now'},
     {{unavailable='no required mission'},'Rerolls every unstarted operation of the campaign'},
@@ -270,6 +272,7 @@ for _,case in ipairs({
     {{match=1/1234567,seconds=150},75.2,'1:15 - 1 in 1,200,000 seeds match - about 3 min'},
     {{match=1e-9,seconds=900},179.9,'2:59 - 1 in 1,000,000,000 seeds match - over the 3 min limit'},
     {{match=1/23456,seconds=4.4},nil,'1 in 23,000 seeds match - about 4 s'},
+    {{match=1/23456},1.7,'0:01 - 1 in 23,000 seeds match'},
     {nil,12.4,'0:12 - 2,731 of 1,000,000 seeds searched',2731},
     -- No seed tried yet: no count of zero, only the start.
     {nil,0.2,'0:00 - Starting search',0},

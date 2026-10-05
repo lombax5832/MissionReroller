@@ -103,4 +103,11 @@ local Broken=make(solver(function()error('broken paths')end))({read=function()re
 Broken.update(s,10,nil,request({1}))
 assert(tostring(Broken.view().unavailable):find('broken paths',1,true))
 E.reset();assert(E.view()==nil)
+-- Before any search has measured the walk rate: how strict, but no time.
+local Unmeasured=make(Solver)({read=function()now=now+0.001;return '\0\0\0\0' end,clock=clock,slice=0.004,
+    options={},rate=function()return nil end,setup=0,bind=bind})
+s={fingerprint='e',planet=100}
+repeat Unmeasured.update(s,10,nil,request({1}))until Unmeasured.view()
+v=Unmeasured.view()
+assert(v.match==1/100 and v.seconds==nil,'No rate measured: no seconds')
 print('Solver estimate: pending, slices, kept inputs, restart and retarget on edits, Day / Night, impossible, unavailable and failures passed')

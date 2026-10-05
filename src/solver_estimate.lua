@@ -11,7 +11,7 @@ return function(SeedSolver)
     -- o: bind(read, s) -> planet model (planet_model.lua) of s's planet,
     -- read, clock, slice (seconds per frame), options (Search.options),
     -- row_of, identity (operation_identity.lua), rate() (walk steps per
-    -- second of a search), setup (seconds a search spends before walking).
+    -- second of a search, nil before one is measured), setup (seconds a search spends before walking).
     return function(o)
         local self={}
         local inputs,results,inputs_key={},{},nil
@@ -83,11 +83,13 @@ return function(SeedSolver)
             end
         end
         -- The current request's estimate: nil while it is worked out;
-        -- {match, seconds}, {impossible=true} or {unavailable=reason}.
+        -- {match, seconds}, {impossible=true} or {unavailable=reason};
+        -- seconds is nil while rate() is (no search has measured one).
         function self.view()
             local r=key and results[key]
             if not r or not r.steps then return r end
-            return {match=r.match,seconds=SeedSolver.seconds(r.steps,o.rate(),o.setup or 0.2)}
+            local rate=o.rate()
+            return {match=r.match,seconds=rate and SeedSolver.seconds(r.steps,rate,o.setup or 0.2)}
         end
         -- Forget everything, as when the dialog closes.
         function self.reset()worker,key,inputs,results,inputs_key=nil,nil,{},{},nil end

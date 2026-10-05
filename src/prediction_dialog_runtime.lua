@@ -217,8 +217,8 @@ do
                 estimator.update(s,difficulty,scope,filters:rules(),daynight)
                 estimate=estimator.view() or 'pending'
                 if type(estimate)=='table' then
-                    local line=estimate.match and string.format('ESTIMATE match=1/%.0f seconds=%.1f',1/math.max(estimate.match,1e-12),
-                        estimate.seconds) or estimate.impossible and 'ESTIMATE none: no draw path'
+                    local line=estimate.match and string.format('ESTIMATE match=1/%.0f seconds=%s',1/math.max(estimate.match,1e-12),
+                        estimate.seconds and string.format('%.1f',estimate.seconds) or 'unmeasured') or estimate.impossible and 'ESTIMATE none: no draw path'
                         or 'ESTIMATE unavailable: '..tostring(estimate.unavailable)
                     if line~=logged then logged=line;emit(line)end
                 end

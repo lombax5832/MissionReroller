@@ -207,8 +207,8 @@ local function search(name,r,solver,bounded)
         end
     end
     if estimate then
-        print(string.format('    dialog estimate: 1 in %.0f seeds match, usually %.2f s (took %.2f s, %s walk steps, %s expected)',
-            1/estimate.match,estimate.seconds,took,match:match('walk_steps=(%d+)'),
+        print(string.format('    dialog estimate: 1 in %.0f seeds match, usually %s s (took %.2f s, %s walk steps, %s expected)',
+            1/estimate.match,estimate.seconds and string.format('%.2f',estimate.seconds) or 'unmeasured',took,match:match('walk_steps=(%d+)'),
             text:match('expected_steps=(%d+)')))
     end
     print(string.format('    frozen inputs: %s ranges, %s bytes (limits 20000 and 2097152)',match:match('ranges=(%d+)'),

@@ -17,8 +17,10 @@ needed about 180 s. Since then, not yet validated in game: the workers split
 each job's starts into equal arcs instead of random starts; a running
 search shows the seeds it has covered (`0:07 - 348M seeds covered - 1 in
 28M match`, logged as `covered=`); the start no longer flashes `0 of
-1,000,000 seeds searched`; and workers set themselves up on their own
-threads, so starting one costs the frame well under a millisecond.
+1,000,000 seeds searched`; workers set themselves up on their own
+threads, so starting one costs the frame well under a millisecond; and the
+request's estimate shows no time until a search has measured this
+machine's walk rate (the fixed 800,000 steps/s guess is gone).
 Unreleased, on the `worktree-native-solver-research` branch with
 `arch/deepening` merged. A search the seed solver seeds now walks in up
 to eight worker VMs (fresh LuaJIT VMs from the game's `lua51.dll` on

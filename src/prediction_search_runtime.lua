@@ -19,8 +19,9 @@ local current_search,search_started,last_progress,max_slice
 local slices,step_time,context_time
 local wait_started,wait_total,last_wait_poll
 local default_limit=1000000
--- Walk steps per second of a search in game (about a million on 2026-10-04).
-local solver_rate=800000
+-- Walk steps per second of a search, measured by this game's first long
+-- enough solver search; nil until then, and the dialog shows no time.
+local solver_rate
 -- The seed solver's worker VMs (src/seed_solver_workers.lua), made on the
 -- first search; worker_pool_off says why there is none.
 local worker_pool,worker_pool_off
@@ -30,8 +31,6 @@ local function pool()
     local ok,made,why=pcall(SeedSolverWorkers.pool,ffi)
     if ok and made then
         worker_pool=made
-        -- Until a search measures it: the main thread's rate per worker.
-        solver_rate=solver_rate*made.max_workers
         emit(string.format('SEED_SOLVER_WORKERS_READY max_workers=%d processors=%d',made.max_workers,made.processors))
     else
         worker_pool_off=tostring(ok and why or made)
@@ -297,8 +296,8 @@ advance_prediction_search=function(action,now)
     local elapsed=math.max(now-search_started-wait_total-waiting,0.001)
     reroll_session.progress(job.attempts,elapsed)
     -- The dialog's estimate: the solver's expected walk at the walk rate
-    -- measured so far, or a typical in-game rate before there is one, plus
-    -- the set-up and the match's confirmation.
+    -- measured so far, plus the set-up and the match's confirmation; no
+    -- seconds before a rate is measured.
     if job.source and job.source.estimate and job.solving~=false then
         local e,steps=job.source.estimate,job.source.steps()
         local work=elapsed-(job.source.setup or 0)
@@ -308,8 +307,8 @@ advance_prediction_search=function(action,now)
         -- covered: the seeds an in-order scan would have checked for the same
         -- chance of a match (seed_solver_chain.lua chain.expected).
         local covered=job.source.expected and e.match>0 and job.source.expected()/e.match or nil
-        reroll_session.estimate({match=e.match,seconds=SeedSolver.seconds(e.steps,rate,job.source.setup or 0),elapsed=elapsed,
-            covered=covered})
+        reroll_session.estimate({match=e.match,seconds=rate and SeedSolver.seconds(e.steps,rate,job.source.setup or 0),
+            elapsed=elapsed,covered=covered})
     else reroll_session.estimate(nil)end
     local compiled=rawget(_G,'jit') and type(jit.status)=='function' and jit.status()
     local timing=string.format('elapsed_s=%.2f slices=%d work_ms=%.0f context_ms=%.0f jit=%s',elapsed,slices,
