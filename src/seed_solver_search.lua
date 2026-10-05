@@ -15,9 +15,11 @@ return function(Math,Paths,Chain,Time,Inputs)
     local SHARE_SAMPLES=2048
     local function sampled_seed(i)return Math.output(i,3)end
     -- Worker VMs only for a request rarer than one seed in this many: a
-    -- commoner one is found on the main thread before workers would pay
-    -- for their set-up and their share of the address space below 2 GB.
-    R.WORKERS_RARER_THAN=2000000
+    -- commoner one expects under 200,000 steps, well under a second on the
+    -- main thread, before workers would pay for their set-up and their share
+    -- of the address space below 2 GB. In game 1 in 1.75 million took 5.5 s
+    -- on the main thread, and 8 warm workers started in 32 ms (2026-10-05).
+    R.WORKERS_RARER_THAN=100000
     -- Whether a source with this estimate walks in worker VMs, or why not.
     function R.use_workers(estimate)
         if estimate.match*R.WORKERS_RARER_THAN<1 then return true end

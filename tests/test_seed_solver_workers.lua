@@ -182,9 +182,10 @@ do
     assert(pool.shutdown(3)==0,'workers left open at shutdown')
 end
 
--- Warm workers: tick makes idle VMs up to max_workers; a search reuses
--- them with the same candidates, and they go back to idle when it ends,
--- twice over; cold closes the idle ones and stops a running search.
+-- Warm workers: tick makes idle VMs up to max_workers; a search uses them
+-- with the same candidates, and when it ends they are closed and tick makes
+-- fresh idle ones, twice over; cold closes the idle ones and stops a
+-- running search.
 local r_warm
 do
     assert(pool.state().idle==0 and not pool.state().warm,'a new pool is cold')
@@ -195,8 +196,9 @@ do
     assert(pool.state().idle==pool.max_workers,'warm stops at max_workers')
     for round=1,2 do
         local _,r=compare(synthetic,rows,173,60000,'warm '..round)
-        assert(r.warm==pool.max_workers and r.workers==pool.max_workers,'warm '..round..': idle workers reused')
-        assert(pool.state().idle==pool.max_workers,'warm '..round..': workers back to idle')
+        assert(r.warm==pool.max_workers and r.workers==pool.max_workers,'warm '..round..': idle workers used')
+        assert(pool.state().idle==0,'warm '..round..': workers that walked are closed')
+        wait(function()pool.tick();local s=pool.state();return s.idle==pool.max_workers and s.retired==0 end,'warm '..round..' replaced')
         r_warm=r
     end
     local source=assert(pool.start({paths=synthetic,rows=rows,planet=173,random=starts(7)}))

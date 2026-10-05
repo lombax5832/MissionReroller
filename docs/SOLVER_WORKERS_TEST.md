@@ -95,7 +95,7 @@ Failure:
 | --- | --- |
 | `SEED_SOLVER_WORKERS_OFF reason=...` | The pool could not be made (for example `lua51.dll not loaded`); every search walks on the main thread. |
 | `SEED_SOLVER_WORKERS workers=0 reason=...; walking on the main thread` | This search's workers did not start: too little memory below 2 GB, or a set-up error. The search still runs. |
-| `SEED_SOLVER_WORKERS workers=0 reason=estimated 1 in <k>, not rarer than 1 in 2000000; walking on the main thread` | Expected, not a failure: a request the estimate puts at 1 in 2 million or commoner walks on the main thread; the warm workers stay idle. |
+| `SEED_SOLVER_WORKERS workers=0 reason=estimated 1 in <k>, not rarer than 1 in 100000; walking on the main thread` | Expected, not a failure: a request the estimate puts at 1 in 100,000 or commoner walks on the main thread; the warm workers stay idle. |
 | `SEED_SOLVER_WORKERS_END ... failed=<n> error=...` | Workers raised errors; the search walked on with the rest, or ended its solving and scanned seeds in order. |
 | `SEED_SOLVER_WORKERS_END ... capped=<n>` | Workers passed the 16 MB heap cap and were stopped. |
 | `SEED_SOLVER_WORKERS_SHUTDOWN left_open=<n>` | Workers had not stopped 3 s after quitting began. |
@@ -143,8 +143,9 @@ a mission (`src/worker_warmth.lua`, `pool.warm` in
 - **Warm.** The first time the galactic map is on top of the screen
   stack (only possible on the ship), the pool makes up to `max_workers`
   idle VMs, one per frame, each loading its modules on its own thread. An
-  idle VM holds no thread. A rare request reuses them, so it skips making
-  VMs and loading modules, and its workers go back to idle when it ends.
+  idle VM holds no thread. A rare request starts on them, so it skips
+  making VMs and loading modules. When it ends they are closed (a VM that
+  walked keeps its peak heap until closed) and fresh idle VMs are made.
 - **Cold.** At once when a loading or transition gate of the UI root is
   set, or a read of them fails, and also after 10 s without the map on
   top while no search runs. Cold closes the idle VMs; a search that still
@@ -183,6 +184,9 @@ SEED_SOLVER_WORKERS_COLD reason=loading or transition gate set closed=<n> screen
 
 - `warm=8` on the hard request's workers line: all eight were idle VMs.
   `setup_ms` there should be lower than in a cold search.
+- After each search a new `SEED_SOLVER_WORKERS_WARMED idle=8` follows, and
+  the next search's `free_mb` stays near the first one's (the first build
+  of this kept the walked VMs: 29.9, then 8.9 MB and `workers=0`).
 - Step 3 logs the 10 s cold line, then a new `WARM` line when the map
   opens again.
 - Step 4 should log the gate cold line when the drop's loading screen

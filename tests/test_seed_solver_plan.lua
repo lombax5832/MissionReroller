@@ -73,11 +73,11 @@ end
 assert(R.seconds(1000,1000,0)==1.3)
 assert(math.abs(R.seconds(800000,800000,0.2)-1.5)<1e-12)
 assert(math.abs(R.seconds(7000,1000,0.5)-7.8)<1e-12)
--- Workers only for a request rarer than one seed in two million.
-assert(R.WORKERS_RARER_THAN==2000000)
+-- Workers only for a request rarer than one seed in 100,000.
+assert(R.WORKERS_RARER_THAN==100000)
 assert(R.use_workers({match=1/28000000})==true,'1 in 28M uses workers')
-assert(R.use_workers({match=1/2000001})==true,'just rarer than 1 in 2M uses workers')
-local rare,why=R.use_workers({match=1/2000000})
-assert(rare==false and why=='estimated 1 in 2000000, not rarer than 1 in 2000000',why)
+assert(R.use_workers({match=1/100001})==true,'just rarer than 1 in 100,000 uses workers')
+local rare,why=R.use_workers({match=1/100000})
+assert(rare==false and why=='estimated 1 in 100000, not rarer than 1 in 100000',why)
 assert(R.use_workers({match=0.5})==false,'a common request walks here')
 print('Seed solver plan: seeded inputs, prepare, source, impossible and scan declines, seconds and workers threshold passed')

@@ -39,6 +39,12 @@ assert(fake.idle==2 and logged('^SEED_SOLVER_WORKERS_WARMED idle=2 max_workers=2
 local lines=#logs
 for t=1.3,3,0.3 do tick_workers(t)end
 assert(#logs==lines and #fake.calls==1,'nothing more while warm and full')
+-- A search used the idle workers and they were closed: warmed again once
+-- fresh ones replace them.
+local function count(pattern)local n=0;for _,line in ipairs(logs)do if line:find(pattern)then n=n+1 end end;return n end
+fake.idle=0
+tick_workers(3.1);tick_workers(3.2)
+assert(fake.idle==2 and count('^SEED_SOLVER_WORKERS_WARMED idle=2')==2,'warmed again after a search')
 -- A set gate cools it at once, with the idle workers it closed.
 gate=true;on_top=false
 tick_workers(4)
@@ -55,4 +61,4 @@ fail=false;tick_workers(7);assert(fake.calls[5]==true)
 up(update,'tick',function()error('boom')end,true)
 update()
 assert(fake.calls[6]==false,'a STOPPED error cools the pool')
-print('Worker warmth runtime: warm on the map, warmed once, gate and failed-read cooling, cooled on STOPPED passed')
+print('Worker warmth runtime: warm on the map, warmed once and again after a search, gate and failed-read cooling, cooled on STOPPED passed')

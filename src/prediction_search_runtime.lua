@@ -71,15 +71,19 @@ local function tick_workers(now)
     if not worker_pool then return end
     pcall(worker_pool.tick)
     local state=worker_pool.state()
+    -- A search took the idle workers: log again once fresh ones replace them.
+    if state.warm and state.idle<worker_pool.max_workers and not state.full then warm_logged=false end
     -- Once warming has stopped: every worker made, memory short or an error.
-    if not warm_logged and state.warm and state.retired==0 and (state.idle>=worker_pool.max_workers or state.full)then
+    if not warm_logged and state.warm and state.retired==0 and current_search==nil
+        and (state.idle>=worker_pool.max_workers or state.full)then
         warm_logged=true
         emit(string.format('SEED_SOLVER_WORKERS_WARMED idle=%d max_workers=%d%s',state.idle,worker_pool.max_workers,
             worker_pool.warm_error and ' error='..worker_pool.warm_error or ''))
     end
 end
--- Stops a finished or replaced search's workers; they go back to idle, or
--- close, once their callbacks return (worker_pool.tick, every frame).
+-- Stops a finished or replaced search's workers; they close once their
+-- callbacks return (worker_pool.tick, every frame), and while warm fresh
+-- idle workers replace them.
 local function release_source(job)
     if job and job.source and job.source.close then pcall(job.source.close)end
 end

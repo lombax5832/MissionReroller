@@ -13,7 +13,10 @@
 --
 -- Warm workers: while the pool is warm (pool.warm(true), on the ship) it
 -- keeps up to max_workers idle VMs with their modules loaded, made one per
--- pool.tick(), and a search's workers go back to idle when it ends. Cold
+-- pool.tick(). A search's workers are closed when it ends and fresh idle
+-- VMs replace them: a VM that walked keeps its peak heap below 2 GB until
+-- lua_close (eight held 21 MB in game, 2026-10-05), while a fresh one
+-- holds about 0.25 MB. Cold
 -- (pool.warm(false), in a mission) every idle VM is closed and a search's
 -- workers close when it ends, as they did before warm workers.
 --
@@ -236,7 +239,8 @@ return tonumber(ffi.cast('intptr_t',SOLVER_WORKER_ENTRY))
 
         -- idle: VMs with their modules loaded and no thread, kept while warm.
         -- retired: workers stopped or warming up, waiting for their callbacks
-        -- to return; then idle again (warm, healthy) or closed.
+        -- to return; then idle (a healthy warm-up while warm) or closed (a
+        -- worker that walked keeps its heap until closed).
         -- active: every source still running, for cool and shutdown.
         local idle,retired,active={},{},{}
         local warm,warm_full=false,false
@@ -310,12 +314,15 @@ return tonumber(ffi.cast('intptr_t',SOLVER_WORKER_ENTRY))
                     table.remove(retired,i)
                     w.error=w.error or error_of(w)
                     w.data=nil
-                    if warm and w.L and not w.error and not w.capped and w.shared.failed==0 then
+                    if warm and w.warming and w.L and not w.error and w.shared.failed==0 then
                         idle[#idle+1]=w
                     else
                         -- A warm-up that failed would fail again: warm no further.
                         if w.warming and w.error then warm_full=true;pool.warm_error=w.error end
                         release(w)
+                        -- A closed VM gave its memory back: warming short of
+                        -- memory may go on.
+                        if not pool.warm_error then warm_full=false end
                     end
                 end
             end
@@ -494,8 +501,7 @@ return tonumber(ffi.cast('intptr_t',SOLVER_WORKER_ENTRY))
             active[source]=true
             -- Figures for the log: workers started (warm: how many were idle
             -- VMs), failed (with the first error), capped, the largest heap,
-            -- and why starting stopped. Read before the next search reuses
-            -- the workers.
+            -- and why starting stopped.
             function source.report()
                 local r={workers=#workers,planned=count,failed=0,capped=0,peak_kb=0,setup_kb=0,spawn_error=spawn_error}
                 for k,v in pairs(report)do if r[k]==nil then r[k]=v end end

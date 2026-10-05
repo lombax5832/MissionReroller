@@ -7,17 +7,27 @@ the first two were brought up to date on 2026-09-29.
 
 **Not yet validated in game: workers only for rare requests.** A search
 the seed solver seeds now walks in worker VMs only when its estimate is
-rarer than one seed in 2 million (`SeedSolver.use_workers`,
-`WORKERS_RARER_THAN`); a commoner request is found on the main thread in a
-second or less, before workers would repay their set-up and their address
-space below 2 GB, and logs `SEED_SOLVER_WORKERS workers=0
-reason=estimated 1 in <k>, not rarer than 1 in 2000000`.
+rarer than one seed in 100,000 (`SeedSolver.use_workers`,
+`WORKERS_RARER_THAN`); a commoner request expects under 200,000 steps on
+the main thread, and logs `SEED_SOLVER_WORKERS workers=0
+reason=estimated 1 in <k>, not rarer than 1 in 100000`. The first cut,
+1 in 2 million, left a request of 1 in 1.75 million on the main thread for
+5.5 s in game (2026-10-05).
 
 **Not yet validated in game: warm workers on the ship.** The worker VMs
 are no longer made per search and closed after it. While on the ship the
 pool keeps up to `max_workers` idle VMs with their modules loaded and no
-thread (`pool.warm`, made one per frame); a search reuses them and they go
-back to idle. They warm when the galactic map is on top, which only
+thread (`pool.warm`, made one per frame); a search starts its walk on them
+at once, and when it ends they are closed and fresh idle VMs made. A VM
+that walked keeps its peak heap until `lua_close`: in game, returning eight
+of them to idle took free memory below 2 GB from 29.9 to 8.9 MB and the
+next searches were refused workers, while eight fresh ones hold about 2 MB.
+Offline on the planet 173 capture (8 workers, 4 million steps each), eight
+walked VMs kept idle held 19, 31 and 38 MB after three searches as their
+JIT traces grew; with `jit.flush()` and a full collect in each worker they
+still held 12 MB (dlmalloc keeps up to 2 MB of free top per heap, and
+fragmentation pins segments); closed and replaced, 2.4 to 2.9 MB.
+They warm when the galactic map is on top, which only
 happens on the ship, and cool when a UI root loading or transition gate is
 set, or after 10 s without the map while no search runs
 (`src/worker_warmth.lua`). The backstop exists because nothing in the mod
