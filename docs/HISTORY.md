@@ -5,6 +5,15 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
+**Not yet validated in game: v0.35.0.** Releases the seed solver's
+worker VMs, the one-poll capture, the reachability checks that disable
+impossible starts and unreachable enemy forces and side objectives, the
+filter catalogue's fix for the game's JIT, and the key state fix:
+`GetAsyncKeyState` is now resolved by address and called through an
+unnamed function pointer, so another addon's `uint16_t` declaration can no
+longer make F7 read as never pressed
+([KEY_STATE_TEST.md](KEY_STATE_TEST.md)).
+
 **Not yet validated in game: impossible requests cannot start, and
 unreachable enemy forces and side objectives are disabled.** On 2026-10-05
 a request the dialog already marked "No seed gives this now" (planet 268,

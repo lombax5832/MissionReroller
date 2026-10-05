@@ -6,6 +6,21 @@ GitHub release notes and, as one plain-text line each, the Nexus Mods
 changelog. How each change was
 made and tested is in the development log, [docs/HISTORY.md](docs/HISTORY.md).
 
+## v0.35.0 Faster searches on every core
+
+- Strict searches now run on several of your processor's cores in the
+  background, so requests that took minutes are often found in seconds
+  without lowering your frame rate.
+- A running search shows how many seeds it has covered and how strict the
+  request is. The time estimate appears once a search has measured how
+  fast your machine searches, instead of a fixed guess.
+- A search starts about two seconds sooner after you press Begin Search.
+- Begin Search is disabled when no seed can give the request, and enemy
+  forces and side objectives that a checked mission can never get are
+  greyed out.
+- Fixed the panel showing Eligibility unavailable after a few searches.
+- Fixed F7 doing nothing when certain other Lua mods were installed.
+
 ## v0.34.0 Faster searches for strict filters
 
 - Searches for missions, enemy forces and side objectives now work out
