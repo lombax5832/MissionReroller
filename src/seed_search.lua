@@ -53,7 +53,9 @@ return function(evaluate,catalogue,options)
     local difficulty,limit=options.difficulty,options.limit
     local source=options.source
     assert(source==nil or type(source.next)=='function','Invalid seed source')
-    local budget=options.source_budget or 4096
+    -- Walk steps per step: about 1 ms at the slowest rate seen in game,
+    -- so a step cannot overrun the frame slice the job keeps.
+    local budget=options.source_budget or 1024
     local self={status='searching',attempts=0,next_seed=options.seed,solving=source~=nil}
     function self:cancel()
         if self.status=='searching' then self.status='cancelled' end

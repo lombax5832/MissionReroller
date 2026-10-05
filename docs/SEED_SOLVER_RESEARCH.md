@@ -506,6 +506,41 @@ per seed offline for the three missions. A filter of the Python set that
 was walked through 3,999 steps per seed now takes 102, its root chosen
 over the grouped alternatives.
 
+### Audit: where a search spends its time, 2026-10-04
+
+In game, after the exclusion fix, a search for three missions each with
+its enemy force and Lidar Station and SEAF Artillery excluded (planet 268,
+difficulty 6, by day) matched on its first candidate after 4.79 million
+walk steps (3.66 million estimated): 91 s, of which 54.7 s were the
+search's own work. Set-up took 142 ms, context checks 1.0 s, the one
+candidate a few ms; the walk was the rest, at 87,000 steps per second of
+work against about 1.6 million before the fix. Its 4,096-step budget per
+search step then took about 47 ms, so slices ran to 61 ms (13 a second).
+
+`scripts/profile_seed_solver.lua` reproduces the request on the planet 173
+capture. Each mission constraint held 80 alternatives (every combination of
+3 intervals at each of four objective draws and 5 at the last, under one
+enemy-force interval). LuaJIT's sampler put 51% of the time in
+`mission_ok`, which looped over the alternatives with `pairs()` and called
+itself for each: its traces aborted (`inner loop in root trace`), and every
+alternative recomputed the generator outputs (`output` and `u64`, 15%).
+With the JIT off it walked 16,000 steps a second, near what the game saw.
+
+- **Decision tree.** `seed_solver_chain.lua` compiles each mission
+  constraint once into a tree over (draw position, interval) steps, in flat
+  arrays walked with an explicit stack; each draw's output is computed once
+  per mission seed and environment conditions are checked where an
+  alternative ends. Steps per second on the request: 674,000 to 4,150,000
+  with the JIT, 16,000 to 245,000 without; candidates unchanged.
+- **Budget.** `seed_search.lua` gives the walk 1,024 steps per search step,
+  about 1 ms at the slowest rate seen in game.
+
+After the change the walk's samples spread over the root check (19%),
+inversions (11%) and the walk's steps (8%); one candidate's board with tags
+and objectives costs about 2 ms offline. What is left of a search's time in
+game is the frame share: the search works 16 ms a frame, about 60% of the
+wall time on 2026-10-04.
+
 ## Next steps, if pursued
 
 1. The in-game test ([SEED_SOLVER_TEST.md](SEED_SOLVER_TEST.md)).

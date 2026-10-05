@@ -75,7 +75,7 @@ assert(not pcall(new,function()end,{options=catalogue.options,find=catalogue.fin
 local queue={false,9,false,7}
 local tried={}
 local source={next=function(budget)
-    assert(budget==4096,'Default source budget')
+    assert(budget==1024,'Default source budget')
     local item=table.remove(queue,1)
     if item==nil then return nil,true end
     if item==false then return nil,false end

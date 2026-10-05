@@ -18,26 +18,95 @@ return function(Math)
     local R={}
     local mission_root
 
-    local function mission_ok(m,mission)
-        if mission.alternatives then
-            for _,alternative in ipairs(mission.alternatives)do
-                if mission_ok(m,alternative)then return true end
+    -- A mission constraint compiled once into a decision tree in flat
+    -- arrays, so the check the walk runs on every solution is numeric loops
+    -- LuaJIT compiles: a recursive check over pairs() fell back to the
+    -- interpreter, and the alternatives of excluded side objectives (80 per
+    -- mission, every combination of a few intervals at each draw) took half
+    -- the walk. Alternatives share prefixes of (draw position, interval)
+    -- steps, in position order; a draw's output is computed once per
+    -- mission seed; environment conditions are checked where an
+    -- alternative ends. Walked depth first with an explicit stack.
+    local function compile(mission)
+        local list=mission.alternatives or {mission}
+        local nodes={{edges={},ends={}}}
+        for _,alternative in ipairs(list)do
+            local steps={}
+            for q,r in pairs(alternative.draws)do steps[#steps+1]={q,r[1],r[2]}end
+            table.sort(steps,function(x,y)return x[1]<y[1] or (x[1]==y[1] and x[2]<y[2])end)
+            local node=nodes[1]
+            for _,s in ipairs(steps)do
+                local found
+                for _,e in ipairs(node.edges)do
+                    if e[1]==s[1] and e[2]==s[2] and e[3]==s[3]then found=e;break end
+                end
+                if not found then
+                    nodes[#nodes+1]={edges={},ends={}}
+                    found={s[1],s[2],s[3],#nodes};node.edges[#node.edges+1]=found
+                end
+                node=nodes[found[4]]
+            end
+            node.ends[#node.ends+1]=alternative.mods
+        end
+        -- Flat arrays: a node's edges and its ends (each a list of mods).
+        local slot_of,pos={},{}
+        local efirst,elast,eslot,elo,ehi,echild={},{},{},{},{},{}
+        local accept,sfirst,slast,mfirst,mlast,mmod,mlo,mhi={},{},{},{},{},{},{},{}
+        local e,set,k=0,0,0
+        for i,node in ipairs(nodes)do
+            efirst[i]=e+1
+            for _,edge in ipairs(node.edges)do
+                local s=slot_of[edge[1]]
+                if not s then s=#pos+1;pos[s]=edge[1];slot_of[edge[1]]=s end
+                e=e+1;eslot[e],elo[e],ehi[e],echild[e]=s,edge[2],edge[3],edge[4]
+            end
+            elast[i]=e
+            accept[i]=false
+            sfirst[i]=set+1
+            for _,mods in ipairs(node.ends)do
+                if #mods==0 then accept[i]=true end
+                set=set+1;mfirst[set]=k+1
+                for _,mod in ipairs(mods)do k=k+1;mmod[k],mlo[k],mhi[k]=mod[1],mod[2],mod[3]end
+                mlast[set]=k
+            end
+            slast[i]=set
+        end
+        local cache,stamp,generation,stack={},{},0,{}
+        for s=1,#pos do cache[s],stamp[s]=0,0 end
+        return function(m)
+            generation=generation+1
+            local state1
+            local sp=1;stack[1]=1
+            while sp>0 do
+                local node=stack[sp];sp=sp-1
+                if accept[node]then return true end
+                for j=sfirst[node],slast[node]do
+                    local ok=true
+                    for x=mfirst[j],mlast[j]do
+                        state1=state1 or A1*(0ULL+m)+C1
+                        local v=tonumber(state1%mmod[x])
+                        if v<mlo[x] or v>mhi[x]then ok=false;break end
+                    end
+                    if ok then return true end
+                end
+                for x=efirst[node],elast[node]do
+                    local s=eslot[x]
+                    local o
+                    if stamp[s]==generation then o=cache[s]
+                    else o=output(m,pos[s]);cache[s],stamp[s]=o,generation end
+                    if o>=elo[x] and o<=ehi[x]then sp=sp+1;stack[sp]=echild[x]end
+                end
             end
             return false
         end
-        for p,r in pairs(mission.draws)do
-            local o=output(m,p)
-            if o<r[1] or o>r[2]then return false end
-        end
-        if #mission.mods>0 then
-            local state1=A1*(0ULL+m)+C1
-            for _,mod in ipairs(mission.mods)do
-                local v=tonumber(state1%mod[1])
-                if v<mod[2] or v>mod[3]then return false end
-            end
-        end
-        return true
     end
+    local compiled=setmetatable({},{__mode='k'})
+    local function checker(mission)
+        local check=compiled[mission]
+        if not check then check=compile(mission);compiled[mission]=check end
+        return check
+    end
+    local function mission_ok(m,mission)return checker(mission)(m)end
     -- Every constraint of a path on the operation seed y.
     local function path_ok(y,path)
         for _,s in ipairs(path.constraints)do
@@ -47,7 +116,7 @@ return function(Math)
                     local k=output((o+y)%M32,1)
                     if k<s.lo or k>s.hi then return false end
                 end
-                if s.mission and not mission_ok(o,s.mission)then return false end
+                if s.mission and not checker(s.mission)(o)then return false end
             elseif o<s.lo or o>s.hi then return false end
         end
         return true
@@ -173,13 +242,14 @@ return function(Math)
                 end
             end
         end
-        local walk,step,invert_m
+        local walk,step,invert_m,check_root
         if not root then
             walk={start=function(s)return s,nil end,advance=function(s)return s+1,nil end}
         else
             walk=Math.walk(root.position,root.lo,root.hi)
             if root.kind=='mission' then
                 step=path.constraints[root.step]
+                check_root=checker(step.mission)
                 invert_m=Math.inverter(step.position)
             end
         end
@@ -206,7 +276,7 @@ return function(Math)
                     budget=budget-1;j.steps=j.steps+1
                     if not root or root.kind=='stream' then
                         if path_ok(v,path)then campaign(v)end
-                    elseif mission_ok(v,step.mission)then
+                    elseif check_root(v)then
                         local n=invert_m(v,ys)
                         for i=1,n do if path_ok(ys[i],path)then campaign(ys[i])end end
                     end

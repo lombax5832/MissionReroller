@@ -54,4 +54,6 @@ in LuaJIT with `seed_chain_bench.lua`; `tests/test_seed_chain.py` checks it.
 `seed_solver_capture.lua` replays a capture through `src` for the oracle and
 for `tests/test_seed_solver_lua.py`, which checks the LuaJIT port
 (`src/seed_solver_*.lua`) against the Python prototype. `tests/test_seed_solver_search.py` runs the
-release entry's own search with the solver on the viewed-planet capture.
+release entry's own search with the solver on the viewed-planet capture. `profile_seed_solver.lua`
+times the solver's set-up and walk on a hard request from a capture, for
+LuaJIT's sampling profiler (its header gives the commands).
