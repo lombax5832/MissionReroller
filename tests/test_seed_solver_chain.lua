@@ -21,6 +21,27 @@ local Time=H.module(root..'/seed_solver_time.lua')()
 local make_rng=H.module(root..'/generation_rng.lua')
 local Identity=H.module(root..'/operation_identity.lua')(make_rng)
 
+-- A mission's kind draw is its first mission draw plus the operation's
+-- first draw plus one of Chain.DELTAS, at their weights (Chain.mass), on
+-- uniform operation seeds (math.random: the LCG below is too regular).
+math.randomseed(7)
+do
+    local seen,n={},200000
+    for _=1,n do
+        local y=math.random(0,2^32-1)
+        local m=Math.output(y,1+y%40)
+        local v=(Math.output((m+y)%2^32,1)-Math.output(m,1)-Math.output(y,1))%2^32
+        seen[v]=(seen[v] or 0)+1
+    end
+    local total=0
+    for _,d in ipairs(Chain.DELTAS)do
+        local got=(seen[d[1]] or 0)/n
+        total=total+(seen[d[1]] or 0)
+        assert(math.abs(got-d[2])<0.005,string.format('Kind offset %u: %.4f sampled, %.4f modelled',d[1],got,d[2]))
+    end
+    assert(total==n,'Every kind offset is modelled')
+end
+
 -- Day / Night on a synthetic sky (as tests/test_day_night.lua builds one):
 -- one body spinning in 15.7 hours. Node longitudes come from the capture's
 -- level nodes (day_night.lua P.longitude) when it holds their pages, else
@@ -143,6 +164,20 @@ local function solve(f)
         end
     end
     local paths=assert(P.shared_paths(operations,f.difficulty,f.required,f.rules))
+    -- The probabilities the search uses: linked draws integrated. Checked
+    -- against random operation seeds; the paths are disjoint.
+    local mass=0
+    for _,path in ipairs(paths)do path.probability=Chain.mass(path);mass=mass+path.probability end
+    if #paths>0 and mass>=1/2000 then
+        local hits,n=0,100000
+        for _=1,n do
+            local y=math.random(0,2^32-1)
+            for _,path in ipairs(paths)do if Chain.path_ok(y,path)then hits=hits+1;break end end
+        end
+        local expected=mass*n
+        assert(math.abs(hits-expected)<=4*math.sqrt(expected)+0.02*expected,
+            string.format('%s: %d of %d operation seeds pass the paths, %.0f by their mass',f.name,hits,n,expected))
+    end
     local rows,others={},{}
     for r=(f.difficulty-1)*3,f.difficulty*3-1 do
         if r~=preserved then
@@ -192,7 +227,7 @@ local function solve(f)
             local hits=0
             for _=1,2000 do if matches(C.board_of(random()),f)then hits=hits+1 end end
             local expected=share*2000
-            assert(math.abs(hits-expected)<=4*math.sqrt(expected)+0.15*expected,
+            assert(math.abs(hits-expected)<=4*math.sqrt(expected)+0.05*expected,
                 string.format('%s: %d of 2000 seeds match, %.0f predicted',f.name,hits,expected))
             sampled=string.format(', %d of 2000 random seeds matched (%.0f predicted)',hits,expected)
         end

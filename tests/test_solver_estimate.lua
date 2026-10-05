@@ -15,6 +15,7 @@ local Solver={source=function(spec)
     local plan=planned[next(spec.required) or 0]
     if plan=='none' then return nil,'no draw path'end
     if plan=='off' then return nil,'operations at the difficulty differ'end
+    if plan=='dark' then return nil,'no operation passes Day / Night'end
     return {estimate={match=1/(plan or 100),steps=1000*(spec.daynight and 7 or 1)}}
 end}
 local specials={}
@@ -80,6 +81,14 @@ v=settle(request({5}))
 assert(v.unavailable=='no draw path','An event operation of the difficulty might still match')
 v=settle(request({5}),nil,{region=2})
 assert(v.impossible,'A city has no other operation')
+-- Day / Night passing no normal operation: likewise.
+planned[7]='dark'
+v=settle(request({7}))
+assert(v.unavailable=='no operation passes Day / Night','A city of the difficulty might pass Day / Night')
+specials[1]=nil
+s={fingerprint='d',planet=100}
+v=settle(request({7}))
+assert(v.impossible,'No operation passes Day / Night and no city: no seed gives this')
 planned[6]='off'
 v=settle(request({6}))
 assert(v.unavailable=='operations at the difficulty differ')

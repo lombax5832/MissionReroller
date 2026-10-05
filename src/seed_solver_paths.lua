@@ -586,7 +586,9 @@ return function(choose_category,make_choose_mission,make_finalize)
         -- last required mission are left free. A special level graph (a city
         -- or other campaign event) draws each mission's level after the
         -- first (mission_level_choice.lua); level_ok(node), when given,
-        -- constrains those draws and the first level to passing nodes.
+        -- constrains those draws and the first level to passing nodes, and
+        -- the walk goes on to the last slot, since Day / Night checks every
+        -- mission's level.
         function P.paths(op,required,rules,level_ok)
             assert(#op.extra==0,'modifier missions are not solved')
             rules=rules or {}
@@ -648,7 +650,8 @@ return function(choose_category,make_choose_mission,make_finalize)
                     for _,g in ipairs(kinds)do if g==k then have=true;break end end
                     if not have then missing[#missing+1]=k end
                 end
-                if #missing==0 then
+                local levels_left=level_ok and op.special and slot<op.total
+                if #missing==0 and not levels_left then
                     out[#out+1]={template=template.index,kinds={unpack(kinds)},constraints={unpack(constraints)},
                         probability=probability}
                     return
@@ -682,7 +685,8 @@ return function(choose_category,make_choose_mission,make_finalize)
                         local p=p
                         if lstep then cons[#cons+1]=lstep;p=p*(lstep.hi-lstep.lo+1)/M32 end
                         local choices={}
-                        if #eligible==1 then choices[1]={eligible[1],nil,counts}
+                        -- The last slot's kind matters only when it is required.
+                        if #eligible==1 or (#missing==0 and slot+1>=op.total)then choices[1]={eligible[1],nil,counts}
                         else
                             for _,part in ipairs(partition(function(o)
                                 stubbed(o)
@@ -737,7 +741,10 @@ return function(choose_category,make_choose_mission,make_finalize)
         -- The paths for the required kinds at a difficulty when every
         -- operation there has the same inputs (IDs differing only in their
         -- level tiles), else nil.
-        function P.shared_paths(operations,difficulty,required,rules,level_ok)
+        -- The operation standing for every one at the difficulty, false when
+        -- they differ, nil when there is none. Comparing them is most of the
+        -- set-up (about 23 KB of text per operation), so callers keep it.
+        function P.shared(operations,difficulty)
             local derived={id=true,effect_id=true,levels=true}
             local signature,sample
             for _,op in ipairs(operations)do
@@ -746,10 +753,15 @@ return function(choose_category,make_choose_mission,make_finalize)
                     local plain={levels=#op.levels}
                     for k,v in pairs(op)do if not derived[k]then plain[k]=v end end
                     local text=canon(plain)
-                    if signature and text~=signature then return nil end
+                    if signature and text~=signature then return false end
                     signature,sample=text,op
                 end
             end
+            return sample
+        end
+        function P.shared_paths(operations,difficulty,required,rules,level_ok,sample)
+            if sample==nil then sample=P.shared(operations,difficulty)end
+            if sample==false then return nil end
             if not sample then return {}end
             return P.paths(sample,required,rules,level_ok)
         end

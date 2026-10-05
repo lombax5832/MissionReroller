@@ -8,6 +8,16 @@
 -- request is one the chain cannot seed; the search then scans seeds in order.
 return function(Math,Paths,Chain,Time,Inputs)
     local R={inputs=Inputs}
+    -- Seeds sampled for the Day / Night share, and how many.
+    local SHARE_SAMPLES=2048
+    local function sampled_seed(i)return Math.output(i,3)end
+    -- Per solver inputs, the operation standing for each difficulty
+    -- (seed_solver_paths.lua P.shared): the dialog estimates every edit
+    -- from the same inputs.
+    local shared_of=setmetatable({},{__mode='k'})
+    -- Per inputs, the Day / Night shares by difficulty and passing IDs:
+    -- they do not depend on the missions requested.
+    local shares_of=setmetatable({},{__mode='k'})
     -- Walk starts for the chain's jobs: the generator's first output of
     -- successive values from a 32-bit seed.
     function R.starts(seed)
@@ -99,14 +109,27 @@ return function(Math,Paths,Chain,Time,Inputs)
         if scope and spec.daynight then
             level_ok=function(node)return spec.daynight({missions={{level_index=node}}})end
         end
+        local known=shared_of[solver]
+        if not known then known={};shared_of[solver]=known end
+        if known[difficulty]==nil then
+            local ok,sample=pcall(P.shared,operations,difficulty)
+            if not ok then return nil,tostring(sample)end
+            known[difficulty]=sample or false
+        end
         local paths={}
         for _,combo in ipairs(combinations(lists))do
-            local ok,found=pcall(P.shared_paths,operations,difficulty,combo,rules,level_ok)
+            local ok,found=pcall(P.shared_paths,operations,difficulty,combo,rules,level_ok,known[difficulty])
             if not ok then return nil,tostring(found)end
             if not found then return nil,'operations at the difficulty differ'end
             for _,path in ipairs(found)do paths[#paths+1]=path end
         end
         if #paths==0 then return nil,'no draw path'end
+        -- Linked draws make the paths' own probabilities rough.
+        for _,path in ipairs(paths)do
+            if spec.checkpoint then spec.checkpoint()end
+            path.probability=Chain.mass(path,spec.checkpoint)
+        end
+        table.sort(paths,function(a,b)return a.probability>b.probability end)
         local active=input.active
         local preserved=active and active.planet==input.planet and active.row or nil
         local rows={}
@@ -124,20 +147,38 @@ return function(Math,Paths,Chain,Time,Inputs)
             end
         end
         local accept,valid,ids
+        local shares={}
+        for i=1,#rows do shares[i]=1 end
         if spec.daynight and not scope then
-            local _
-            _,valid,ids=Time.valid_ids(operations,difficulty,spec.daynight) -- set, count, total
+            local set
+            set,valid,ids=Time.valid_ids(operations,difficulty,spec.daynight) -- set, count, total
+            -- Only city rows can match: the search scans for them.
+            if valid==0 then return nil,'no operation passes Day / Night'end
             accept=Time.accept(operations,difficulty,spec.daynight,spec.identity,input,'any')
+            local passing={}
+            for id in pairs(set)do passing[#passing+1]=id end
+            table.sort(passing)
+            local key=difficulty..':'..table.concat(passing,',')
+            local kept=shares_of[input]
+            if not kept then kept={};shares_of[input]=kept end
+            if not kept[key]then
+                local list={}
+                for i,row in ipairs(rows)do list[i]=row.row end
+                kept[key]=Time.shares(operations,difficulty,spec.daynight,spec.identity,input,list,SHARE_SAMPLES,
+                    sampled_seed,spec.checkpoint)
+            end
+            shares=kept[key]
         end
         -- Paths are disjoint outcomes of the draws, so their probabilities add.
-        local share=accept and ids>0 and valid/ids or 1
         local q=0
         for _,path in ipairs(paths)do q=q+path.probability end
-        q=math.min(1,q)*share
+        q=math.min(1,q)
+        local none,share=1,0
+        for _,s in ipairs(shares)do none=none*(1-q*s);share=share+s/#shares end
         -- The walk's solutions come in clusters, so the first candidate takes
         -- longer than independent draws would: 0.8 to 3.4 times as long on
         -- the captures' filters (tests/test_seed_solver_chain.lua).
-        local estimate={match=1-(1-q)^#rows,steps=2*Chain.expected_steps(paths,#rows,4096,share)}
+        local estimate={match=1-none,steps=2*Chain.expected_steps(paths,#rows,4096,share)}
         -- The dialog's estimate before a search needs no walks.
         if spec.estimate_only then return {paths=#paths,rows=#rows,valid=valid,ids=ids,estimate=estimate}end
         local chain=Chain.new({paths=paths,rows=rows,planet=input.planet,random=spec.random,accept=accept,

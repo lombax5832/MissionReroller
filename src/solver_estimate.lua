@@ -51,9 +51,10 @@ return function(SeedSolver)
                 constellations=request.constellations,objectives=request.objectives,scope=w.scope,
                 daynight=w.daynight,row_of=o.row_of,checkpoint=pause,estimate_only=true})
             if not source then
-                -- No path, and no other operation that could match: no seed
-                -- gives this now (a Day / Night window may open later).
-                if why=='no draw path' then
+                -- No path, or no operation ID Day / Night passes, and no
+                -- city operation that could match instead: no seed gives
+                -- this now (a Day / Night window may open later).
+                if why=='no draw path' or why=='no operation passes Day / Night' then
                     local others=false
                     if not w.scope then
                         for _,event in ipairs(cached.input.specials or {})do

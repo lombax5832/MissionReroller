@@ -39,6 +39,32 @@ return function()
         end
         return valid,count,total
     end
+    -- The share of campaign seeds whose `row` draws an ID accepts() passes,
+    -- per row of `rows`, from `samples` seeds through the identity stage:
+    -- the IDs come out unevenly (the pool's used mask, the preserved
+    -- operation's ID never drawn), so counting IDs misjudges it. seed(i)
+    -- gives the i-th sampled seed; checkpoint() is called between seeds.
+    function R.shares(operations,difficulty,accepts,identity,input,rows,samples,seed,checkpoint)
+        local ok={}
+        for _,op in ipairs(operations)do
+            if op.difficulty==difficulty then
+                local nodes=R.mission_nodes(op)
+                ok[op.id]=nodes~=nil and #nodes>0 and accepts(placed(nodes))
+            end
+        end
+        local hits={}
+        for i=1,#rows do hits[i]=0 end
+        for i=1,samples do
+            if checkpoint then checkpoint()end
+            local drawn=identity(input,seed(i))
+            for k,row in ipairs(rows)do
+                local entry=drawn[row]
+                if entry and ok[entry.id]then hits[k]=hits[k]+1 end
+            end
+        end
+        for k=1,#rows do hits[k]=hits[k]/samples end
+        return hits
+    end
     -- accept(seed, row) for seed_solver_chain.lua: the row draws an ID whose
     -- nodes accepts() passes; with scope 'all', every generated row of the
     -- difficulty does. identity(input, seed) is operation_identity.lua's.

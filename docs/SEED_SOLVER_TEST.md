@@ -99,16 +99,20 @@ ran out (not expected). Send the whole log after the session.
      holds=true`, `LUA_SEARCH_MATCH ... mode=solver`, `DAYNIGHT_VERIFIED
      row=<r> holds=true` and `PUBLICATION_STATE_VERIFIED`. Hover each
      mission: SEST shows night (before 06:00 or after 18:00).
-   - Also fine: `daynight_ids=0/<total>`: no operation of that difficulty
-     can be at night now; the search runs to its limit without a match.
-     Try DAY, or another planet.
+   - Also fine: `SEED_SOLVER_OFF reason=no operation passes Day / Night`:
+     no operation of that difficulty can be at night now. The dialog said
+     `No seed gives this now` before the search unless a city has an
+     operation at that difficulty; the scan looks for the city's and runs
+     to its limit otherwise. Try DAY, or another planet.
 7. **City.** With the cursor on a city or megafactory marker, open the
    dialog (it reads `This city or megafactory only`), check two of its
    missions, choose DAY or NIGHT and press REROLL OPERATIONS.
    - Pass: `SEED_SOLVER paths=<n> rows=1 ...`, `LUA_SEARCH_MATCH ...
      row=<30 + region*10 + difficulty - 1> ... mode=solver`, then
      `DAYNIGHT_VERIFIED holds=true` and `PUBLICATION_STATE_VERIFIED`; the
-     city's operation opens on that side.
+     city's operation opens on that side. The match comes on the first
+     candidate or nearly (`after 1 candidates`); before the audit fixes
+     about 4 in 10 candidates failed here.
    - Also fine: `SEED_SOLVER_OFF reason=no draw path`: none of the levels
      the city's missions can take is on that side now. The scan then runs
      to its limit without a match; try the other side.

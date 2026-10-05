@@ -135,6 +135,123 @@ return function(Math)
         for _,mod in ipairs(mission.mods)do p=p*(mod[3]-mod[2]+1)/mod[1]end
         return p
     end
+    -- A mission's kind draw is the first output of m + y, m the mission
+    -- seed drawn from y: the high half of A1*(m+y)+C1, which is the high
+    -- halves of A1*m+C1 and A1*y+C1 added, minus C1, minus A1's low half
+    -- when m+y wraps. So kind = t + c + delta (mod 2^32), t the mission
+    -- seed's first draw (a tag or objective draw), c the operation's first
+    -- draw (template and first category), delta one of six values: a carry
+    -- of 0, 1 or 2 from the low halves, times wrapping or not.
+    local DELTAS={}
+    do
+        local minus=0ULL-C1
+        local high=tonumber(bit.rshift(minus,32))
+        local u=tonumber(bit.band(minus,0xffffffffULL))/M32
+        local low_a=tonumber(bit.band(A1,0xffffffffULL))
+        local carry={(1-u)^2/2,0,u^2/2}
+        carry[2]=1-carry[1]-carry[3]
+        for e=0,2 do
+            for w=0,1 do DELTAS[#DELTAS+1]={(high+e-w*low_a)%M32,carry[e+1]/2}end
+        end
+    end
+    R.DELTAS=DELTAS
+    -- Length of [lo, hi] inside the cyclic interval of `width` values from start.
+    local function cyclic_overlap(lo,hi,start,width)
+        local function plain(a,b)
+            local l,h=math.max(lo,a),math.min(hi,b)
+            return h>=l and h-l+1 or 0
+        end
+        local stop=start+width-1
+        if stop<M32 then return plain(start,stop)end
+        return plain(start,M32-1)+plain(0,stop-M32)
+    end
+    local SAMPLES=256
+    -- A linked mission's share of mission seeds at each of SAMPLES values
+    -- of c in [clo, chi]: the kind draw in [klo, khi] and the mission
+    -- constraint met. checkpoint() is called every 16 values.
+    local linked_cache=setmetatable({},{__mode='k'})
+    local function linked(mission,klo,khi,clo,chi,checkpoint)
+        local list=mission.alternatives or {mission}
+        local by=linked_cache[list]
+        if not by then by={};linked_cache[list]=by end
+        local key=klo..':'..khi..':'..clo..':'..chi
+        if by[key]then return by[key]end
+        -- Alternatives grouped by their first-draw interval, with the
+        -- probability of everything else they require.
+        local groups,order={},{}
+        for _,a in ipairs(list)do
+            local d=a.draws[1]
+            local tlo,thi=d and d[1] or 0,d and d[2] or M32-1
+            local p=1
+            for q,r in pairs(a.draws)do if q~=1 then p=p*(r[2]-r[1]+1)/M32 end end
+            for _,mod in ipairs(a.mods)do p=p*(mod[3]-mod[2]+1)/mod[1]end
+            local g=tlo..':'..thi
+            if not groups[g]then groups[g]={tlo,thi,0};order[#order+1]=groups[g]end
+            groups[g][3]=groups[g][3]+p
+        end
+        local width=khi-klo+1
+        local values={}
+        local step=(chi-clo+1)/SAMPLES
+        for i=1,SAMPLES do
+            if i%16==0 then checkpoint()end
+            local c=math.floor(clo+(i-0.5)*step)
+            local sum=0
+            for _,g in ipairs(order)do
+                local hit=0
+                for _,d in ipairs(DELTAS)do
+                    -- t with t + c + delta in [klo, khi].
+                    hit=hit+d[2]*cyclic_overlap(g[1],g[2],(klo-c-d[1])%M32,width)
+                end
+                sum=sum+g[3]*hit/M32
+            end
+            values[i]=sum
+        end
+        by[key]=values
+        return values
+    end
+    -- The probability of a path on a random operation seed: constraints on
+    -- the same draw intersect, and missions whose kind draw and first
+    -- mission draw are both constrained are integrated over c.
+    -- checkpoint, optional, is called often while it works.
+    function R.mass(path,checkpoint)
+        checkpoint=checkpoint or function()end
+        local at,missions={},{}
+        for _,s in ipairs(path.constraints)do
+            if s.kind=='mission' then missions[#missions+1]=s
+            else
+                local r=at[s.position]
+                if r then at[s.position]={math.max(r[1],s.lo),math.min(r[2],s.hi)}
+                else at[s.position]={s.lo,s.hi}end
+            end
+        end
+        local p=1
+        for position,r in pairs(at)do
+            if r[2]<r[1]then return 0 end
+            if position~=1 then p=p*(r[2]-r[1]+1)/M32 end
+        end
+        local c=at[1] or {0,M32-1}
+        local curves={}
+        for _,s in ipairs(missions)do
+            local both=false
+            if s.lo and s.mission then
+                for _,a in ipairs(s.mission.alternatives or {s.mission})do if a.draws[1]then both=true;break end end
+            end
+            if both then curves[#curves+1]=linked(s.mission,s.lo,s.hi,c[1],c[2],checkpoint)
+            else
+                p=p*(s.lo and (s.hi-s.lo+1)/M32 or 1)*(s.mission and mission_mass(s.mission) or 1)
+            end
+        end
+        local share=(c[2]-c[1]+1)/M32
+        if #curves==0 then return p*share end
+        local sum=0
+        for i=1,SAMPLES do
+            local v=1
+            for _,curve in ipairs(curves)do v=v*curve[i]end
+            sum=sum+v
+        end
+        return p*share*sum/SAMPLES
+    end
+
     -- The mission-stream draw to walk for a mission constraint: the
     -- narrowest one every alternative constrains (the hull of their
     -- intervals), and the share of its solutions that pass the rest; nil
