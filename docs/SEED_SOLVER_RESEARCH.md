@@ -471,6 +471,41 @@ long` once a search has taken twice its estimate).
   `SEED_SOLVER` line in every solved case (night, day and the city
   included), worked out in 6 to 79 slices of 4 ms from cold inputs.
 
+### Excluded side objectives, 2026-10-04
+
+The in-game test of the estimate found a search for three missions, each
+with an enemy force and Lidar Station and SEAF Artillery excluded, at day
+on planet 268: estimated 1 in 100,622 seeds and under a second, it ran 51 s
+and 40.8 million walk steps, and none of its 148 candidates matched. The
+draw walk for side objectives (`draw_walk`, ported from the prototype)
+constrained only required rows and stopped once they were drawn; excluded
+rows were left to the forward check, as the prototype's docstring says.
+For the chain that check is the predictor, so the paths took no exclusion
+into account: their probability, the estimate and the candidates were all
+as if the exclusions were absent. Reproduced on planet 173: one mission
+excluding both objectives gave 3 matches in 30 candidates, three missions
+none.
+
+- **Exact exclusions.** The walk now continues while a pool left can still
+  draw an excluded row and drops every draw that gives one.
+- **Alternatives.** That leaves many constraint sets per mission (each
+  acceptable sequence of draws). A mission step now holds them as
+  `alternatives` instead of a path each, which would multiply across
+  missions; `mission_ok` passes when one does, and the walk's root is the
+  narrowest draw all alternatives constrain, over the hull of their
+  intervals.
+- **Python.** The prototype is unchanged; `test_seed_solver_paths.lua`
+  builds the comparison with `ignore_exclusions` and expands the
+  alternatives, so the 3,922 paths still match exactly.
+
+`test_seed_solver_chain.lua` adds filters from the capture's board: 84
+excluding both objectives (1 in 8, 203 of 2,000 random seeds against 249
+predicted) and 84, 65 and 59 each with its enemy force and both exclusions
+(1 in 75,884), with night and day variants: every candidate matched, 0.28 s
+per seed offline for the three missions. A filter of the Python set that
+was walked through 3,999 steps per seed now takes 102, its root chosen
+over the grouped alternatives.
+
 ## Next steps, if pursued
 
 1. The in-game test ([SEED_SOLVER_TEST.md](SEED_SOLVER_TEST.md)).

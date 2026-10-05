@@ -9,7 +9,10 @@
 --       starts at (m + y) mod 2^32 (lo, hi nil when the kind is forced), and
 --       mission = {draws={[p]={lo,hi}}, mods={{modulus,lo,hi}}} constrains
 --       the stream started at m (enemy tags, side objectives) and the
---       environment's state m*A+C modulo its weight totals.
+--       environment's state m*A+C modulo its weight totals; or mission =
+--       {alternatives={{draws, mods, probability}, ...}}, any one of them.
+-- Excluded side objectives are constrained too: the draws continue while a
+-- pool left can still draw one.
 -- Template, category and kind draws run the real choice modules on a stub
 -- generator that returns one output; enemy-tag and side-objective draws are
 -- walked step by step (ports of constellation_prediction.lua and
@@ -454,34 +457,46 @@ return function(choose_category,make_choose_mission,make_finalize)
             return true
         end
         local function union(a,b)local r=copy(a);for k in pairs(b)do r[k]=true end;return r end
+        -- Whether entries 1..n of a pool give a row of set.
+        local function gives(list,n,role,set)
+            if not next(set)then return false end
+            local ids={}
+            for i=1,n do ids[#ids+1]={list[i].id,role}end
+            for r in pairs(O.rows(ids))do if set[r]then return true end end
+            return false
+        end
         -- Walk the side (3) then tactical (2) pools' draws until every
-        -- required row is drawn.
-        local function draw_walk(pools,left,roles,rows,need,position,draws,out,state)
-            if covers(need,rows)then out[#out+1]=draws;return end
+        -- required row is drawn and no pool left can draw an excluded row
+        -- (avoid); a draw of an excluded row ends its branch.
+        local function draw_walk(pools,left,roles,rows,need,avoid,position,draws,out,state)
+            if covers(need,rows)then
+                local open=state and state.remaining~=0 and gives(state.list,state.n,state.role,avoid)
+                for _,role in ipairs(state and state.rest or roles)do
+                    if open then break end
+                    open=left[role]~=0 and gives(pools[role],#pools[role],role,avoid)
+                end
+                if not open then out[#out+1]=draws;return end
+            end
             if not state then
                 if #roles==0 then return end -- pools exhausted without every required row
                 local role=roles[1]
                 local rest={unpack(roles,2)}
                 local list=copies(pools[role])
-                local holds=false
-                local ids={}
-                for _,e in ipairs(list)do ids[#ids+1]={e.id,role}end
-                for r in pairs(O.rows(ids))do if need[r]then holds=true;break end end
-                if not holds then
-                    -- Nothing required comes from this pool: only its draw count matters.
+                if not gives(list,#list,role,need) and not gives(list,#list,role,avoid)then
+                    -- Nothing required or excluded comes from this pool: only its draw count matters.
                     for _,spent in ipairs(sorted_keys(role_counts(list,left[role])))do
-                        draw_walk(pools,left,rest,rows,need,position+spent,draws,out)
+                        draw_walk(pools,left,rest,rows,need,avoid,position+spent,draws,out)
                     end
                     return
                 end
-                if #list==0 then return draw_walk(pools,left,rest,rows,need,position,draws,out)end
+                if #list==0 then return draw_walk(pools,left,rest,rows,need,avoid,position,draws,out)end
                 state={role=role,rest=rest,list=list,n=#list,mask=0,remaining=left[role]}
             end
-            if state.remaining==0 then return draw_walk(pools,left,state.rest,rows,need,position,draws,out)end
+            if state.remaining==0 then return draw_walk(pools,left,state.rest,rows,need,avoid,position,draws,out)end
             local list=copies(state.list)
             local n=O.draw_step(list,state.n,state.mask)
             if n==0 then -- the draw is spent and the pool ends
-                return draw_walk(pools,left,state.rest,rows,need,position+1,draws,out)
+                return draw_walk(pools,left,state.rest,rows,need,avoid,position+1,draws,out)
             end
             for _,part in ipairs(partition(function(o)return O.draw_pick(list,n,o) or 'none' end))do
                 local d=merge(draws,{[position]={part.first,part.last}})
@@ -489,11 +504,16 @@ return function(choose_category,make_choose_mission,make_finalize)
                     local l2=copies(list)
                     local emitted={}
                     local n2,mask2,rem2=O.draw_apply(l2,n,part.key,state.mask,state.remaining,emitted)
-                    local new=union(rows,O.rows(emitted))
-                    if n2==0 then draw_walk(pools,left,state.rest,new,need,position+1,d,out)
-                    else
-                        draw_walk(pools,left,nil,new,need,position+1,d,out,
-                            {role=state.role,rest=state.rest,list=l2,n=n2,mask=mask2,remaining=rem2})
+                    local drawn=O.rows(emitted)
+                    local excluded=false
+                    for r in pairs(drawn)do if avoid[r]then excluded=true;break end end
+                    if not excluded then
+                        local new=union(rows,drawn)
+                        if n2==0 then draw_walk(pools,left,state.rest,new,need,avoid,position+1,d,out)
+                        else
+                            draw_walk(pools,left,nil,new,need,avoid,position+1,d,out,
+                                {role=state.role,rest=state.rest,list=l2,n=n2,mask=mask2,remaining=rem2})
+                        end
                     end
                 end
             end
@@ -507,12 +527,15 @@ return function(choose_category,make_choose_mission,make_finalize)
             local left,pools=O.emit_minimums(s,emitted)
             local rows=O.rows(emitted)
             for r in pairs(rows)do if avoid[r]then return {}end end -- a fixed objective is excluded
+            -- The Python prototype leaves excluded rows to its forward check;
+            -- tests/test_seed_solver_paths.lua compares paths built that way.
+            if planet.ignore_exclusions then avoid={}end
             local offered={}
             for _,role in ipairs({3,2})do for _,e in ipairs(pools[role])do offered[#offered+1]={e.id,role}end end
             if not covers(need,union(rows,O.rows(offered)))then return {}end -- never drawn here
             local out={}
             for _,count in ipairs(sorted_keys(substep_counts(s)))do
-                draw_walk(pools,left,{3,2},rows,need,count+1,{},out)
+                draw_walk(pools,left,{3,2},rows,need,avoid,count+1,{},out)
             end
             return out
         end
@@ -577,7 +600,17 @@ return function(choose_category,make_choose_mission,make_finalize)
                 if not wanted or not rule then return {{wanted,nil,1}}end
                 missions[kind]=missions[kind] or P.mission_paths(op,kind,rule)
                 local list={}
-                for _,mp in ipairs(missions[kind])do list[#list+1]={true,{draws=mp.draws,mods=mp.mods},mp.probability}end
+                local found=missions[kind]
+                if #found==1 then
+                    list[1]={true,{draws=found[1].draws,mods=found[1].mods},found[1].probability}
+                elseif #found>1 then
+                    -- The mission's constraint sets are disjoint alternatives:
+                    -- one step holding them all, not a path for each (three
+                    -- missions with excluded objectives would multiply them).
+                    local total=0
+                    for _,mp in ipairs(found)do total=total+mp.probability end
+                    list[1]={true,{alternatives=found},total}
+                end
                 list[#list+1]={false,nil,1} -- the slot may hold the kind without meeting its rules
                 return list
             end

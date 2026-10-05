@@ -204,8 +204,35 @@ local function solve(f)
     return #found
 end
 
+-- Excluded side objectives, which the Python prototype leaves to its
+-- forward check: filters from the capture's board, each mission excluding
+-- the two most common side objectives (and accepting its own enemy force).
+-- Every candidate must match.
+local filters={}
+for _,f in ipairs(expected.filters)do filters[#filters+1]=f end
+if solver.seeded then
+    local names=C.SideObjectives.names
+    local avoid={}
+    for row,name in pairs(names)do if name=='Lidar Station' or name=='SEAF Artillery' then avoid[row]='exclude' end end
+    local op
+    for _,o in ipairs(C.board_of(C.case.seed))do
+        if o.row<30 and o.row~=preserved and #o.missions>=3 and o.missions[1][4] and (not op or o.difficulty>op.difficulty)then op=o end
+    end
+    if op and next(avoid)then
+        local kinds,rules={},{}
+        for i=1,3 do
+            local m=op.missions[i]
+            kinds[i]=m[1]
+            rules[m[1]]={tags=m[4] and m[4][1] and {[m[4][1]]='accept'} or nil,objectives=avoid}
+        end
+        filters[#filters+1]={name=kinds[1]..' excluding Lidar Station and SEAF Artillery',difficulty=op.difficulty,
+            required={kinds[1]},rules={[kinds[1]]={objectives=avoid}},scope='any',all_match=true}
+        filters[#filters+1]={name=table.concat(kinds,', ')..', each with its enemy force and those exclusions',
+            difficulty=op.difficulty,required=kinds,rules=rules,scope='any',all_match=true}
+    end
+end
 local solved=0
-for _,f in ipairs(expected.filters)do
+for _,f in ipairs(filters)do
     solved=solved+(solve(f) or 0)
     if f.scope=='any' then
         for _,side in ipairs({'night','day'})do

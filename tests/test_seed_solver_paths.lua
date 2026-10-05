@@ -53,7 +53,30 @@ if solver.seeded then
     end
 end
 
--- 2. Draw paths against the Python prototype's.
+-- 2. Draw paths against the Python prototype's, which leaves excluded side
+-- objectives to its forward check and lists each of a mission's constraint
+-- sets as its own path.
+local Legacy=Paths.new({records=solver.records,row_of=C.SideObjectives.row_of,disabled_tags=solver.disabled_tags,
+    ignore_exclusions=true})
+local function expand(path)
+    local out={{}}
+    for _,s in ipairs(path.constraints)do
+        local options={s}
+        if s.mission and s.mission.alternatives then
+            options={}
+            for i,a in ipairs(s.mission.alternatives)do
+                options[i]={kind=s.kind,position=s.position,lo=s.lo,hi=s.hi,mission={draws=a.draws,mods=a.mods}}
+            end
+        end
+        local grown={}
+        for _,prefix in ipairs(out)do
+            for _,o in ipairs(options)do local c={unpack(prefix)};c[#c+1]=o;grown[#grown+1]=c end
+        end
+        out=grown
+    end
+    for i,c in ipairs(out)do out[i]={constraints=c}end
+    return out
+end
 local function text(path)
     local parts={}
     for _,s in ipairs(path.constraints)do
@@ -74,9 +97,9 @@ local function text(path)
 end
 local compared=0
 for _,f in ipairs(expected.filters)do
-    local paths=assert(P.shared_paths(solver.operations,f.difficulty,f.required,f.rules),'paths differ by operation ID')
+    local paths=assert(Legacy.shared_paths(solver.operations,f.difficulty,f.required,f.rules),'paths differ by operation ID')
     local got={}
-    for i,path in ipairs(paths)do got[i]=text(path)end
+    for _,path in ipairs(paths)do for _,one in ipairs(expand(path))do got[#got+1]=text(one)end end
     table.sort(got)
     local want={unpack(f.paths)}
     table.sort(want)

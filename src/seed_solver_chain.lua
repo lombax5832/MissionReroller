@@ -16,8 +16,15 @@ return function(Math)
     local output=Math.output
     local M32=2^32
     local R={}
+    local mission_root
 
     local function mission_ok(m,mission)
+        if mission.alternatives then
+            for _,alternative in ipairs(mission.alternatives)do
+                if mission_ok(m,alternative)then return true end
+            end
+            return false
+        end
         for p,r in pairs(mission.draws)do
             local o=output(m,p)
             if o<r[1] or o>r[2]then return false end
@@ -47,6 +54,41 @@ return function(Math)
     end
     R.mission_ok,R.path_ok=mission_ok,path_ok
 
+    -- The probability of a mission constraint.
+    local function mission_mass(mission)
+        if mission.alternatives then
+            local sum=0
+            for _,alternative in ipairs(mission.alternatives)do sum=sum+mission_mass(alternative)end
+            return sum
+        end
+        local p=1
+        for _,d in pairs(mission.draws)do p=p*(d[2]-d[1]+1)/M32 end
+        for _,mod in ipairs(mission.mods)do p=p*(mod[3]-mod[2]+1)/mod[1]end
+        return p
+    end
+    -- The mission-stream draw to walk for a mission constraint: the
+    -- narrowest one every alternative constrains (the hull of their
+    -- intervals), and the share of its solutions that pass the rest; nil
+    -- when no draw is common to all.
+    function mission_root(mission)
+        local list=mission.alternatives or {mission}
+        local hull
+        for i,alternative in ipairs(list)do
+            local next_hull={}
+            for q,d in pairs(alternative.draws)do
+                if i==1 then next_hull[q]={d[1],d[2]}
+                elseif hull[q]then next_hull[q]={math.min(hull[q][1],d[1]),math.max(hull[q][2],d[2])}end
+            end
+            hull=next_hull
+        end
+        local p,r
+        for q,d in pairs(hull or {})do
+            if not r or d[2]-d[1]<r[2]-r[1] or (d[2]-d[1]==r[2]-r[1] and q<p)then p,r=q,d end
+        end
+        if not p then return nil end
+        return p,r,math.min(1,mission_mass(mission)/((r[2]-r[1]+1)/M32))
+    end
+
     -- The root of a path: the draw leaving the fewest candidates to invert.
     -- {kind='mission', step=n, position, lo, hi} walks mission seeds,
     -- {kind='stream', position, lo, hi} operation seeds; nil scans every y.
@@ -57,16 +99,10 @@ return function(Math)
             if s.kind~='mission' then
                 -- Every root solution is a y to check: weight it like an inversion.
                 option,c={kind='stream',position=s.position,lo=s.lo,hi=s.hi},(s.hi-s.lo+1)*8
-            elseif s.mission and next(s.mission.draws)then
-                local p,r
-                for q,d in pairs(s.mission.draws)do
-                    if not r or d[2]-d[1]<r[2]-r[1] or (d[2]-d[1]==r[2]-r[1] and q<p)then p,r=q,d end
-                end
-                local rest=1
-                for q,d in pairs(s.mission.draws)do if q~=p then rest=rest*(d[2]-d[1]+1)/M32 end end
-                for _,mod in ipairs(s.mission.mods)do rest=rest*(mod[3]-mod[2]+1)/mod[1]end
+            elseif s.mission then
+                local p,r,rest=mission_root(s.mission)
                 -- Root solutions cost one cheap check; survivors cost an inversion.
-                option,c={kind='mission',step=n,position=p,lo=r[1],hi=r[2]},(r[2]-r[1]+1)*(1+8*rest)
+                if p then option,c={kind='mission',step=n,position=p,lo=r[1],hi=r[2]},(r[2]-r[1]+1)*(1+8*rest)end
             end
             if option and (not cost or c<cost)then best,cost=option,c end
         end
