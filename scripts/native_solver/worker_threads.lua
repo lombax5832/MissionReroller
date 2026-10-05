@@ -27,6 +27,7 @@ uint32_t WaitForMultipleObjects(uint32_t n, void *const *handles, int all, uint3
 int CloseHandle(void *h);
 int TrySubmitThreadpoolCallback(void *callback, void *context, void *environment);
 void Sleep(uint32_t ms);
+void *CreateEventA(void *attributes, int manual, int initial, const char *name);
 typedef struct { void *base; void *alloc_base; uint32_t alloc_protect; uint16_t partition; size_t size;
     uint32_t state; uint32_t protect; uint32_t type; } MEMORY_BASIC_INFORMATION;
 size_t VirtualQuery(const void *address, MEMORY_BASIC_INFORMATION *info, size_t length);
@@ -137,7 +138,7 @@ print(string.format('main VM (game lua51.dll, %s): %d jobs, %d steps in %.3f s =
 
 -- The worker: its own VM, given module sources, the paths and its jobs.
 local WORKER=[==[
-local math_source,chain_source,paths_text,jobs,planet,limit,out,done_address,index,peak_address=...
+local math_source,chain_source,paths_text,jobs,planet,limit,out,done_address,index,peak_address,event_address=...
 local ffi=require('ffi')
 local Math=assert(loadstring(math_source,'=seed_solver_math.lua'))()
 local Chain=assert(loadstring(chain_source,'=seed_solver_chain.lua'))()(Math)
@@ -169,7 +170,10 @@ end)
 -- The same work as a thread-pool callback: the thread starts in ntdll and
 -- calls it; it raises its done flag when finished.
 local done=ffi.cast('volatile int32_t *',done_address)
-WORKER_POOL_ENTRY=ffi.cast('void (__stdcall *)(void *, void *)',function()
+ffi.cdef[[void SetEventWhenCallbackReturns(void *instance, void *event);]]
+WORKER_POOL_ENTRY=ffi.cast('void (__stdcall *)(void *, void *)',function(instance)
+    -- Set once the callback has returned: only then may the VM be closed.
+    ffi.C.SetEventWhenCallbackReturns(instance,ffi.cast('void *',event_address))
     local ok,err=pcall(body)
     if not ok then WORKER_ERROR=tostring(err)end
     done[index]=ok and 1 or 2
@@ -185,6 +189,8 @@ for threads in counts:gmatch('%d+')do
     threads=tonumber(threads)
     local results=ffi.new('double[?]',#jobs*3+3)
     local done=ffi.new('int32_t[?]',threads)
+    local events=ffi.new('void *[?]',threads)
+    for t=0,threads-1 do events[t]=C.CreateEventA(nil,1,0,nil)end
     local peaks=ffi.new('double[?]',threads)
     local low_before,used_before=low_memory()
     local states,handles={},ffi.new('void *[?]',threads)
@@ -199,8 +205,8 @@ for threads in counts:gmatch('%d+')do
         assert(L~=nil,'luaL_newstate failed')
         C.luaL_openlibs(L)
         -- The worker chunk with its arguments bound as a prelude.
-        local prelude=string.format('local args={%q,%q,%q,%s,%d,%d,%.17g,%.17g,%d,%.17g}\nreturn (function(...)\n',
-            math_source,chain_source,paths_text,text(mine),Cap.planet,limit,tonumber(ffi.cast('intptr_t',results)),tonumber(ffi.cast('intptr_t',done)),t-1,tonumber(ffi.cast('intptr_t',peaks)))
+        local prelude=string.format('local args={%q,%q,%q,%s,%d,%d,%.17g,%.17g,%d,%.17g,%.17g}\nreturn (function(...)\n',
+            math_source,chain_source,paths_text,text(mine),Cap.planet,limit,tonumber(ffi.cast('intptr_t',results)),tonumber(ffi.cast('intptr_t',done)),t-1,tonumber(ffi.cast('intptr_t',peaks)),tonumber(ffi.cast('intptr_t',events[t-1])))
         local chunk=prelude..WORKER..'\nend)(unpack(args))'
         check(L,C.luaL_loadbuffer(L,chunk,#chunk,'=worker'),'worker load')
         check(L,C.lua_pcall(L,0,2,0),'worker setup')
@@ -219,13 +225,15 @@ for threads in counts:gmatch('%d+')do
     local t1=now()
     if start=='pool' then
         for t=1,threads do assert(C.TrySubmitThreadpoolCallback(states[t].pool,nil,nil)~=0,'TrySubmitThreadpoolCallback failed')end
-        -- Polled as the mod would poll once a frame.
+        -- The done flags say the work is over; the events, set by the pool
+        -- once each callback has returned, say the VMs may be closed.
         local finished=0
         while finished<threads do
             C.Sleep(1)
             finished=0
             for t=0,threads-1 do if done[t]~=0 then finished=finished+1 end end
         end
+        C.WaitForMultipleObjects(threads,events,1,0xffffffff)
     else
         for t=1,threads do
             handles[t-1]=C.CreateThread(nil,0,states[t].entry,nil,0,nil)
@@ -239,6 +247,7 @@ for threads in counts:gmatch('%d+')do
     for t=1,threads do
         after_kb=after_kb+C.lua_gc(states[t].L,3,0)
         if start~='pool' then C.CloseHandle(handles[t-1])end
+        C.CloseHandle(events[t-1])
         C.lua_close(states[t].L)
     end
     collectgarbage()

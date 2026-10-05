@@ -199,10 +199,12 @@ main thread keeps only set-up, candidate boards and publication.
 
 1. Ship the double inverter (on this branch): 1.3 to 2.3 times the walk
    with no other change.
-2. An in-game probe, as a research build: one thread-pool worker VM that
-   counts for ten seconds, logs from the main VM, and is stopped and closed
-   on `shutdown`. Its test plan names the log lines; the user runs it and
-   watches for any GameGuard reaction.
+2. The in-game probe: `scripts/native_solver/worker_probe.lua`, built by
+   `build_worker_probe.py` as the separate Worker Thread Probe addon and
+   checked by `tests/test_worker_probe.py` (in the workspace LuaJIT and in
+   the game's `lua51.dll`). It runs three scheduled runs of thread-pool
+   worker VMs (1, 4, then 1 until shutdown) with the memory scan, and joins
+   them at shutdown. Test plan: [WORKER_PROBE_TEST.md](WORKER_PROBE_TEST.md).
 3. If the probe is clean, move the chain's walk into worker VMs:
    candidates go back to the main VM to be predicted and confirmed as now.
 4. Keep native C out of the mod. `solver_bench.c` stays as the bound for

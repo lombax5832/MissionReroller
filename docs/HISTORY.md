@@ -14,7 +14,9 @@ threads can walk on several cores: in the game's own `lua51.dll`, offline,
 12 workers ran 8 to 14 times one VM with identical candidates. The lattice
 inverter now runs in doubles instead of boxed int64, 1.3 to 2.3 times the
 walk; not yet validated in game. Measurements, risks and next steps:
-[NATIVE_SOLVER_RESEARCH.md](NATIVE_SOLVER_RESEARCH.md).
+[NATIVE_SOLVER_RESEARCH.md](NATIVE_SOLVER_RESEARCH.md). The Worker Thread Probe, a
+separate research addon, tests worker VMs and the memory below 2 GB in game;
+not yet run ([WORKER_PROBE_TEST.md](WORKER_PROBE_TEST.md)).
 
 **Not yet validated in game: v0.34.0 seed solver search.** Searches
 with mission, enemy force, side objective or Day / Night rules now take
