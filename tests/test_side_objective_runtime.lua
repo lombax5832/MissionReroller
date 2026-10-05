@@ -44,7 +44,7 @@ local binders={}
 local host={emit=function(s)logs[#logs+1]=s end,read=read,pointer=pointer,u=u,O=O,
     reroll_session={view=function()return {running=running}end},map={on_top=function()return on_top end},
     when_initialized=function(bind)binders[#binders+1]=bind end}
-local lib={SideObjectives=SideObjectives,Planet={bind=function(_,_,_,_,b,planet)assert(b==board and planet==268);return model end}}
+local lib={SideObjectives=SideObjectives,Board=H.board(src),Planet={bind=function(_,_,_,_,b,planet)assert(b==board and planet==268);return model end}}
 local chunk=assert(loadfile(src..'/side_objective_runtime.lua'))
 local env=setmetatable({host=host,lib=lib,hooks={}},{__index=_G,__newindex=function(_,k)error('global '..k)end})
 setfenv(chunk,env)

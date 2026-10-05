@@ -273,9 +273,9 @@ local function snapshot(viewed_planet)
     page(b+O.board.owner_count,4,0x20000,'board.owner_count')
     local canonical=read(b+O.board.seed,96)
     if canonical:sub(1,4)~=read(b+O.board.published_seed,4) then return nil,'waiting for seed publication' end
-    local mc=u(read(b+O.board.mission_count,4),0); assert(mc<=330,'mission count overflow')
-    local ops=read(b+O.board.operations,110*92)
-    local missions=read(b+O.board.missions,mc*76)
+    local mc=u(read(b+O.board.mission_count,4),0); assert(mc<=Board.MISSION_LIMIT,'mission count overflow')
+    local ops=read(b+O.board.operations,Board.OPERATIONS*Board.OPERATION_SIZE)
+    local missions=read(b+O.board.missions,mc*Board.MISSION_SIZE)
     assert(pointer(game+O.rva.board)==b and pointer(game+O.rva.session)==session,'root changed')
     -- The core decoder's first word denotes the buffer's planet. Normalize only
     -- this local decoder input; retain the raw selection in the stability key.
@@ -286,7 +286,7 @@ local function snapshot(viewed_planet)
         board=b,selection=selection,operations=ops,missions=missions,planet=planet,seed=u(canonical,0),active=hex(canonical:sub(5)),sc=sc,dc=dc,union=union}
 end
 -- Runtime host: what the runtimes may use of the adapter. build_identity_probe
--- wraps this file as function(core,config,make_map_screen,offsets,O,sha256)
+-- wraps this file as function(core,config,make_map_screen,offsets,O,sha256,Board)
 -- and passes the table to each runtime.
 return {M=M,config=config,emit=emit,hex=hex,u=u,read=read,pointer=pointer,page=page,participants=participants,
     snapshot=snapshot,initialize=initialize,map=map_screen,O=O,verify_code=verify_code,

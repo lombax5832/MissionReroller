@@ -1,7 +1,8 @@
 -- The dialog's Filters and view model, plain tables in and out.
 -- Usage: luajit tests/test_filter_request.lua <src folder>
 local root=arg[1]
-local R=dofile(root..'/filter_request.lua');local C=dofile(root..'/filter_catalogue.lua')
+local Rules=dofile(root..'/filter_rules.lua')
+local R=assert(loadfile(root..'/filter_request.lua'))(nil,Rules);local C=dofile(root..'/filter_catalogue.lua')
 local compatibility=dofile(root..'/mission_compatibility.lua');local options=dofile(root..'/search_session.lua').options
 local labels={[2]='Constellation 2 (Tag2)',[9]='Predator Strain (Tag9)'}
 local spores,gunships=0x1101e25c,0xf6f1b0c7
@@ -65,7 +66,7 @@ do
     -- Excluding a mission the request requires, or one every operation
     -- holds, or one not offered here, is refused by validation.
     local function refused(required,excluded,why)
-        local ok,err=pcall(C.validate,terminids,required,{},nil,nil,excluded)
+        local ok,err=pcall(C.validate,terminids,{required=required,excluded=excluded})
         assert(not ok and tostring(err):find(why,1,true),tostring(err))
     end
     refused({[2]=true},{[2]=true},'A mission cannot be both required and excluded')
@@ -73,12 +74,12 @@ do
     refused({},{[1]=true},'Excluded mission is unavailable on this planet/difficulty')
     refused({},{[2]='exclude'},'Excluded mission is unavailable on this planet/difficulty')
     refused({[9]=true},{[2]=true,[4]=true},'Incompatible')
-    C.validate(terminids,{},{},nil,nil,{[9]=true})
-    C.validate(terminids,{[4]=true},{},nil,nil,{[2]=true})
+    C.validate(terminids,{required={},excluded={[9]=true}})
+    C.validate(terminids,{required={[4]=true},excluded={[2]=true}})
     -- Without compatibility data, excluding every mission offered is still refused.
-    local possible,why=C.possible(automatons,{},{},nil,{[4]=true})
+    local possible,why=C.possible(automatons,{required={},excluded={[4]=true}})
     assert(not possible and why=='Every mission here is excluded')
-    assert(not pcall(C.validate,automatons,{},{},nil,nil,{[4]=true}))
+    assert(not pcall(C.validate,automatons,{required={},excluded={[4]=true}}))
     local alone=R.new(options,C,labels);alone:toggle(4,automatons);alone:toggle(4,automatons)
     assert(not alone.selected[4] and not alone.excluded[4],'The only mission here cannot be excluded')
 end
@@ -297,7 +298,7 @@ m=t:model(terminids,fresh({sky={blocked='ignored'}}))
 assert(m.status=='Choose what the operation must contain' and not m.time_sky,'Any time ignores the sky')
 edit(t,'time:day',2);assert(t:rule_count()==2)
 edit(t,'clear');assert(t.time==nil and t:rule_count()==0,'Clear resets the time of day')
-assert(not pcall(C.validate,terminids,{},{},nil,'dusk'),'Only day or night')
+assert(not pcall(C.validate,terminids,{required={},time='dusk'}),'Only day or night')
 -- Side objectives: per checked mission or the operation, cycling any,
 -- required, excluded; a mode the catalogue rules out is skipped.
 do

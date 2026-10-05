@@ -6,6 +6,7 @@ local map,write=host.map,host.write
 local snapshot,participants,verify_code,O=host.snapshot,host.participants,host.verify_code,host.O
 local Search,make_publication,make_ui_selection=lib.Search,lib.make_publication,lib.make_ui_selection
 local verify_predicted_board,DayNight=lib.verify_predicted_board,lib.DayNight
+local Board=lib.Board
 local api,game,ffi
 host.when_initialized(function(n)api,game,ffi=n.api,n.game,n.ffi end)
 local on_existing_match,on_search_match,advance_live_publication
@@ -74,7 +75,7 @@ local function select_match(s)
     assert(read(s.board+O.board.selection_context,8)==s.selection:sub(1,8),'Planet fields changed during selection')
     assert(u(read(s.board+O.board.selected_row,4),0)==candidate.row,'Native selection rejected')
     assert(u(read(s.board+O.board.selected_mission,4),0)==4294967295,'Mission unexpectedly selected')
-    assert(hex(read(s.board+O.board.active_operation,92))==s.active,'Active operation changed on selection')
+    assert(hex(read(s.board+O.board.active_operation,Board.OPERATION_SIZE))==s.active,'Active operation changed on selection')
     selector={started=api.time(),context=s.context,planets=s.selection:sub(1,8)}
     emit('PREDICTION_VERIFIED selected_row='..candidate.row..' active_preserved=true')
 end
@@ -97,8 +98,8 @@ end
 on_search_match=function(job,now)
     if publication_used and not M.dialog_enabled then reroll_session.finish('publication_blocked');emit('PUBLICATION_BLOCKED one publication per test session; restart to test again');return end
     local s=job.baseline;local match=job.operation
-    candidate={seed=job.seed,planet=s.planet,row=match.row,difficulty=match.difficulty,operation_seed=match.seed,operations=job.operations,required=job.required or {[1]=true,[2]=true,[3]=true},excluded=job.excluded,modifiers=job.modifiers,
-        constellations=job.constellations,objectives=job.objectives,scope=job.scope,daynight=job.daynight}
+    candidate={seed=job.seed,planet=s.planet,row=match.row,difficulty=match.difficulty,operation_seed=match.seed,operations=job.operations,
+        rules=job.rules or {required={[1]=true,[2]=true,[3]=true}},scope=job.scope,daynight=job.daynight}
     transaction=make_publication({
         preflight=function(before,e)
             local current,reason=snapshot(true)
@@ -116,7 +117,7 @@ on_search_match=function(job,now)
             assert(ok,'Map click signature changed: '..tostring(err))
             -- A day/night match must hold for the whole buffer from the write.
             local daynight=e.daynight and function(op)return e.daynight.confirm(op,DayNight.war_time(read,before.board))end
-            assert(Search.find({operations=e.operations},e.difficulty,e.required,e.modifiers,e.constellations,e.scope,daynight,e.excluded,e.objectives),'Predicted filter no longer matches')
+            assert(Search.find({operations=e.operations},e.difficulty,e.rules,e.scope,daynight),'Predicted filter no longer matches')
             before.owner_guard=ownership(before.board)
             local final=assert(snapshot(true),'Publication context unavailable')
             assert(final.fingerprint==before.fingerprint,'Context changed before publication')
@@ -126,19 +127,19 @@ on_search_match=function(job,now)
             publication_used=true
             emit(string.format('PUBLISH_BEGIN previous_seed=%u candidate_seed=%u primary_planet=%u viewed_planet=%u',before.seed,seed,u(before.selection,0),u(before.selection,4)))
             write_seed(before.board,seed);notify(before.board)
-            assert(hex(read(before.board+O.board.active_operation,92))==before.active,'Active operation changed')
+            assert(hex(read(before.board+O.board.active_operation,Board.OPERATION_SIZE))==before.active,'Active operation changed')
             emit('PUBLISH_RETURN active_preserved=true')
         end,
         restore=function(before,seed)
             assert(ownership(before.board)==before.owner_guard,'Restore owner changed; refusing stale write')
-            assert(hex(read(before.board+O.board.active_operation,92))==before.active,'Restore active operation changed')
+            assert(hex(read(before.board+O.board.active_operation,Board.OPERATION_SIZE))==before.active,'Restore active operation changed')
             local current=u(read(before.board+O.board.seed,4),0)
             assert(current==seed or current==before.seed,'External seed change; refusing overwrite')
             write_seed(before.board,before.seed);notify(before.board)
             emit('RESTORE_SEED previous_seed='..before.seed)
         end,
         matches=function(current,e)
-            local ok,reason=verify_predicted_board(current,e.operations,u)
+            local ok,reason=verify_predicted_board(current,e.operations)
             emit('PREDICTION_CHECK descriptors_match='..tostring(ok)..' reason='..tostring(reason))
             return ok and current.active==s.active and current.selection:sub(1,8)==s.selection:sub(1,8)
         end,

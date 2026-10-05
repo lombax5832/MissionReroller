@@ -1,5 +1,5 @@
 -- Read-only capture and comparison for the partial Lua generation port.
-local O=...
+local O,Board=...
 return function(read,u,predict,special_inputs,levels_factory,verify_levels,composition_capture)
     local ffi=require('ffi')
     local function address_number(address)return tonumber(ffi.cast('uintptr_t',address))end
@@ -14,11 +14,11 @@ return function(read,u,predict,special_inputs,levels_factory,verify_levels,compo
         end
         assert(definitions,'Planet definitions are not cached')
         local count=read(definitions+O.definitions.pool_count,4)
-        local active=read(b+O.board.active_snapshot,92)
+        local active=read(b+O.board.active_snapshot,Board.OPERATION_SIZE)
         local input={planet=planet,pool_count=u(count,0),max_difficulty=10}
-        if active:byte(53)~=0 then
-            input.active={row=u(active,0),id=active:byte(25),seed=u(active,12),
-                difficulty=active:byte(33),planet=active:byte(17)+active:byte(18)*256}
+        if Board.valid(active,0)then
+            input.active={row=Board.row(active,0),id=Board.operation_id(active,0),seed=Board.seed(active,0),
+                difficulty=Board.difficulty(active,0),planet=Board.planet(active,0)}
         end
         local special_key=''
         if special_inputs then input.specials,special_key=special_inputs(b,planet,definitions)end
@@ -39,7 +39,7 @@ return function(read,u,predict,special_inputs,levels_factory,verify_levels,compo
             captured.level_graphs={};captured.level_operations=snapshot.decoded.operations
             for _,operation in ipairs(captured.level_operations)do
                 local ok,levels,special,graph_key=pcall(collect,definitions,{id=operation.operation_id,
-                    category=u(snapshot.operations,operation.row*92+28)})
+                    category=Board.category(snapshot.operations,operation.row)})
                 assert(ok,string.format('planet=%d seed=%u row=%d: %s',planet,snapshot.seed,operation.row,tostring(levels)))
                 captured.level_graphs[operation.row]={levels=levels,special=special}
                 keys[#keys+1]=graph_key
@@ -69,17 +69,16 @@ return function(read,u,predict,special_inputs,levels_factory,verify_levels,compo
         local predicted=predict(capture.input,capture.seed)
         local matched,observed_count,predicted_count,errors=0,0,0,{}
         local differences,matched_rows={},{}
-        assert(#capture.operations==110*92,'Invalid operation buffer')
+        assert(#capture.operations==Board.OPERATIONS*Board.OPERATION_SIZE,'Invalid operation buffer')
         for row=0,109 do
-            local offset=row*92
-            local valid=capture.operations:byte(offset+53)~=0
+            local valid=Board.valid(capture.operations,row)
             local p=predicted[row]
             if p then predicted_count=predicted_count+1 end
             if valid then observed_count=observed_count+1 end
             if valid and p then
-                local id=capture.operations:byte(offset+25)
-                local seed=u(capture.operations,offset+12)
-                local difficulty=capture.operations:byte(offset+33)
+                local id=Board.operation_id(capture.operations,row)
+                local seed=Board.seed(capture.operations,row)
+                local difficulty=Board.difficulty(capture.operations,row)
                 if id==p.id and seed==p.seed and difficulty==p.difficulty then matched=matched+1;matched_rows[#matched_rows+1]=row
                 else
                     errors[#errors+1]=string.format('row=%d observed=%d/%u/d%d predicted=%d/%u/d%d',row,id,seed,difficulty,p.id,p.seed,p.difficulty)

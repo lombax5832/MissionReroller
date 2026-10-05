@@ -39,6 +39,7 @@ update=function()end
 dofile(arg[3])
 local ready=up(up(update,'tick'),'on_prediction_ready')
 local Planet=up(ready,'Planet');local make_job=up(ready,'make_search_job')
+local FilterRules=up(ready,'FilterRules')
 local Search=module('search_session');local Catalogue=module('filter_catalogue')
 local game=ffi.cast('uint8_t*',tonumber(fixture.game));local board=tonumber(fixture.board)
 local planet=u(read(board+O.board.selection,8),4);assert(planet<512,'No viewed planet')
@@ -77,7 +78,7 @@ print(string.format('planet=%d seed=%u operations=%d city regions=[%s] difficult
 assert(#regions>0,'View a planet with a city or megafactory')
 -- The displayed board, cities included, is what the predictor produces.
 local predict=Planet.bind(read,u,pointer,game,board,planet).predictor(definitions)
-local ok,why=module('verify_predicted_board')(snapshot,predict(seed),u)
+local ok,why=module('verify_predicted_board')(snapshot,predict(seed))
 assert(ok,'Displayed board differs from its prediction: '..tostring(why))
 print('Displayed board, city operations included, equals its prediction')
 local model=Planet.bind(read,u,pointer,game,board,planet)
@@ -124,7 +125,7 @@ local function run(required,groups,scope)
             return operations
         end
         return function(candidate)return evaluate(candidate,difficulty,accepts)end,function(candidate)return evaluate(candidate)end
-    end,{seed=(seed+1)%4294967296,limit=65536,difficulty=difficulty,required=required,constellations={groups=groups},
+    end,{seed=(seed+1)%4294967296,limit=65536,difficulty=difficulty,rules=FilterRules.new({required=required,constellations={groups=groups}}),
         scope=scope,quantum=4096,clock=os.clock,slice=0.016,batch=256,revalidate=1})
     local started=os.clock()
     while job.status=='running' do job:step(function()end)end
@@ -158,7 +159,7 @@ for _,region in ipairs(regions)do
         assert(family and city.mission_set[family],'The displayed city mission must be offered')
         local reachable={}
         for _,option in ipairs(city.missions)do
-            if Catalogue.possible(city,{[option.id]=true},{})then reachable[#reachable+1]=option.name end
+            if Catalogue.possible(city,{required={[option.id]=true}})then reachable[#reachable+1]=option.name end
         end
         print('  selectable alone: '..table.concat(reachable,'; '))
         local offered=city.constellation_groups[family]
@@ -169,7 +170,7 @@ for _,region in ipairs(regions)do
         local job,elapsed=run({[family]=true},groups,scope)
         assert(job.status=='matched',job.status..': '..tostring(job.error))
         assert(job.operation.row==row,'A city search must match that city: row '..job.operation.row)
-        local again=Search.find({operations=job.operations},difficulty,{[family]=true},{},{groups=groups},scope)
+        local again=Search.find({operations=job.operations},difficulty,{required={[family]=true},constellations={groups=groups}},scope)
         assert(again and again.row==row and #job.operations>=#decoded.operations,'The match carries the complete board')
         local tagged={}
         for i,mission in ipairs(job.operation.missions)do

@@ -29,6 +29,7 @@ update=function()end
 dofile(arg[3])
 local ready=up(up(update,'tick'),'on_prediction_ready')
 local Planet=up(ready,'Planet');local make_job=up(ready,'make_search_job')
+local FilterRules=up(ready,'FilterRules')
 local Search=dofile(root..'/search_session.lua')
 local game=ffi.cast('uint8_t*',tonumber(fixture.game));local definitions=tonumber(fixture.definitions)
 local H=dofile((arg[0]:match('^(.*[/\\])') or '')..'harness.lua')
@@ -72,7 +73,7 @@ local function run(required,limit,first)
     local job=make_job(read,function()end,function(take)
         local bound=Planet.bind(take,u,pointer,game,board,planet).predictor(definitions)
         return function(seed)return bound(seed,10)end,function(seed)return bound(seed)end
-    end,{seed=first or 0,limit=limit,difficulty=10,required=required,quantum=4096,clock=os.clock,slice=0.016,batch=256,revalidate=1})
+    end,{seed=first or 0,limit=limit,difficulty=10,rules=FilterRules.new({required=required}),quantum=4096,clock=os.clock,slice=0.016,batch=256,revalidate=1})
     local frames,longest,started=0,0,os.clock()
     while job.status=='running' do
         local t=os.clock();job:step(function()end);longest=math.max(longest,os.clock()-t);frames=frames+1
@@ -81,7 +82,7 @@ local function run(required,limit,first)
 end
 local job,frames,longest,elapsed=run({[1]=true,[2]=true,[3]=true},65536)
 assert(job.status=='matched',job.status..': '..tostring(job.error))
-local again=Search.find({operations=predict(job.seed)},10,{[1]=true,[2]=true,[3]=true},{})
+local again=Search.find({operations=predict(job.seed)},10,{required={[1]=true,[2]=true,[3]=true}})
 assert(again and again.row==job.operation.row and #job.operations>#predict(job.seed,10),'A match must carry the complete board')
 print(string.format('Packaged search matched seed=%u row=%d after %d seeds in %d slices',job.seed,job.operation.row,job.attempts,frames))
 job,frames,longest,elapsed=run({[1]=true,[9]=true,[11]=true},65536)

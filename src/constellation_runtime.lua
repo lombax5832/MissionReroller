@@ -5,6 +5,7 @@ local M,emit,read,pointer,u=host.M,host.emit,host.read,host.pointer,host.u
 local reroll_session=host.reroll_session
 local map,O=host.map,host.O
 local Constellations,Planet=lib.Constellations,lib.Planet
+local Board=lib.Board
 local api,game
 host.when_initialized(function(n)api,game=n.api,n.game end)
 local bind_constellations,observe_constellations
@@ -125,23 +126,11 @@ do
     local function observe()
         if not map.on_top()then return end
         local b=pointer(game+O.rva.board)
-        local row=u(read(b+O.board.selection_row,4),0)
-        if row>=110 then return end
-        local op=read(b+O.board.operations+row*92,92)
-        if op:byte(53)==0 then return end
-        local preview=read(b+O.board.mission_preview,0xe8)
-        local seed,difficulty,kind=u(preview,0),preview:byte(10),preview:byte(27)+preview:byte(28)*256
-        if difficulty<1 or difficulty>10 or kind>=162 then return end
+        local hovered=Board.hovered(read,b)
+        if not hovered then return end
+        local preview,row,seed,difficulty,kind,planet=hovered.preview,hovered.row,hovered.seed,hovered.difficulty,hovered.kind,hovered.planet
         local key=seed..':'..kind..':'..difficulty..':'..u(preview,12)
         if seen[key]then return end
-        local planet=op:byte(17)+op:byte(18)*256
-        if planet>=512 or u(read(b+O.board.campaign+planet*O.campaign.definition_stride+0x18,4),0)~=u(preview,12)then return end
-        local count=u(read(b+O.board.mission_count,4),0);assert(count<=330,'Mission count overflow')
-        local rows=count>0 and read(b+O.board.missions,count*76) or '';local member=false
-        for i=0,count-1 do
-            if u(rows,i*76+40)==row and u(rows,i*76+48)==kind and u(rows,i*76+52)==seed then member=true;break end
-        end
-        if not member then return end
         local controller=pointer(pointer(game+O.rva.ui_root)+O.ui_root.level_controller)
         -- The preview loads asynchronously; wait for the matching descriptor.
         local level=read(controller+8,28)==preview:sub(1,28)
@@ -155,7 +144,7 @@ do
         local record=inputs.mission(kind)
         local faction=preview:byte(9)
         assert(faction==record.faction and faction>=2 and faction<=4,'Preview faction differs from mission record')
-        local effect=inputs.effect_id(u(op,28),op:byte(25),planet)
+        local effect=inputs.effect_id(hovered.category,hovered.operation_id,planet)
         local campaign=inputs.campaign(planet,effect);local settings=inputs.settings(faction,difficulty)
         local predicted=Constellations.resolve(seed,settings,campaign,record,inputs.disabled)
         local head=string.format('CONSTELLATION_CHECK planet=%d row=%d type=%d seed=%u difficulty=%d faction=%d effect=%u campaign=[%s] predicted=[%s]',

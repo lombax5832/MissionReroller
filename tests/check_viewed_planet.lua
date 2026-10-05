@@ -83,7 +83,7 @@ for _,op in ipairs(decoded.operations)do
     if not shown[tags]then shown[tags]=true;print('environment tags: ['..tags..'] (row '..op.row..')')end
 end
 local predict=model.predictor(definitions)
-local ok,why=module('verify_predicted_board')(snapshot,predict(seed),u)
+local ok,why=module('verify_predicted_board')(snapshot,predict(seed))
 assert(ok,'Displayed board differs from its prediction: '..tostring(why))
 print('Displayed board equals its prediction')
 local function names(list)local out={};for i,item in ipairs(list)do out[i]=item.name end;return table.concat(out,'; ')end

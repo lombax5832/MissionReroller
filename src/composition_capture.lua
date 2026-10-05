@@ -4,7 +4,7 @@
 -- active operation remains an explicitly preserved input in either mode.
 -- bind is Planet.bind (planet_model.lua): the inputs decode through the
 -- capture's own cached reads.
-local O=...
+local O,Board=...
 return function(bind,make_levels,predict,make_bases)
     local ffi=require('ffi')
     return function(read,u,pointer,game)
@@ -24,17 +24,17 @@ return function(bind,make_levels,predict,make_bases)
             local level=make_levels(take,u,game)
             local operations={}
             if not make_bases then for _,op in ipairs(snapshot.decoded.operations)do
-                local at=op.row*92
                 assert(type(op.difficulty)=='number',string.format('[COMPOSITION_INPUT] decoded row=%s difficulty=%s raw_difficulty=%s',
-                    tostring(op.row),tostring(op.difficulty),tostring(snapshot.operations:byte(at+33))))
+                    tostring(op.row),tostring(op.difficulty),tostring(Board.difficulty(snapshot.operations,op.row))))
                 operations[#operations+1]={row=op.row,id=op.operation_id,seed=op.seed,difficulty=op.difficulty,
-                    faction=u(snapshot.operations,at+36),category=u(snapshot.operations,at+28),explicit_hash=u(snapshot.operations,at+8)}
+                    faction=Board.faction(snapshot.operations,op.row),category=Board.category(snapshot.operations,op.row),
+                    explicit_hash=Board.explicit_hash(snapshot.operations,op.row)}
             end end
-            local bytes=take(snapshot.board+O.board.active_snapshot,92);local active
-            if bytes:byte(53)~=0 and bytes:byte(17)+bytes:byte(18)*256==snapshot.planet then
-                active={row=u(bytes,0),seed=u(bytes,12),id=bytes:byte(25),template_index=u(bytes,56),modifiers={}}
-                assert(bytes:byte(69)<=2,'Invalid preserved modifier count')
-                for i=0,bytes:byte(69)-1 do active.modifiers[#active.modifiers+1]=u(bytes,60+i*4)end
+            local bytes=take(snapshot.board+O.board.active_snapshot,Board.OPERATION_SIZE);local active
+            if Board.valid(bytes,0) and Board.planet(bytes,0)==snapshot.planet then
+                active={row=Board.row(bytes,0),seed=Board.seed(bytes,0),id=Board.operation_id(bytes,0),template_index=Board.template_index(bytes,0)}
+                assert(Board.modifier_count(bytes,0)<=2,'Invalid preserved modifier count')
+                active.modifiers=Board.modifiers(bytes,0)
             end
             if make_bases then
                 operations,active=make_bases(take,u,pointer,game,snapshot.board,definitions,snapshot.planet,inputs)(snapshot.seed)
@@ -51,21 +51,21 @@ return function(bind,make_levels,predict,make_bases)
             local by_row={};for _,op in ipairs(snapshot.decoded.operations)do by_row[op.row]=op end
             if #predicted~=#snapshot.decoded.operations then fail(nil,'operation count mismatch')end
             for i,op in ipairs(predicted)do
-                local observed=by_row[op.row];local at=op.row*92
+                local observed=by_row[op.row];local ops,row=snapshot.operations,op.row
                 local prefix='row='..op.row..' '
                 if not observed then fail(op.row,prefix..'predicted row absent')
                 elseif not op.valid then fail(op.row,prefix..'predicted invalid')
                 else
                     if make_bases then
                         if op.id==observed.operation_id and op.seed==observed.seed and op.difficulty==observed.difficulty
-                            and op.category==u(snapshot.operations,at+28) and op.faction==u(snapshot.operations,at+36)
-                            and op.explicit_hash==u(snapshot.operations,at+8) then bases=bases+1
+                            and op.category==Board.category(ops,row) and op.faction==Board.faction(ops,row)
+                            and op.explicit_hash==Board.explicit_hash(ops,row) then bases=bases+1
                         else fail(op.row,prefix..'base fields mismatch')end
                     end
-                    if op.template_index~=u(snapshot.operations,at+56) then fail(op.row,prefix..'template mismatch')
+                    if op.template_index~=Board.template_index(ops,row) then fail(op.row,prefix..'template mismatch')
                     else templates=templates+1 end
-                    local same=#op.modifiers==snapshot.operations:byte(at+69)
-                    for j,id in ipairs(op.modifiers)do if id~=u(snapshot.operations,at+56+j*4)then same=false end end
+                    local same=#op.modifiers==Board.modifier_count(ops,row)
+                    for j,id in ipairs(op.modifiers)do if id~=Board.modifier(ops,row,j)then same=false end end
                     if same then modifiers=modifiers+1 else fail(op.row,prefix..'modifier mismatch')end
                     if #op.missions~=#observed.missions then fail(op.row,prefix..'mission count mismatch')
                     else

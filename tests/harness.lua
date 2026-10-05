@@ -40,10 +40,19 @@ function H.offsets(src)
     return numbers[src][1],numbers[src][2]
 end
 
--- A module file of src run as the build runs it: its chunk argument is O.
+-- The board's records (src/board_records.lua) for a src folder, as the
+-- build creates Board.
+local boards={}
+function H.board(src)
+    if not boards[src]then boards[src]=assert(loadfile(src..'/board_records.lua'))((H.offsets(src)))end
+    return boards[src]
+end
+
+-- A module file of src run as the build runs it: its chunk arguments are O
+-- and Board.
 function H.module(path)
     local src=assert(path:match('^(.*)[/\\][^/\\]+$'),'module path needs a folder')
-    return assert(loadfile(path))((H.offsets(src)))
+    return assert(loadfile(path))((H.offsets(src)),H.board(src))
 end
 
 -- The planet model (src/planet_model.lua) built from the modules in src, as

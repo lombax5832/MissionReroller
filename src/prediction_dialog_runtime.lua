@@ -160,9 +160,9 @@ do
         if failure and tostring(failure)~=objective_error then objective_error=tostring(failure);emit('SIDE_OBJECTIVE_CATALOGUE_BLOCKED '..objective_error)end
         return result
     end
-    validate_search_request=function(s,request)
-        FilterCatalogue.validate(catalogue_for(s,request.difficulty,Search.scope(request.scope)),request.required,request.modifiers,
-            request.constellations,request.time,request.excluded,request.objectives)
+    -- rules: the request's filter rules (src/filter_rules.lua).
+    validate_search_request=function(s,request,rules)
+        FilterCatalogue.validate(catalogue_for(s,request.difficulty,Search.scope(request.scope)),rules)
     end
     -- Day and night on the viewed planet while a time of day is chosen
     -- (src/day_night.lua), refreshed once a second: how long a side holds, or why
@@ -209,7 +209,7 @@ do
                     end
                     daynight=window
                 end
-                estimator.update(s,difficulty,scope,filters:to_request(scope,difficulty),daynight)
+                estimator.update(s,difficulty,scope,filters:rules(),daynight)
                 estimate=estimator.view() or 'pending'
                 if type(estimate)=='table' then
                     local line=estimate.match and string.format('ESTIMATE match=1/%.0f seconds=%.1f',1/math.max(estimate.match,1e-12),

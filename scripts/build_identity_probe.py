@@ -43,8 +43,9 @@ def lua_table(values):
 
 
 # The adapter's inputs: the core, the build's mode, the map screen, the
-# offsets it verifies on the first frame, their numbers, and SHA-256.
-ADAPTER='core,config,make_map_screen,offsets,O,sha256'
+# offsets it verifies on the first frame, their numbers, SHA-256 and the
+# board's record layout.
+ADAPTER='core,config,make_map_screen,offsets,O,sha256,Board'
 
 
 def release_offsets(root):
@@ -74,9 +75,13 @@ def source(search=False,publish=False,dialog=False,version=None):
     # numbers O, which every module receives as its chunk argument (local O=...).
     parts.append('local offsets=(function()\n'+release_offsets(root)+'\nend)()')
     parts.append('local O=(function()\n'+(root/'offset_values.lua').read_text()+'\nend)()(offsets)')
+    # The board's operation and mission records (src/board_records.lua), every
+    # module's second chunk argument (local O,Board=...).
+    libraries.append('Board')
+    parts.append('local Board=(function(...)\n'+(root/'board_records.lua').read_text()+'\nend)(O)')
     def library(name,file):
         libraries.append(name)
-        parts.append('local '+name+'=(function(...)\n'+(root/file).read_text()+'\nend)(O)')
+        parts.append('local '+name+'=(function(...)\n'+(root/file).read_text()+'\nend)(O,Board)')
     def derived(name,expression):
         libraries.append(name)
         parts.append('local '+name+'='+expression)
@@ -105,14 +110,18 @@ def source(search=False,publish=False,dialog=False,version=None):
               'environments':'make_environments','composition_inputs':'make_composition_inputs',
               'composition_prediction':'make_composition_prediction','capture':'make_composition_capture',
               'base_inputs':'make_base_inputs'}
+    if search:
+        # The Filters as one value (src/filter_rules.lua), for the search and the dialog.
+        library('FilterRules','filter_rules.lua')
     if dialog:
-        for name,file in [('Panel','docked_panel.lua'),('Hint','keybind_hint.lua'),('Binding','mod_binding.lua'),('EscapeGate','escape_gate.lua'),('Compatibility','mission_compatibility.lua'),('FilterCatalogue','filter_catalogue.lua'),('FilterRequest','filter_request.lua'),('make_gate','window_mouse_gate.lua'),('make_router','modal_pointer.lua'),('make_cursor','window_cursor.lua'),
+        for name,file in [('Panel','docked_panel.lua'),('Hint','keybind_hint.lua'),('Binding','mod_binding.lua'),('EscapeGate','escape_gate.lua'),('Compatibility','mission_compatibility.lua'),('FilterCatalogue','filter_catalogue.lua'),('make_gate','window_mouse_gate.lua'),('make_router','modal_pointer.lua'),('make_cursor','window_cursor.lua'),
                           ('Constellations','constellation_prediction.lua'),('make_constellation_inputs','constellation_inputs.lua'),
                           ('SideObjectives','side_objective_prediction.lua'),('make_objective_inputs','side_objective_inputs.lua'),
                           ('UnitForecast','unit_forecast.lua'),
                           ('KycRoster','vendor/know_your_constellation/roster.lua'),
                           ('KycRosterData','vendor/know_your_constellation/roster_data.lua')]:
             library(name,file)
+        derived('FilterRequest','(function(...)\n'+(root/'filter_request.lua').read_text()+'\nend)(O,FilterRules)')
         # Know Your Constellation's roster, bundled with CowboyBingus's permission.
         derived('BundledRoster','(function(...)\n'+(root/'bundled_roster.lua').read_text()+'\nend)(O,KycRoster,KycRosterData)')
         planet.update({'constellation_inputs':'make_constellation_inputs','catalogue':'FilterCatalogue',
