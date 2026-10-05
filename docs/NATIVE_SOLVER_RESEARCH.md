@@ -218,8 +218,12 @@ main thread keeps only set-up, candidate boards and publication.
    the game's `lua51.dll`). It runs three scheduled runs of thread-pool
    worker VMs (1, 4, then 1 until shutdown) with the memory scan, and joins
    them at shutdown. Test plan: [WORKER_PROBE_TEST.md](WORKER_PROBE_TEST.md).
-3. If the probe is clean, move the chain's walk into worker VMs:
-   candidates go back to the main VM to be predicted and confirmed as now.
+3. Done 2026-10-05, not yet run in game: the chain's walk runs in worker
+   VMs (`src/seed_solver_workers.lua`, `src/seed_solver_codec.lua`).
+   Candidates go back to the main VM to be accepted, predicted and confirmed
+   as before. The codec cut the exclusion request's worker heap to 0.5 MB
+   after set-up and 1.4 MB at its peak (86 KB of text). Test plan:
+   [SOLVER_WORKERS_TEST.md](SOLVER_WORKERS_TEST.md).
 4. Keep native C out of the mod. `solver_bench.c` stays as the bound for
    what a core can do.
 

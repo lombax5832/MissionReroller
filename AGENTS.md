@@ -137,6 +137,13 @@ No single file in `src/` is the shipped entry. `scripts/build.py` calls
   reach into an assembled entry with `tests/harness.lua`: `H.up` for a
   closure variable, `H.natives(update,{...})` to hand every runtime fake
   native handles as `initialize()` would.
+- The seed solver's walk runs in worker VMs (`src/seed_solver_workers.lua`):
+  fresh `luaL_newstate`s from `lua51.dll` on thread-pool threads, which
+  cannot see the entry's closures. `source()` passes them
+  `seed_solver_math.lua`, `seed_solver_chain.lua` and `seed_solver_codec.lua`
+  as strings, so those three files stay self-contained (no build arguments,
+  no globals of the entry). The search runtime closes a search's workers when
+  the search ends and joins them at shutdown.
 - Status changes go through `src/reroll_session.lua`, created on the host as
   `host.reroll_session` right after the adapter. Runtimes call `advance` /
   `finish` / `settle` / `fail`; the dialog calls `start` / `cancel` / `view`.

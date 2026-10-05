@@ -5,6 +5,22 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
+**Not yet validated in game: the seed solver walks in worker VMs.**
+Unreleased, on the `worktree-native-solver-research` branch with
+`arch/deepening` merged. A search the seed solver seeds now walks in up
+to eight worker VMs (fresh LuaJIT VMs from the game's `lua51.dll` on
+thread-pool threads at below-normal priority, `src/seed_solver_workers.lua`)
+instead of on the main thread. Each walks the whole chain from its own
+starts, and hands back seed and row. The main thread applies the Day / Night
+check, predicts and matches as before, and yields while the workers have
+nothing ready. Paths travel as compact text (`src/seed_solver_codec.lua`).
+The pool scans the address space below 2 GB, starts only the workers that
+fit beside a 16 MB reserve, starts them over several frames, caps their
+heaps, and closes a VM only after its thread has left it. Without workers the
+walk stays on the main thread. Offline the workers' candidates equal the
+in-process chain's in both LuaJITs. Test plan:
+[SOLVER_WORKERS_TEST.md](SOLVER_WORKERS_TEST.md).
+
 **Research, 2026-10-05: native code and worker threads for the seed
 solver.** A C port of the solver's job loop runs 5 to 7 times faster than
 LuaJIT per core, but no way of running native code in the game fits the

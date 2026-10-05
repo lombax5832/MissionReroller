@@ -61,6 +61,15 @@ def factory(root,file,params,args):
     return f'(function({params})\n'+(root/file).read_text()+f'\nend)({args})'
 
 
+def lua_long_string(text):
+    """text as a Lua long string, its level chosen so nothing in it closes it."""
+    level=0
+    while (']'+'='*level+']') in text:
+        level+=1
+    # A long string drops a newline right after its opening bracket.
+    return '['+'='*level+'[\n'+text+']'+'='*level+']'
+
+
 def source(search=False,publish=False,dialog=False,version=None):
     assert not publish or search
     assert not dialog or publish
@@ -150,6 +159,11 @@ def source(search=False,publish=False,dialog=False,version=None):
                 +'\nreturn '+chunk('seed_solver_search.lua')+'(Math,Paths,Chain,Time,'+chunk('seed_solver_inputs.lua')+')'
                 +'\nend)()')
         planet['solver_inputs']='SeedSolver.inputs'
+        # The worker VMs (src/seed_solver_workers.lua) load the walk's modules
+        # from text, so the build also passes those three files as strings.
+        derived('SeedSolverWorkers',chunk('seed_solver_workers.lua')+'({'+','.join(
+            f'{key}='+lua_long_string((root/file).read_text())
+            for key,file in (('math','seed_solver_math.lua'),('chain','seed_solver_chain.lua'),('codec','seed_solver_codec.lua')))+'})')
         if dialog:
             # The dialog's estimate before a search (src/solver_estimate.lua).
             derived('make_solver_estimate',chunk('solver_estimate.lua')+'(SeedSolver)')

@@ -9,6 +9,7 @@ local FilterRules=lib.FilterRules
 local ExternalEdits,SideObjectives=lib.ExternalEdits,lib.SideObjectives
 local Board=lib.Board
 local SeedSolver,predict_identity=lib.SeedSolver,lib.predict_identity
+local SeedSolverWorkers=lib.SeedSolverWorkers
 local bind_constellations,on_existing_match,on_search_match=hooks.bind_constellations,hooks.on_existing_match,hooks.on_search_match
 local bind_objectives=hooks.bind_objectives
 local api,game,ffi,kernel
@@ -20,6 +21,29 @@ local wait_started,wait_total,last_wait_poll
 local default_limit=1000000
 -- Walk steps per second of a search in game (about a million on 2026-10-04).
 local solver_rate=800000
+-- The seed solver's worker VMs (src/seed_solver_workers.lua), made on the
+-- first search; worker_pool_off says why there is none.
+local worker_pool,worker_pool_off
+local function pool()
+    if worker_pool or worker_pool_off then return worker_pool end
+    if not SeedSolverWorkers or not ffi then worker_pool_off='not in this build';return nil end
+    local ok,made,why=pcall(SeedSolverWorkers.pool,ffi)
+    if ok and made then
+        worker_pool=made
+        -- Until a search measures it: the main thread's rate per worker.
+        solver_rate=solver_rate*made.max_workers
+        emit(string.format('SEED_SOLVER_WORKERS_READY max_workers=%d processors=%d',made.max_workers,made.processors))
+    else
+        worker_pool_off=tostring(ok and why or made)
+        emit('SEED_SOLVER_WORKERS_OFF reason='..worker_pool_off)
+    end
+    return worker_pool
+end
+-- Stops a finished or replaced search's workers; they close once their
+-- callbacks return (worker_pool.reap, every frame).
+local function release_source(job)
+    if job and job.source and job.source.close then pcall(job.source.close)end
+end
 -- The last range searched without a match, so an unchanged request continues
 -- after it instead of repeating it.
 local resume
@@ -115,6 +139,7 @@ on_prediction_ready=function(s,definitions,now)
     local first=(s.seed+1)%4294967296
     local resumed=resume and resume.key==key and resume.planet==s.planet and resume.baseline==s.seed
     if resumed then first=resume.next end
+    release_source(current_search)
     current_search=make_search_job(read,baseline,function(frozen_read,pause)
         local planet=Planet.bind(frozen_read,u,api.pointer,game,s.board,s.planet)
         local predict=planet.predictor(definitions)
@@ -125,18 +150,32 @@ on_prediction_ready=function(s,definitions,now)
         -- The seed solver proposes the candidates when it can seed this
         -- request (src/seed_solver_search.lua); its inputs are read through
         -- the frozen reads, so they are revalidated with the predictor's.
-        local source
+        local source,worker_report
         if SeedSolver then
             local started=search_clock()
             local ok,result,why=pcall(function()
                 local spec={identity=predict_identity,difficulty=request.difficulty,
                     required=required,options=Search.options,constellations=constellations,objectives=objectives,scope=scope,
                     daynight=daynight and daynight.accepts,row_of=SideObjectives and SideObjectives.row_of,
-                    random=SeedSolver.starts(s.seed+math.floor(started*1000000)),checkpoint=pause}
+                    random=SeedSolver.starts(s.seed+math.floor(started*1000000)),checkpoint=pause,
+                    make_chain=function(chain_spec)
+                        local p=pool()
+                        if not p then return nil,worker_pool_off end
+                        local made,why,report=p.start(chain_spec)
+                        worker_report=report
+                        return made,why
+                    end}
                 local source,decline=SeedSolver.plan(SeedSolver.prepare(planet,definitions,spec),spec)
                 return source,decline and decline.reason
             end)
             local ms=(search_clock()-started)*1000
+            local r=worker_report or {}
+            if ok and result and result.workers>0 then
+                emit(string.format('SEED_SOLVER_WORKERS workers=%d text_kb=%.0f worker_heap_kb=%.0f setup_ms=%.1f free_mb=%.1f largest_mb=%.1f processors=%d',
+                    result.workers,r.text_kb or 0,r.setup_kb or 0,r.setup_ms or 0,r.free_mb or 0,r.largest_mb or 0,r.processors or 0))
+            elseif ok and result then
+                emit('SEED_SOLVER_WORKERS workers=0 reason='..tostring(result.workers_off or worker_pool_off)..'; walking on the main thread')
+            end
             if ok and result then
                 source=result
                 result.setup=ms/1000
@@ -233,6 +272,7 @@ on_prediction_ready=function(s,definitions,now)
         s.planet,scope and scope.region or 'all',s.seed,first,tostring(resumed==true),request.difficulty,table.concat(names,' + '),limit))
 end
 advance_prediction_search=function(action,now)
+    if worker_pool then pcall(worker_pool.reap)end
     if not current_search then return false end
     local job=current_search
     reroll_session.progress(job.attempts)
@@ -271,7 +311,8 @@ advance_prediction_search=function(action,now)
     local timing=string.format('elapsed_s=%.2f slices=%d work_ms=%.0f context_ms=%.0f jit=%s',elapsed,slices,
         (step_time-context_time)*1000,context_time*1000,tostring(compiled))
     if job.source then
-        timing=timing..string.format(' mode=%s walk_steps=%.0f',job.solving and 'solver' or 'scan',job.source.steps())
+        timing=timing..string.format(' mode=%s walk_steps=%.0f workers=%d',job.solving and 'solver' or 'scan',job.source.steps(),
+            job.source.workers or 0)
     end
     if job.status=='running' then
         if job.waiting then
@@ -302,6 +343,7 @@ advance_prediction_search=function(action,now)
                 job.daynight.side,job.operation.row,job.seed,T,job.daynight.planet.buffer,tostring(held),table.concat(times,',')))
             if not held then
                 resume={key=job.key,planet=job.baseline.planet,baseline=job.baseline.seed,next=(job.seed+1)%4294967296}
+                release_source(job)
                 current_search=nil
                 emit('DAYNIGHT_WINDOW_CLOSED row='..job.operation.row..' seed='..job.seed..'; searching on')
                 on_prediction_ready(job.baseline,job.definitions,now)
@@ -342,10 +384,23 @@ advance_prediction_search=function(action,now)
             emit(string.format('LUA_SEARCH_%s attempts=%d seeds_per_second=%.0f next_seed=%u reason=%s max_slice_ms=%.3f %s',string.upper(job.status),job.attempts,
                 job.attempts/elapsed,job.next_seed,tostring(job.error or 'candidate budget reached'),max_slice,timing))
         end
+        if job.source and job.source.report then
+            local r=job.source.report()
+            emit(string.format('SEED_SOLVER_WORKERS_END workers=%d walk_steps=%.0f failed=%d capped=%d peak_worker_heap_kb=%.0f%s',
+                r.workers,job.source.steps(),r.failed,r.capped,r.peak_kb,r.error and ' error='..r.error or ''))
+        end
+        release_source(job)
         current_search=nil
     end
     return true
 end
 emit('Lua search checkpoint: ICBM + Geological Survey + Eradicate, difficulty 10; same shortcut cancels; alt-tab supported; '..config.search_outcome)
 return {on_prediction_ready=on_prediction_ready,advance_prediction_search=advance_prediction_search,
-    search_clock=search_clock,default_limit=default_limit,solver_rate=function()return solver_rate end}
+    search_clock=search_clock,default_limit=default_limit,solver_rate=function()return solver_rate end,
+    -- At shutdown, after the search's cancel: joins its workers (bounded).
+    shutdown_search_workers=function(seconds)
+        if not worker_pool then return 0 end
+        local left=worker_pool.shutdown(seconds or 3)
+        if left>0 then emit('SEED_SOLVER_WORKERS_SHUTDOWN left_open='..left)end
+        return left
+    end}

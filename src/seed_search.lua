@@ -3,7 +3,9 @@
 -- Seeds are tried in order from options.seed, or taken from options.source
 -- (the seed solver, src/seed_solver_search.lua): source.next(budget) returns
 -- a candidate, or nil when its budget is spent (the step tries no seed) and
--- done when it has no more, after which the search continues in order.
+-- done when it has no more, after which the search continues in order. A
+-- third result `idle` (worker VMs with no candidate ready) sets self.idle,
+-- so the caller can yield instead of stepping again at once.
 return function(evaluate,catalogue,options)
     local function integer(n,lo,hi)return type(n)=='number' and n==math.floor(n) and n>=lo and n<=hi end
     assert(type(evaluate)=='function' and type(catalogue.find)=='function','Missing predictor or matcher')
@@ -32,11 +34,12 @@ return function(evaluate,catalogue,options)
     function self:step()
         if self.status~='searching' then return self.status end
         local seed
+        self.idle=false
         if source then
-            local done
-            seed,done=source.next(budget)
+            local done,idle
+            seed,done,idle=source.next(budget)
             if not seed then
-                if done then source=nil;self.solving=false end
+                if done then source=nil;self.solving=false else self.idle=idle==true end
                 return self.status
             end
         else

@@ -414,13 +414,14 @@ return function(Math)
         local phase,limit=1,M32
         local s,off=walk.start(s0)
         local j={steps=0,path=path,root=root}
-        -- Up to `budget` walk steps; returns a candidate seed, or nil when the
-        -- budget is spent (done=false) or the job is exhausted (done=true).
+        -- Up to `budget` walk steps; returns a candidate seed (then nil and
+        -- its row), or nil when the budget is spent (done=false) or the job
+        -- is exhausted (done=true).
         function j.next(budget)
             while true do
                 if count>0 then
                     local seed=pending[count];pending[count]=nil;count=count-1
-                    return seed
+                    return seed,nil,row
                 end
                 if budget<=0 then return nil,false end
                 if not s or s>=limit then
@@ -469,8 +470,10 @@ return function(Math)
         local turn,left,turns,at,other=nil,0,0,0,0
         local chain={jobs=jobs,steps=0}
         local sorted={}
-        -- Up to `budget` walk steps in all; a candidate seed, or nil with
-        -- done=true when every job is exhausted.
+        -- Up to `budget` walk steps in all; a candidate seed, then nil and its
+        -- row (for a check made outside the chain, such as a worker VM's
+        -- caller applying accept), or nil with done=true when every job is
+        -- exhausted.
         function chain.next(budget)
             while #jobs>0 and budget>0 do
                 if not turn then
@@ -490,10 +493,10 @@ return function(Math)
                 end
                 local j=jobs[turn]
                 local before=j.steps
-                local seed,done=j.next(math.min(budget,left))
+                local seed,done,row=j.next(math.min(budget,left))
                 local spent=j.steps-before
                 budget,left,chain.steps=budget-spent,left-spent,chain.steps+spent
-                if seed then return seed end
+                if seed then return seed,nil,row end
                 if done then
                     table.remove(jobs,turn)
                     if other>=turn then other=other-1 end

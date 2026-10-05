@@ -86,6 +86,10 @@ def test_release_notes():
     subprocess.run([sys.executable, '-B', str(ROOT / 'tests/test_release_notes.py')], check=True)
 
 
+def test_seed_solver_workers():
+    subprocess.run([sys.executable, '-B', str(ROOT / 'tests/test_seed_solver_workers.py')], check=True)
+
+
 if __name__ == '__main__':
     test_package()
     test_release_version()
@@ -93,5 +97,6 @@ if __name__ == '__main__':
     test_release_notes()
     test_runtime_host()
     test_bundled_roster()
+    test_seed_solver_workers()
     test_dialog()
     print('test_package: passed')

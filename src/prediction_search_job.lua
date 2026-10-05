@@ -64,7 +64,8 @@ return function(make_reads,make_search,catalogue)
                             self.phase='validate inputs';frozen:validate();validated=clock()
                         end
                         -- The candidate cap bounds a slice if the clock stalls.
-                        if evaluated>=batch or clock()>=deadline then evaluated=0;coroutine.yield()end
+                        -- Worker VMs with nothing ready: give the frame back.
+                        if evaluated>=batch or search.idle or clock()>=deadline then evaluated=0;coroutine.yield()end
                     end
                 end
             until search.status~='searching'

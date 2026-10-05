@@ -113,6 +113,20 @@ memory[65537]='B';target=30;job=timed(5000);job:step(function()end);memory[65537
 while job.status=='running' do job:step(function()end)end
 assert(job.status=='failed' and not job.seed and not job.operation,'A match on changed inputs is rejected')
 memory[65537]='B';target=nil
+-- An idle seed source (worker VMs with nothing ready) gives the frame back
+-- after one step instead of stepping until the candidate cap.
+do
+    local nexts=0
+    local idle=new(read,function(take)assert(take(65536,1)=='A')end,function(take)
+        take(65537,1)
+        return function(seed)return board(seed,{2})end,nil,{next=function()nexts=nexts+1;return nil,false,true end}
+    end,{seed=10,limit=5000,difficulty=10,rules=Rules.new({required={[1]=true,[2]=true,[3]=true}}),quantum=64,
+        clock=function()return now end,slice=0.016,batch=256,revalidate=1})
+    idle:step(function()end);idle:step(function()end)
+    local before_slice=nexts
+    idle:step(function()end)
+    assert(before_slice>=1 and nexts-before_slice==1,'An idle source yields after one step: '..(nexts-before_slice))
+end
 assert(not pcall(timed,5000,0) and not pcall(new,read,function()end,function()end,{seed=1,limit=1,difficulty=10,rules=Rules.new({required={[1]=true}}),clock=1}))
 job=make();job:step(function()end);job:cancel('User cancelled');before=calls
 assert(job:step(function()end)=='cancelled' and calls==before)

@@ -92,10 +92,16 @@ end}
 search=new(function(seed)tried[#tried+1]=seed;return {seed==20 and operation({0}) or operation({7})}end,catalogue,
     with{seed=19,limit=10,difficulty=10,required={[1]=true},source=source})
 assert(search.solving and search:step()=='searching' and search.attempts==0 and #tried==0,'A spent budget tries no seed')
+assert(not search.idle,'A spent budget is not idle')
 assert(search:step()=='searching' and tried[1]==9 and search.attempts==1,'A candidate is predicted')
 search:step();search:step()
 assert(tried[2]==7 and search.attempts==2 and search.next_seed==19,'The source leaves the scan position alone')
 assert(search:step()=='searching' and not search.solving and search.attempts==2,'An exhausted source ends solving')
 assert(search:step()=='searching' and tried[3]==19 and search:step()=='matched' and search.seed==20,'Then seeds in order')
 assert(not pcall(new,function()end,catalogue,with{seed=1,limit=1,difficulty=10,required={[1]=true},source={}}),'Invalid source')
+-- Worker VMs with no candidate ready (src/seed_solver_workers.lua): the step
+-- tries no seed and says idle, so the job can give the frame back.
+search=new(function()error('No seed may be tried')end,catalogue,
+    with{seed=1,limit=10,difficulty=10,required={[1]=true},source={next=function()return nil,false,true end}})
+assert(search:step()=='searching' and search.idle and search.attempts==0 and search.solving,'An idle source tries no seed')
 print('Seed search: seed source and fallback, city scope, constellation groups, operation-wide filter, wrap, budget, cancellation, invalid operations and fail-closed prediction passed')

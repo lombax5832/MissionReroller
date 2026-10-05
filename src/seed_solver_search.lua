@@ -47,8 +47,13 @@ return function(Math,Paths,Chain,Time,Inputs)
     -- ({groups}) or nil, scope, daynight (checker.accepts) or nil, row_of
     -- (side_objective_prediction.lua), random() returning a 32-bit start,
     -- checkpoint() called often while the paths and walks are set up,
-    -- estimate_only to stop once the estimate is known (no next or steps).
-    -- Returns {next(budget) -> seed | nil, done; steps(); paths; rows;
+    -- estimate_only to stop once the estimate is known (no next or steps),
+    -- make_chain(chain spec) to walk elsewhere (src/seed_solver_workers.lua:
+    -- a chain-like {next, steps, close, workers, report} or nil and why,
+    -- when the walk stays here).
+    -- Returns {next(budget) -> seed | nil, done, idle; steps(); close();
+    -- workers (0 when the walk runs here) and workers_off (why), report();
+    -- paths; rows;
     -- valid, ids: how many operation IDs the Day / Night window passes, of
     -- how many; estimate={match, steps}} or nil, reason. estimate.match is
     -- the share of campaign seeds whose board matches the paths (one row of
@@ -185,10 +190,20 @@ return function(Math,Paths,Chain,Time,Inputs)
         local estimate={match=1-none,steps=2*Chain.expected_steps(paths,shares,4096)}
         -- The dialog's estimate before a search needs no walks.
         if spec.estimate_only then return {paths=#paths,rows=#rows,valid=valid,ids=ids,estimate=estimate}end
-        local chain=Chain.new({paths=paths,rows=rows,planet=input.planet,random=spec.random,accept=accept,
-            checkpoint=spec.checkpoint})
-        return {next=chain.next,steps=function()return chain.steps end,paths=#paths,rows=#rows,valid=valid,ids=ids,
-            estimate=estimate}
+        local chain_spec={paths=paths,rows=rows,planet=input.planet,random=spec.random,accept=accept,
+            checkpoint=spec.checkpoint}
+        local workers,workers_off
+        if spec.make_chain then
+            local ok,made,why=pcall(spec.make_chain,chain_spec)
+            if ok and made then workers=made else workers_off=ok and why or tostring(made)end
+        end
+        if workers then
+            return {next=workers.next,steps=workers.steps,close=workers.close,report=workers.report,
+                workers=workers.workers,paths=#paths,rows=#rows,valid=valid,ids=ids,estimate=estimate}
+        end
+        local chain=Chain.new(chain_spec)
+        return {next=chain.next,steps=function()return chain.steps end,close=function()end,workers=0,
+            workers_off=workers_off,paths=#paths,rows=#rows,valid=valid,ids=ids,estimate=estimate}
     end
     -- The search and the dialog's estimate (src/solver_estimate.lua) plan a
     -- request the same way: prepare reads the planet's solver inputs, plan
