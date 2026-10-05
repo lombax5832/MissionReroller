@@ -144,7 +144,7 @@ No single file in `src/` is the shipped entry. `scripts/build.py` calls
   as strings, so those three files stay self-contained (no build arguments,
   no globals of the entry). On the ship the search runtime keeps the
   workers warm (idle VMs, no thread) between searches; it closes them when
-  `src/worker_warmth.lua` says cold (a loading gate, or 120 s away from the
+  `src/worker_warmth.lua` says cold (a loading gate, or 10 s away from the
   galactic map) and joins them at shutdown.
 - Status changes go through `src/reroll_session.lua`, created on the host as
   `host.reroll_session` right after the adapter. Runtimes call `advance` /

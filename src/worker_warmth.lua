@@ -13,7 +13,7 @@
 -- new() -> {update(now, seen) -> 'warm' | 'cold' | nil, reason}, where
 -- seen = {map=<galactic map on top>, loading=<a gate set>, searching=<a
 -- search runs>}; nil when nothing changes.
-local W={IDLE_SECONDS=120}
+local W={IDLE_SECONDS=10}
 function W.new()
     local warm,last_map=false,nil
     local machine={}

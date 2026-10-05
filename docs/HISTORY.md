@@ -19,7 +19,7 @@ pool keeps up to `max_workers` idle VMs with their modules loaded and no
 thread (`pool.warm`, made one per frame); a search reuses them and they go
 back to idle. They warm when the galactic map is on top, which only
 happens on the ship, and cool when a UI root loading or transition gate is
-set, or after 120 s without the map while no search runs
+set, or after 10 s without the map while no search runs
 (`src/worker_warmth.lua`). The backstop exists because nothing in the mod
 yet tells a mission from the ship and the gates' values at a drop are not
 recorded; the `SEED_SOLVER_WORKERS_COLD` line logs the screen ids and gate
