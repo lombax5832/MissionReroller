@@ -6,6 +6,18 @@ GitHub release notes and, as one plain-text line each, the Nexus Mods
 changelog. How each change was
 made and tested is in the development log, [docs/HISTORY.md](docs/HISTORY.md).
 
+## v0.34.0 Faster searches for strict filters
+
+- Searches for missions, enemy forces and side objectives now work out
+  which seeds can match instead of trying seeds one by one, so strict
+  filters that used to run out of time can now match, often in seconds.
+  Filters it cannot work out search as before.
+- Before you search, the panel says how strict the request is and how long
+  it usually takes, for example 1 in 2,400 seeds match - expect about 4 s,
+  and says No seed gives this now when nothing on the campaign can match.
+- A running search shows how long it has been searching, then how strict
+  the request is or how many seeds it has tried.
+
 ## v0.33.2 Shorter description
 
 - The description shown in Arsenal and HD2MM is now a short summary: what

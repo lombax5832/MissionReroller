@@ -5,6 +5,19 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
+**Not yet validated in game: v0.34.0 seed solver search.** Searches
+with mission, enemy force, side objective or Day / Night rules now take
+their candidates from the seed solver (`src/seed_solver_*.lua`): draw
+paths per filter, mission seeds walked by their root draw, inverted to
+operation and campaign seeds, each confirmed by the predictor; requests
+without paths scan as before. Cities, excluded side objectives, linked
+draws and per-row Day / Night shares are covered, mission checks are a
+compiled decision tree, and jobs take turns by candidate yield. The dialog
+estimates the match share and usual time in the background while the
+filter is edited, and a running search shows its clock. Research, audits
+and offline measurements: [SEED_SOLVER_RESEARCH.md](SEED_SOLVER_RESEARCH.md);
+test plan: [SEED_SOLVER_TEST.md](SEED_SOLVER_TEST.md).
+
 **Not yet validated in game: v0.33.2 brief mod manager description.**
 `DESCRIPTION` and `REQUIREMENT` in `scripts/build.py`, the text Arsenal and
 HD2MM show for the mod and its option, are cut to three sentences: what it
