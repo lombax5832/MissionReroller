@@ -42,3 +42,18 @@ docstring says what it needs. `validate_side_objectives.py` also reads live
 memory: it emulates the game's side-objective draw on pages read from the
 running game and replays the Lua port on them
 (`docs/SIDE_OBJECTIVE_RESEARCH.md`).
+
+`seed_solver.py`, `seed_solver_oracle.lua` and `prove_seed_solver.py` are the
+research prototype that solves campaign seeds for a filter of missions,
+enemy forces and side objectives instead of searching them
+(`docs/SEED_SOLVER_RESEARCH.md`); `tests/test_seed_solver.py` checks the
+solver without a capture. `seed_chain.py` is the variant a LuaJIT port would
+follow (chained 1-D inversions, 64-bit arithmetic in its loops);
+`measure_seed_chain.py` measures it against brute force and times its units
+in LuaJIT with `seed_chain_bench.lua`; `tests/test_seed_chain.py` checks it.
+`seed_solver_capture.lua` replays a capture through `src` for the oracle and
+for `tests/test_seed_solver_lua.py`, which checks the LuaJIT port
+(`src/seed_solver_*.lua`) against the Python prototype. `tests/test_seed_solver_search.py` runs the
+release entry's own search with the solver on the viewed-planet capture. `profile_seed_solver.lua`
+times the solver's set-up and walk on a hard request from a capture, for
+LuaJIT's sampling profiler (its header gives the commands).

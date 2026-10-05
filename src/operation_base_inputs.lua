@@ -83,7 +83,8 @@ return function(make_identity,make_special,make_environments)
                     result[#result+1]=op
                 end
             end
-            return result,active
+            -- The identity input last: the seed solver walks the same draws.
+            return result,active,input
         end
     end
 end
