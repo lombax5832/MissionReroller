@@ -1,8 +1,8 @@
 # Worker Thread Probe test
 
 In-game check for [NATIVE_SOLVER_RESEARCH.md](NATIVE_SOLVER_RESEARCH.md),
-next step 2. **Run in game 2026-10-05: workers ran and joined cleanly; frame
-rate not yet reported.**
+next step 2. **Run in game 2026-10-05, v0.1.0 and v0.2.0: up to eight
+workers ran, kept the game at its 120 fps cap, and joined cleanly.**
 
 ## What it answers
 
@@ -123,7 +123,37 @@ against the idle lines and the one-worker run; `steps_per_second` with
 eight against one; `added_mb` (about 2.5 MB expected for eight); and
 `waited_ms` at shutdown with eight workers.
 
-## Result
+## Result, v0.2.0 (eight workers)
+
+2026-10-05, same machine and mods, on the ship. After run 3 had walked
+54 s, a normal window close quit the game. The log is kept as
+`artifacts/worker-probe/WorkerThreadProbe-v0.2.0-2026-10-05.log`.
+
+| Phase | Frames | Average frame | Worst frame: median / p90 / max |
+| --- | --- | --- | --- |
+| Idle (15 windows of 5 s) | 600 per 5 s | 8.34 ms | 10.7 / 22.0 / 25.3 ms |
+| 1 worker (9 windows of 1 s) | 120 per s | 8.34 ms | 9.0 / 11.3 / 11.3 ms |
+| 8 workers, run 2 (29 windows of 1 s) | 118 to 120 per s | 8.34 ms (at most 8.53) | 9.1 / 13.9 / 31.0 ms |
+| 8 workers, run 3 (53 windows of 1 s) | 119 to 120 per s | 8.34 ms (at most 8.46) | 8.9 / 11.8 / 21.2 ms |
+
+- **The game held its 120 fps cap** with eight workers; the average frame
+  stayed at 8.34 ms. Worst frames stayed within the idle range; idle
+  windows are 5 s long, so they catch more outliers than the 1 s ones.
+  The single 31 ms frame in run 2 is the only one above the idle maximum
+  (25.3 ms).
+- **Speed.** Eight workers: `steps_per_second=31323747` (run 2) and
+  `35104831` (run 3), 5.6 and 6.2 times one worker (`5638670`).
+- **Correctness.** `failed=0` in all three runs: 2.9 billion inversions.
+- **Memory.** Eight workers `added_mb=2.0` (peak worker heap 124 KB),
+  `held_after_close_mb=0.0`; free below 2 GB went from 31.9 to 29.9 MB
+  while they ran.
+- **Shutdown.** `PROBE_SHUTDOWN joined=1 run=3 waited_ms=0` with eight
+  workers walking.
+- **No reaction** from GameGuard or the game; no `STOPPED`.
+- `lua51=?` again: the `tostring` of the handle has no `0x` on this VM. The
+  lookups worked; cosmetic only.
+
+## Result, v0.1.0
 
 2026-10-05, v0.1.0, on the user's machine with their usual mods (16 logical
 processors, Bingus Shared Loader v17). The game was on the ship. After run

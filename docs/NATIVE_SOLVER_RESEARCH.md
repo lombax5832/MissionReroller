@@ -176,8 +176,11 @@ worker's heap, which the figures above include.
 The Worker Thread Probe answered three of these on 2026-10-05: GameGuard
 showed no reaction to pool threads in Lua code, the join at shutdown was
 clean, and 31.9 MB was free below 2 GB. Workers walked at 6.1 to 7.0
-million steps/s each in game (4 workers: 19.3 million). The frame rate is
-still open.
+million steps/s each in game (4 workers: 19.3 million). v0.2.0 answered
+the second: eight workers at below-normal priority walked at 31 to 35
+million steps/s, while the game held its 120 fps cap (average frame 8.34
+ms, worst frames within the idle range), took 2.0 MB below 2 GB and joined
+at shutdown in under a millisecond.
 
 - **GameGuard.** Starting threads in the game process is new for this
   workspace. Execution in LuaJIT machine code is not: every compiled trace
