@@ -247,11 +247,17 @@ for _,case in ipairs({
     -- No walk rate measured yet on this machine: no time.
     {{match=1/23456},'1 in 23,000 seeds match'},
     {{match=0,seconds=math.huge},'No seed gives this now'},
-    {{impossible=true},'No seed gives this now'},
     {{unavailable='no required mission'},'Rerolls every unstarted operation of the campaign'},
 })do
     local text=g:model(terminids,fresh({estimate=case[1]})).detail
     assert(text==case[2],tostring(text))
+end
+-- A request the solver proves no seed meets cannot be started.
+do
+    local m=g:model(terminids,fresh({estimate={impossible=true}}))
+    assert(not m.can_start and m.ready and m.tone=='bad' and m.status=='No seed gives this now. Change a rule to search',
+        m.status)
+    assert(g:model(terminids,fresh({estimate={match=1/23456}})).can_start,'A possible request can start')
 end
 -- A search that has not tried a seed yet keeps the request's estimate from
 -- before the search.
@@ -355,6 +361,17 @@ do
     c.objective_groups[2].list[3].role=2
     m=o:model(c,fresh())
     assert(m.items[1].role=='side' and m.items[3].role=='tactical','Rows carry their role for the panel')
+    -- The seed solver's reachability disables a row no draw path meets in
+    -- either mode, with the reason; without it nothing is ruled out.
+    m=o:model(c,fresh({reachable={ok=true,tag=function()return true end,
+        objective=function(g,row)return not (g==2 and row==broadcast)end}}))
+    for _,item in ipairs(m.items)do
+        if item.id=='objective:2:'..broadcast then assert(item.enabled==false and item.reason:find('never gets'),tostring(item.reason))
+        else assert(item.enabled~=false,item.id)end
+    end
+    act('objective:2:'..broadcast);assert(not (o.objectives[2] or {})[broadcast],'A refused row ignores clicks')
+    m=o:model(c,fresh())
+    for _,item in ipairs(m.items)do assert(item.enabled~=false,item.id)end
     act('objective:2:'..lidar)
     -- One side slot: Artillery can no longer be required, only excluded.
     m=o:model(c,fresh())
@@ -376,4 +393,27 @@ do
     act(4);o.group_choice=4;m=o:model(c,fresh());assert(#m.items==0 and m.objective_slots=='0 SIDE + 0 TACTICAL')
     act('clear');assert(next(o.objectives)==nil and o:rule_count()==0 and not next(o.changed))
 end
-print('Filter request: toggles, conflicts, groups, pruning, pages, request copy, status precedence, side objectives and time of day passed')
+-- Enemy forces of a checked mission: the seed solver's reachability
+-- disables a tag no draw path gives or avoids, and a click skips the modes it
+-- refuses. A request with no path itself, and the any-mission group, keep
+-- every option.
+do
+    local f=R.new(options,C,labels)
+    edit(f,2);f:navigate('section:enemies')
+    local refused={['2:2:accept']=true,['2:2:exclude']=true,['2:4:accept']=true}
+    local reach={ok=true,tag=function(g,t,mode)return not refused[g..':'..t..':'..mode]end,objective=function()return true end}
+    local m=f:model(terminids,fresh({reachable=reach}))
+    assert(ids(m)=='constellation:2:2 constellation:2:4')
+    assert(m.items[1].enabled==false and m.items[1].reason:find('never gets'),'Neither mode has a path')
+    assert(m.items[2].enabled and m.items[2].reason,'Only excluding has a path')
+    edit(f,'constellation:2:4');assert(f.constellations[2][4]=='exclude','The click skips accept')
+    edit(f,'constellation:2:2');assert(f.constellations[2][2]==nil,'A refused tag ignores clicks')
+    m=f:model(terminids,fresh())
+    assert(m.items[1].enabled and m.items[2].enabled,'Without reachability nothing is disabled')
+    m=f:model(terminids,fresh({reachable={ok=false,tag=function()return false end,objective=function()return false end}}))
+    assert(m.items[1].enabled and m.items[2].enabled,'A request without a path keeps every option')
+    local any=R.new(options,C,labels);any:navigate('section:enemies')
+    m=any:model(terminids,fresh({reachable={ok=true,tag=function()return false end,objective=function()return false end}}))
+    for _,item in ipairs(m.items)do assert(item.enabled,'The any-mission group is not solved')end
+end
+print('Filter request: toggles, conflicts, groups, pruning, pages, request copy, status precedence, side objectives, reachability and time of day passed')

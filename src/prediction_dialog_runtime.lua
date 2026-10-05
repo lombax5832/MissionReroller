@@ -184,7 +184,9 @@ do
     end
     -- The estimate under a request ready to search, worked out a few
     -- milliseconds a frame while the player edits it (src/solver_estimate.lua):
-    -- nil, 'pending' or the estimator's view.
+    -- nil, 'pending' or the estimator's view; and, once worked out, which
+    -- enemy-force and side-objective rules a path can still meet (nil when
+    -- unknown).
     local estimate_for
     do
         local make,identity,objectives=lib.make_solver_estimate,lib.predict_identity,lib.SideObjectives
@@ -198,7 +200,7 @@ do
             kept=nil
             if not (make and s and catalogue and compatible and not fixed and filters:rule_count()>0)then return end
             if sky and (sky.blocked or sky.pending) or filters.time and not sky_planet then return end
-            local estimate
+            local estimate,reach
             local ok,err=pcall(function()
                 estimator=estimator or make({read=read,clock=clock,slice=0.004,options=Search.options,
                     row_of=objectives and objectives.row_of,identity=identity,rate=rate,
@@ -214,8 +216,18 @@ do
                     end
                     daynight=window
                 end
-                estimator.update(s,difficulty,scope,filters:rules(),daynight)
+                -- The options shown for a checked mission, all checked for a path.
+                local function offered(family)
+                    local tags=(catalogue.constellation_groups or {})[family]
+                    local rows=(catalogue.objective_groups or {})[family]
+                    local out={tags={},objectives={}}
+                    for _,option in ipairs(tags and tags.list or {})do out.tags[#out.tags+1]=option.id end
+                    for _,option in ipairs(rows and rows.list or {})do out.objectives[#out.objectives+1]=option.id end
+                    return out
+                end
+                estimator.update(s,difficulty,scope,filters:rules(),daynight,offered)
                 estimate=estimator.view() or 'pending'
+                reach=estimator.reachable()
                 if type(estimate)=='table' then
                     local line=estimate.match and string.format('ESTIMATE match=1/%.0f seconds=%s',1/math.max(estimate.match,1e-12),
                         estimate.seconds and string.format('%.1f',estimate.seconds) or 'unmeasured') or estimate.impossible and 'ESTIMATE none: no draw path'
@@ -225,7 +237,7 @@ do
             end)
             if not ok and tostring(err)~=failure then failure=tostring(err);emit('ESTIMATE_BLOCKED '..failure)end
             kept=estimate
-            return estimate
+            return estimate,reach
         end
     end
     local function sky_view(s,now)
@@ -401,10 +413,10 @@ do
             -- A search keeps the last sky, so its tile keeps the hold.
             if s then sky=sky_view(s,now)elseif retained or running then sky=sky_state end
         end
-        local estimate=estimate_for(s,now,sky,compatible,fixed)
+        local estimate,reachable=estimate_for(s,now,sky,compatible,fixed)
         local model=filters:model(catalogue,{shown=s or running or retained,fresh=s~=nil,retained=retained,running=running,
             queued=gap.queued~=nil,fixed=fixed,overdue=overdue,run=run,why=why,report=report,tone=report_tone,
-            difficulty=difficulty,scope=scope,limit=default_limit,sky=sky,estimate=estimate})
+            difficulty=difficulty,scope=scope,limit=default_limit,sky=sky,estimate=estimate,reachable=reachable})
         if model.section=='enemies' then
             local shown,forced=catalogue,model.forced
             model.tooltip=function(item)return forecaster:tip(item,shown,forced)end

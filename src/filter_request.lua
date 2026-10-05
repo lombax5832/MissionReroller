@@ -137,20 +137,39 @@ end
 function R:can_exclude(id,catalogue)
     return self.catalogue.possible(catalogue,self:rules(nil,copy(self.excluded,id,true)))
 end
+-- The reason an option the seed solver rules out is disabled.
+local UNREACHABLE='This mission never gets this here at this difficulty'
+-- Whether the seed solver finds a path with one enemy-force ('tag') or
+-- side-objective ('objective') option of a checked mission set to mode,
+-- with the reason when not. self.reach is the request's reachability
+-- (src/seed_solver_search.lua R.reachability, set by model); without it, or
+-- for an option it did not check, nothing is ruled out.
+local function reachable(self,field,group,id,mode)
+    local reach=self.reach
+    if not reach or group==0 or not self.selected[group] then return true end
+    if reach[field](group,id,mode)==false then return false,UNREACHABLE end
+    return true
+end
 -- Whether a side-objective row of a group could take a mode, with the
 -- reason when not.
 function R:can_objective(group,row,mode,catalogue)
     if not catalogue then return true end
     local filter=self:objective_filter()
     filter.groups[group]=copy(filter.groups[group] or {},row,mode)
-    return self.catalogue.possible(catalogue,self:rules(nil,nil,filter))
+    local possible,why=self.catalogue.possible(catalogue,self:rules(nil,nil,filter))
+    if not possible then return possible,why end
+    return reachable(self,'objective',group,row,mode)
 end
+-- Whether a constellation tag of a group could take a mode, with the reason
+-- when not.
+function R:can_tag(group,tag,mode)return reachable(self,'tag',group,tag,mode)end
 -- Edits the request: clear, a mission id, 'modifier:<id>',
 -- 'constellation:<group>:<id>', 'objective:<group>:<row>' or
 -- 'time:any|day|night'. A mission cycles any, required, excluded. One the
 -- catalogue cannot require with the rest stays unchecked; a required one
 -- that cannot be excluded goes back to any. A side objective cycles the
--- same way, skipping a mode the catalogue rules out. A mission click that
+-- same way, skipping a mode the catalogue rules out; a constellation cycles
+-- accept, exclude, any, skipping a mode the seed solver rules out. A mission click that
 -- discards enemy or side-objective rules marks those sections changed.
 -- Returns whether the action was an edit.
 function R:toggle(action,catalogue)
@@ -178,7 +197,12 @@ function R:toggle(action,catalogue)
         local target,id=action:match('^constellation:(%d+):(%d+)$')
         target,id=tonumber(target),tonumber(id)
         local tags=self.constellations[target] or {}
-        tags[id]=tags[id]==nil and 'accept' or tags[id]=='accept' and 'exclude' or nil
+        local mode=tags[id]
+        local order=mode==nil and {'accept','exclude'} or mode=='accept' and {'exclude'} or {}
+        tags[id]=nil
+        for _,next_mode in ipairs(order)do
+            if self:can_tag(target,id,next_mode)then tags[id]=next_mode;break end
+        end
         self.constellations[target]=next(tags) and tags or nil
     elseif type(action)=='string' and action:match('^objective:')then
         local target,row=action:match('^objective:(%d+):(%d+)$')
@@ -279,8 +303,14 @@ local CHANGED=' - Mission changed'
 -- last outcome), difficulty, scope, limit (seeds per search) and sky: the
 -- viewed planet's day and night with a time of day chosen, {hold} or
 -- {pending=reason} or {blocked=reason} (src/day_night.lua).
+-- v.estimate is the request's estimate (src/solver_estimate.lua) and
+-- v.reachable its reachability, which disables the enemy-force and
+-- side-objective options no path meets. A request no path meets keeps every
+-- option enabled, so the player can edit it back, and cannot be started.
 function R:model(catalogue,v)
     local options,selected,excluded,modifiers,section=self.options,self.selected,self.excluded,self.modifiers,self.section
+    self.reach=v.reachable and v.reachable.ok and v.reachable or nil
+    local impossible=type(v.estimate)=='table' and v.estimate.impossible==true
     local display=v.shown and catalogue
     local groups=self:groups()
     local group=groups[1]
@@ -321,8 +351,15 @@ function R:model(catalogue,v)
                 -- A tag the map can add after generation carries a marker; its
                 -- tooltip says why (src/unit_forecast.lua).
                 local title,stamped=(option.name:gsub(' %b()$','')),self.stamped[option.id] or false
+                local mode=(self.constellations[group] or {})[option.id]
+                -- A tag no path gives or avoids is disabled with the reason.
+                local enabled,reason=true,nil
+                if not mode then
+                    local can,why=self:can_tag(group,option.id,'accept')
+                    if not can then enabled=(self:can_tag(group,option.id,'exclude'));reason=why end
+                end
                 items[#items+1]={id='constellation:'..group..':'..option.id,name=title..(stamped and ' *' or ''),
-                    title=title,tag=option.id,stamped=stamped,mode=(self.constellations[group] or {})[option.id]}
+                    title=title,tag=option.id,stamped=stamped,mode=mode,enabled=enabled,reason=reason}
             end
         end
         for i,id in ipairs(groups)do
@@ -376,12 +413,13 @@ function R:model(catalogue,v)
     elseif not compatible then status,tone=compatibility_reason,'bad'
     elseif sky.blocked and (fresh or retained) then status,tone=sky.blocked,'bad'
     elseif sky.pending and (fresh or retained) then status,tone=sky.pending,'warn'
+    elseif impossible and (fresh or retained) and rules>0 then status,tone='No seed gives this now. Change a rule to search','bad'
     elseif not fresh and not retained then
         status,tone=why=='Choose a planet and map difficulty' and 'Open a planet on the war table first' or why or report or 'Waiting for planet data','warn'
     elseif report then status,tone=report,v.tone
     else status,tone=rules>0 and 'Ready to search' or 'Choose what the operation must contain','idle' end
     -- An empty request is refused by validation; the panel disables Start instead.
-    return {running=busy,locked=locked,ready=ready,can_start=ready and rules>0,can_clear=not locked and rules>0,
+    return {running=busy,locked=locked,ready=ready,can_start=ready and rules>0 and not impossible,can_clear=not locked and rules>0,
         difficulty=v.difficulty,status=tostring(status),tone=tone,
         step=busy and (running and run.step or 1) or nil,
         detail=busy and (running and running_text(run,v.limit,v.estimate) or starting_text(v.estimate))

@@ -4,7 +4,9 @@ Runs tests/check_game_jit.lua inside the installed game's lua51.dll
 (tests/game_lua.py; the game is never started) on the viewed-planet captures,
 artifacts/planet-live and artifacts/city-live. The pinned LuaJIT compiles
 differently: a loop that passes there failed in game with "attempt to
-concatenate field 'effect_id' (a nil value)".
+concatenate field 'effect_id' (a nil value)". Then the recorded dialog
+reachability cases (tests/reachability_cases.lua), whose answers must agree
+with the seed solver's plan under the game's JIT too.
 
 Needs HD2_GAME_ROOT (or HD2_LUA51_DLL) and, for the build, ../BingusSharedLoader
 or BINGUS_LOADER_ROOT. The captures exist only in the main checkout; a missing
@@ -35,6 +37,13 @@ def main():
                 print(f'test_game_jit: {capture} missing, skipped')
                 continue
             game_lua.run(ROOT / 'tests/check_game_jit.lua', capture, ROOT / 'src', entry)
+            sys.stdout.flush()
+        for name in ('planet-268',):
+            capture = PR.artifacts() / name / 'capture.lua'
+            if not capture.exists():
+                print(f'test_game_jit: {capture} missing, skipped')
+                continue
+            game_lua.run(ROOT / 'tests/check_seed_solver_search.lua', capture, ROOT / 'src', entry, name)
             sys.stdout.flush()
     print('test_game_jit: passed')
 

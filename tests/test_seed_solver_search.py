@@ -5,6 +5,9 @@ viewed-planet captures (artifacts/planet-live/capture.lua, written by
 scripts/check_live_planet.py, and artifacts/city-live/capture.lua, a planet
 with a city): requests from the displayed board, the city's included, must
 match through the solver, and one it cannot seed must fall back to scanning.
+Then the recorded reachability cases (tests/reachability_cases.lua) on their
+captures: the options the dialog disables, each answer checked against the
+plan.
 
 Needs HD2_LUAJIT and, for the build, ../BingusSharedLoader or
 BINGUS_LOADER_ROOT. The captures exist only in the main checkout; a missing
@@ -33,6 +36,13 @@ def main():
                 continue
             subprocess.run([os.environ['HD2_LUAJIT'], str(ROOT / 'tests/check_seed_solver_search.lua'), str(capture),
                             str(ROOT / 'src'), str(entry)], check=True)
+        for name in ('planet-268',):
+            capture = PR.artifacts() / name / 'capture.lua'
+            if not capture.exists():
+                print(f'test_seed_solver_search: {capture} missing, skipped')
+                continue
+            subprocess.run([os.environ['HD2_LUAJIT'], str(ROOT / 'tests/check_seed_solver_search.lua'), str(capture),
+                            str(ROOT / 'src'), str(entry), name], check=True)
     print('test_seed_solver_search: passed')
 
 
