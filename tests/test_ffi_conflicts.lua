@@ -19,6 +19,12 @@ typedef struct {
 } MBM_MEMORY_BASIC_INFORMATION;
 size_t VirtualQuery(const void *address, MBM_MEMORY_BASIC_INFORMATION *info, size_t length);
 ]]
+-- Another addon's key and window declarations with unsigned types. With these
+-- first, a held key read 32768 through the entry's own int16_t declaration.
+ffi.cdef[[
+uint16_t GetAsyncKeyState(int vKey);
+unsigned long GetWindowThreadProcessId(void *hWnd, unsigned long *lpdwProcessId);
+]]
 CowboyBingusModLoader={api=1,version=18,open_log=function()return {write=function()end,flush=function()end,close=function()end}end}
 update=function()end;shutdown=function()end
 dofile(arg[1])
@@ -38,4 +44,11 @@ up(page,'ffi',ffi,true);up(page,'kernel',ffi.load('kernel32'),true)
 local buffer=ffi.new('uint8_t[?]',1048576)
 page(buffer+4096,16,0x20000)
 assert(not pcall(page,buffer+4096,16,0x1000000),'the page type is still checked')
-print('test_ffi_conflicts: page check works after Mod Bindings Menu declares VirtualQuery')
+-- The adapter's user32 functions keep their own signatures.
+local import_user32=up(up(up(up(update,'tick'),'prepare'),'initialize'),'import_user32')
+up(import_user32,'kernel',ffi.load('kernel32'),true)
+local user32=import_user32(ffi)
+assert(tostring(ffi.typeof(user32.GetAsyncKeyState)):find('^ctype<short %(%*%)'),tostring(ffi.typeof(user32.GetAsyncKeyState)))
+assert(type(user32.GetAsyncKeyState(0x76))=='number')
+user32.GetWindowThreadProcessId(user32.GetForegroundWindow(),ffi.new('uint32_t[1]'))
+print('test_ffi_conflicts: page check works after Mod Bindings Menu declares VirtualQuery; key state stays signed after an unsigned declaration')
