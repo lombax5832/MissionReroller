@@ -9,7 +9,7 @@ ffi.cdef[[void Sleep(uint32_t ms);]]
 local log_path=out..'/WorkerThreadProbe.log'
 CowboyBingusModLoader={api=1,version=mode=='old_loader' and 15 or 18,
     open_log=function(name)return io.open(out..'/'..name,'w')end}
-WorkerThreadProbeSchedule={first=0,gap=0.1,runs={{workers=1,seconds=0.5},{workers=3,seconds=0.5},{workers=1,seconds=120}}}
+WorkerThreadProbeSchedule={first=5.2,gap=0.1,runs={{workers=1,seconds=0.5},{workers=8,seconds=0.5},{workers=8,seconds=120}}}
 local shutdown_calls=0
 function update(dt)return 'a',nil,dt end
 function shutdown(...)shutdown_calls=shutdown_calls+1;return 7,select('#',...)end
@@ -65,12 +65,15 @@ for i,line in ipairs(done)do
     assert(tonumber(line:match('held_after_close_mb=([%-%d%.]+)'))<1,'memory held after close: '..line)
     assert(line:find('run='..i..' ',1,true),line)
 end
-assert(done[2]:find('workers=3',1,true),done[2])
+assert(done[2]:find('workers=8',1,true),done[2])
+assert(text:find('PROBE_FRAMES idle=1 frames=%d+'),'no idle frame baseline')
 assert(text:find('PROBE_SHUTDOWN joined=1 run=3',1,true),'no join at shutdown:\n'..text)
 for _,phase in ipairs({'startup','before','setup','walk','walked','closed'})do
     assert(text:find('phase='..phase..' ',1,true),'no memory phase '..phase)
 end
 assert(text:find('PROBE_PROGRESS run=3',1,true),'no progress of the long run')
+assert(text:find('PROBE_PROGRESS run=3 [^\n]* frames=%d+ frame_avg_ms=[%d%.]+ frame_max_ms=[%d%.]+'),'no frame times in progress')
+assert(text:find('WORKER_PROBE [^\n]*lua51=0x%x+'),'no lua51 address')
 local rate=tonumber(done[1]:match('steps_per_second=(%d+)'))
 print(string.format('test_worker_probe: passed (%s; one worker %.0f steps/s; %d log lines)',jit and jit.version or '?',
     rate,select(2,text:gsub('\n',''))))

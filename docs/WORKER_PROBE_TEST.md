@@ -106,6 +106,23 @@ Failure looks like:
 | No `PROBE_SHUTDOWN` line after run 3 started | The game did not call `shutdown`, or ended first. |
 | Frame rate drops in run 2 or 3 | Fewer workers or a lower priority are needed. |
 
+## v0.2.0: eight workers
+
+Same addon and GUID; replace v0.1.0 with
+`releases/Worker-Thread-Probe-v0.2.0.zip`. Runs: one worker for 10 s at
+60 s (baseline), eight for 30 s, then eight until you quit (at most 15
+min). The probe now logs the game's frame times: `frames`,
+`frame_avg_ms` and `frame_max_ms` on every `PROBE_PROGRESS` line (the
+second before it), and `PROBE_FRAMES idle=1 ...` every 5 s while no worker
+runs, as a baseline. The steps are the same as above: stay on the ship,
+and during the long run open the galactic map and move around before
+quitting from the menu.
+
+What to compare: `frame_avg_ms` and `frame_max_ms` with eight workers
+against the idle lines and the one-worker run; `steps_per_second` with
+eight against one; `added_mb` (about 2.5 MB expected for eight); and
+`waited_ms` at shutdown with eight workers.
+
 ## Result
 
 2026-10-05, v0.1.0, on the user's machine with their usual mods (16 logical

@@ -20,7 +20,7 @@ from build_addon import build_addon  # noqa: E402
 
 MODULE = 'mods/ipodalexei/worker_thread_probe'
 NAME = 'Worker Thread Probe'
-VERSION = '0.1.0'
+VERSION = '0.2.0'
 # Generated once for this addon. Keep it for every future build.
 GUID = '34c1fcb4-48e3-47b1-bfc2-8f92a685f4af'
 

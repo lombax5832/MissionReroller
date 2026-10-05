@@ -13,7 +13,7 @@
 -- It reads memory only through VirtualQuery, writes no game memory, reads
 -- no input and changes nothing in the game. Remove it after the test.
 if rawget(_G,'WorkerThreadProbe')then return end
-local VERSION='0.1.0'
+local VERSION='0.2.0'
 local state={version=VERSION,status='starting',run_index=0,active=false}
 rawset(_G,'WorkerThreadProbe',state)
 
@@ -32,8 +32,10 @@ end
 -- Runs, in order: the first `first` seconds after the first frame, each
 -- next one `gap` seconds after the previous one closed. The last one runs
 -- until the game shuts down (or its seconds pass), to test the join.
+-- v0.2.0: one worker as a baseline, then eight, to see what eight do to
+-- the game's frames.
 local SCHEDULE=rawget(_G,'WorkerThreadProbeSchedule') or {first=60,gap=20,runs={
-    {workers=1,seconds=10},{workers=4,seconds=10},{workers=1,seconds=900}}}
+    {workers=1,seconds=10},{workers=8,seconds=30},{workers=8,seconds=900}}}
 local LOW=2^31 -- non-GC64 LuaJIT heaps live below 2 GB
 local LUA_GLOBALSINDEX,LUA_GCCOLLECT,LUA_GCCOUNT,LUA_GCSETPAUSE=-10002,2,3,6
 local WAIT_OBJECT_0,MEM_FREE,MEM_PRIVATE=0,0x10000,0x20000
@@ -282,6 +284,15 @@ local function request_stop(run)
     run.stopping=true
     for i=0,run.spec.workers-1 do run.shared[i].stop=1 end
 end
+-- Frame times of the game's main thread: the time between update calls,
+-- gathered per window and reset when read.
+local frames={count=0,sum=0,max=0}
+local function frame_stats()
+    local text=string.format('frames=%d frame_avg_ms=%.2f frame_max_ms=%.2f',frames.count,
+        frames.count>0 and frames.sum/frames.count*1000 or 0,frames.max*1000)
+    frames.count,frames.sum,frames.max=0,0,0
+    return text
+end
 local function poll(t)
     local run=active
     local done=returned(run)
@@ -289,14 +300,14 @@ local function poll(t)
     if t-run.last_progress>=1 then
         run.last_progress=t
         local steps,_,seconds,heap,peak=totals(run)
-        emit(string.format('PROBE_PROGRESS run=%d elapsed_s=%.1f steps=%.0f steps_per_second=%.0f heap_kb=%.0f peak_kb=%.0f',
-            run.index,t-run.started,steps,seconds>0 and steps/seconds or 0,heap,peak))
+        emit(string.format('PROBE_PROGRESS run=%d elapsed_s=%.1f steps=%.0f steps_per_second=%.0f heap_kb=%.0f peak_kb=%.0f %s',
+            run.index,t-run.started,steps,seconds>0 and steps/seconds or 0,heap,peak,frame_stats()))
     end
     if t-run.last_scan>=2 then run.last_scan=t;log_memory('walk',run.index,scan())end
     return false
 end
 
-local next_at,stopped
+local next_at,stopped,last_idle
 local function first_frame()
     local lua51=initialize()
     local jit_state=rawget(_G,'jit')
@@ -304,17 +315,25 @@ local function first_frame()
     pcall(function()processors=tostring(os.getenv('NUMBER_OF_PROCESSORS'))end)
     emit(string.format('WORKER_PROBE version=%s jit=%s %s loader=v%s lua51=%s processors=%s',VERSION,
         tostring(jit_state and jit_state.status and jit_state.status()),tostring(jit_state and jit_state.version),
-        tostring(loader.version),tostring(lua51):match('0x%x+') or '?',processors))
+        tostring(loader.version),tostring(ffi.cast('void *',lua51)):match('0x%x+') or '?',processors))
     log_memory('startup',0,scan())
     next_at=now()+SCHEDULE.first
     emit(string.format('PROBE_SCHEDULE runs=%d first_in_s=%g gap_s=%g',#SCHEDULE.runs,SCHEDULE.first,SCHEDULE.gap))
     state.status='waiting'
+    last_idle=now()
+    frame_stats()
 end
 local function tick()
     if not now then first_frame()end
     local t=now()
+    if not active and state.run_index<#SCHEDULE.runs and t-last_idle>=5 then
+        -- Baseline frames with no worker running.
+        last_idle=t
+        emit('PROBE_FRAMES idle=1 '..frame_stats())
+    end
     if active then
         if poll(t)then
+            last_idle=t;frame_stats()
             next_at=t+SCHEDULE.gap
             if state.run_index>=#SCHEDULE.runs then state.status='finished';emit('PROBE_FINISHED')end
         end
@@ -327,7 +346,17 @@ end
 
 local original_update,original_shutdown=rawget(_G,'update'),rawget(_G,'shutdown')
 local function pack(...)return {n=select('#',...),...}end
+local last_frame
 _G.update=function(...)
+    if now then
+        local t=now()
+        if last_frame then
+            local dt=t-last_frame
+            frames.count,frames.sum=frames.count+1,frames.sum+dt
+            if dt>frames.max then frames.max=dt end
+        end
+        last_frame=t
+    end
     local result=original_update and pack(original_update(...)) or {n=0}
     if not state.abandoned then
         local ok,err=pcall(tick)
