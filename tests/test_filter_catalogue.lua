@@ -1,11 +1,18 @@
-local root=arg[1];local C=dofile(root..'/filter_catalogue.lua');local S=dofile(root..'/search_session.lua')
+local H=dofile((arg[0]:match('^(.*[/\\])') or '')..'harness.lua')
+local root=arg[1];local C=H.module(root..'/filter_catalogue.lua');local S=dofile(root..'/search_session.lua')
+-- A 110-row operation buffer whose rows hold only a faction (+36).
+local function factions(rows)
+    local parts={}
+    for row=0,109 do parts[#parts+1]=string.rep('\0',36)..string.char(rows[row] or 0,0,0,0)..string.rep('\0',52)end
+    return table.concat(parts)
+end
 local make_search=dofile(root..'/seed_search.lua');local Rules=dofile(root..'/filter_rules.lua')
 local spores,gunships,leviathan=0x1101e25c,0xf6f1b0c7,0xa92f094f
 local mission_by_faction={[2]=79,[3]=21,[4]=119}
 local modifier_by_faction={[2]=spores,[3]=gunships,[4]=leviathan}
 for faction=2,4 do
     local mod=modifier_by_faction[faction]
-    local s={planet=100,operations='',decoded={operations={{row=0,operation_id=1,difficulty=10}}}}
+    local s={planet=100,operations=factions({[0]=faction}),decoded={operations={{row=0,operation_id=1,difficulty=10}}}}
     local function u(_,offset)if offset==36 then return faction end;return 0 end
     local inputs={effect_id=function()return 4294967295 end,difficulty=function()return 1,3 end,
         templates=function(op)assert(op.faction==faction);return {{index=5,modifiers={{id=mod,cost=1},{id=0xa0687641,cost=500}}}}end,
@@ -54,7 +61,7 @@ local tags={settings=function(faction,difficulty)
     mission=function(kind)return assert(records[kind],'Only eligible mission types are decoded')end,
     disabled=function(id)return id==6 end}
 local function sample(with_tags)
-    local s={planet=100,operations='',decoded={operations={{row=0,operation_id=1,difficulty=10}}}}
+    local s={planet=100,operations=factions({[0]=2}),decoded={operations={{row=0,operation_id=1,difficulty=10}}}}
     local inputs={effect_id=function()return 4294967295 end,difficulty=function()return 1,3 end,
         templates=function()return {{index=5,modifiers={}}}end,
         candidates=function()return {{id=79},{id=66},{id=12},{id=150}}end,extra_mission=function()return nil end}
@@ -114,7 +121,7 @@ draws=0;assert(ids(sample(true).constellation_groups[0])=='','No draw, no conste
 assert(next(sample(false).constellation_groups)==nil,'Catalogues without tag inputs offer none')
 -- City scope: only accepted rows contribute missions, modifiers and effects.
 do
-    local s={planet=100,operations='',decoded={operations={{row=29,operation_id=1,difficulty=10,missions={}},
+    local s={planet=100,operations=factions({[29]=3,[49]=3,[48]=3}),decoded={operations={{row=29,operation_id=1,difficulty=10,missions={}},
         {row=49,operation_id=1,difficulty=10,missions={}},{row=48,operation_id=1,difficulty=9,missions={}}}}}
     local inputs={effect_id=function(op)return op.row==49 and 1 or 4294967295 end,difficulty=function()return 1,3 end,
         templates=function(op)return {{index=op.row,modifiers={{id=op.row==49 and gunships or spores,cost=1}}}}end,

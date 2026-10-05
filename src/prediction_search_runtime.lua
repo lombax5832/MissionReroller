@@ -7,6 +7,7 @@ local reroll_session,O,map=host.reroll_session,host.O,host.map
 local Search,Planet,make_search_job,DayNight=lib.Search,lib.Planet,lib.make_search_job,lib.DayNight
 local FilterRules=lib.FilterRules
 local ExternalEdits,SideObjectives=lib.ExternalEdits,lib.SideObjectives
+local Board=lib.Board
 local SeedSolver,predict_identity=lib.SeedSolver,lib.predict_identity
 local bind_constellations,on_existing_match,on_search_match=hooks.bind_constellations,hooks.on_existing_match,hooks.on_search_match
 local bind_objectives=hooks.bind_objectives
@@ -82,7 +83,7 @@ on_prediction_ready=function(s,definitions,now)
                     if bind then
                         local annotate=bind(model)
                         for _,op in ipairs(s.decoded.operations)do
-                            annotate(op,u(s.operations,op.row*92+28),op.operation_id)
+                            annotate(op,Board.category(s.operations,op.row),op.operation_id)
                             -- Side objectives are drawn on first use; draw them here, where a failure is caught.
                             for _,mission in ipairs(op.missions)do local _=mission.objectives end
                         end

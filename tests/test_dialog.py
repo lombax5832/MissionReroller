@@ -24,6 +24,7 @@ subprocess.run([lua,str(ROOT/'tests/test_day_night.lua'),str(ROOT/'src')],check=
 subprocess.run([lua,str(ROOT/'tests/test_mission_compatibility.lua'),str(ROOT/'src')],check=True)
 subprocess.run([lua,str(ROOT/'tests/test_template_environments.lua'),str(ROOT/'src')],check=True)
 subprocess.run([lua,str(ROOT/'tests/test_constellation_inputs.lua'),str(ROOT/'src')],check=True)
+subprocess.run([lua,str(ROOT/'tests/test_board_records.lua'),str(ROOT/'src')],check=True)
 # The saved campaign capture exists only in the main checkout's artifacts.
 oracle=ROOT/'artifacts/level-capture-oracle.lua'
 subprocess.run([lua,str(ROOT/'tests/test_planet_model.lua'),str(ROOT/'src')]+([str(oracle)] if oracle.exists() else []),check=True)

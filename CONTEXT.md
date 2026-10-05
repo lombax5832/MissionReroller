@@ -7,6 +7,12 @@ The words this project uses for its own concepts. Game facts are in
   unstarted operation. In a lobby, only the host may reroll.
 - **Board**: the operations on the viewed planet's war table, as the game
   holds them in memory.
+- **Board records** (`src/board_records.lua`, `lib.Board`): the Board's
+  92-byte operation records and 76-byte mission records, decoded in one
+  place. Field readers take a buffer and a row (`Board.category(bytes, row)`;
+  a lone record such as the active operation is row 0) and allocate
+  nothing; `Board.operation` gives the base fields as a table, and
+  `Board.hovered(read, board)` the mission the map previews.
 - **Prediction**: the board that the Lua port of the game's operation
   generator computes for a candidate seed. It is compared with the live board
   before any search.

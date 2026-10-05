@@ -128,10 +128,10 @@ for case_index,case in ipairs(fixture.cases)do
         end end end
         assert(module('filter_catalogue').possible(catalogue,{required=required,modifiers=rules}),'Native operation rejected by compatibility')
     end end
-    assert(module('verify_predicted_board')(snapshot,output,u))
+    assert(module('verify_predicted_board')(snapshot,output))
     local observed_type=decoded.operations[1].missions[1].native_type
     decoded.operations[1].missions[1].native_type=255
-    assert(not module('verify_predicted_board')(snapshot,output,u),'Publication must reject a wrong mission')
+    assert(not module('verify_predicted_board')(snapshot,output),'Publication must reject a wrong mission')
     decoded.operations[1].missions[1].native_type=observed_type
     if not baseline_snapshot then baseline_snapshot=snapshot end
     local catalogue=module('search_session')

@@ -1,6 +1,6 @@
 -- Supported normal, invasion and special operation bases, derived from campaign inputs.
 -- Defense generation and unresolved world-modifier conditions fail closed.
-local O=...
+local O,Board=...
 return function(make_identity,make_special,make_environments)
     return function(read,u,pointer,game,board,definitions,planet,inputs)
         local function word(a)return u(read(a,4),0)end
@@ -57,12 +57,11 @@ return function(make_identity,make_special,make_environments)
             assert(category<14,'Unsupported special category')
             event.category=category
         end
-        local bytes=read(board+O.board.active_snapshot,92);local active
-        if bytes:byte(53)~=0 and bytes:byte(17)+bytes:byte(18)*256==planet then
-            active={row=u(bytes,0),id=bytes:byte(25),seed=u(bytes,12),difficulty=bytes:byte(33),planet=planet,
-                category=u(bytes,28),faction=u(bytes,36),explicit_hash=u(bytes,8),template_index=u(bytes,56),modifiers={}}
-            assert(bytes:byte(69)<=2,'Invalid preserved modifier count')
-            for i=0,bytes:byte(69)-1 do active.modifiers[#active.modifiers+1]=u(bytes,60+i*4)end
+        local bytes=read(board+O.board.active_snapshot,Board.OPERATION_SIZE);local active
+        if Board.valid(bytes,0) and Board.planet(bytes,0)==planet then
+            active=Board.operation(bytes,0)
+            assert(Board.modifier_count(bytes,0)<=2,'Invalid preserved modifier count')
+            active.modifiers=Board.modifiers(bytes,0)
         end
         local input={planet=planet,pool_count=word(definitions+O.definitions.pool_count),max_difficulty=limit,active=active,specials=special}
         return function(seed)

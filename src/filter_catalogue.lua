@@ -1,4 +1,5 @@
 -- Read eligibility through the same input decoder used by the predictor.
+local _,Board=...
 local bit=require('bit')
 -- Names resolved from build 25480438 modifier metadata +0x38 localization keys.
 local C={names={
@@ -19,9 +20,8 @@ function C.build(inputs,s,difficulty,u,options,compatibility,accepts)
     local native,seen={},{}
     for _,base in ipairs(s.decoded.operations)do
         if base.difficulty==difficulty and (not accepts or accepts(base.row))then
-            local at=base.row*92
-            local op={id=base.operation_id,row=base.row,difficulty=difficulty,
-                faction=u(s.operations,at+36),category=u(s.operations,at+28),explicit_hash=u(s.operations,at+8)}
+            local op={id=base.operation_id,row=base.row,difficulty=difficulty,faction=Board.faction(s.operations,base.row),
+                category=Board.category(s.operations,base.row),explicit_hash=Board.explicit_hash(s.operations,base.row)}
             assert(op.faction>=2 and op.faction<=4,'Unsupported filter faction')
             assert(not result.faction or result.faction==op.faction,'Mixed planet factions')
             result.faction=op.faction;op.effect_id=inputs.effect_id(op,s.planet)

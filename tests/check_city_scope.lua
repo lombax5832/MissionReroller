@@ -78,7 +78,7 @@ print(string.format('planet=%d seed=%u operations=%d city regions=[%s] difficult
 assert(#regions>0,'View a planet with a city or megafactory')
 -- The displayed board, cities included, is what the predictor produces.
 local predict=Planet.bind(read,u,pointer,game,board,planet).predictor(definitions)
-local ok,why=module('verify_predicted_board')(snapshot,predict(seed),u)
+local ok,why=module('verify_predicted_board')(snapshot,predict(seed))
 assert(ok,'Displayed board differs from its prediction: '..tostring(why))
 print('Displayed board, city operations included, equals its prediction')
 local model=Planet.bind(read,u,pointer,game,board,planet)

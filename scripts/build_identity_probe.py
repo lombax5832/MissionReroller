@@ -43,8 +43,9 @@ def lua_table(values):
 
 
 # The adapter's inputs: the core, the build's mode, the map screen, the
-# offsets it verifies on the first frame, their numbers, and SHA-256.
-ADAPTER='core,config,make_map_screen,offsets,O,sha256'
+# offsets it verifies on the first frame, their numbers, SHA-256 and the
+# board's record layout.
+ADAPTER='core,config,make_map_screen,offsets,O,sha256,Board'
 
 
 def release_offsets(root):
@@ -74,9 +75,13 @@ def source(search=False,publish=False,dialog=False,version=None):
     # numbers O, which every module receives as its chunk argument (local O=...).
     parts.append('local offsets=(function()\n'+release_offsets(root)+'\nend)()')
     parts.append('local O=(function()\n'+(root/'offset_values.lua').read_text()+'\nend)()(offsets)')
+    # The board's operation and mission records (src/board_records.lua), every
+    # module's second chunk argument (local O,Board=...).
+    libraries.append('Board')
+    parts.append('local Board=(function(...)\n'+(root/'board_records.lua').read_text()+'\nend)(O)')
     def library(name,file):
         libraries.append(name)
-        parts.append('local '+name+'=(function(...)\n'+(root/file).read_text()+'\nend)(O)')
+        parts.append('local '+name+'=(function(...)\n'+(root/file).read_text()+'\nend)(O,Board)')
     def derived(name,expression):
         libraries.append(name)
         parts.append('local '+name+'='+expression)

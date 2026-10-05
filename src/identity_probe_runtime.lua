@@ -67,7 +67,7 @@ local function observe_baseline(now)
         local planet=u(read(b+O.board.selection,8),4)
         if planet>=512 or ExternalEdits.known(baselines,planet,u(read(b+O.board.seed,4),0)) then return end
         local s=snapshot(true)
-        if s and ExternalEdits.observe(baselines,s.planet,s.seed,s.operations,u) then
+        if s and ExternalEdits.observe(baselines,s.planet,s.seed,s.operations) then
             emit(string.format('BASELINE_RECORDED planet=%d seed=%u',s.planet,s.seed))
         end
     end)
@@ -145,7 +145,7 @@ local function tick()
     -- on the live board; the search's baseline and existing-match check read
     -- them from s.external.
     local edits,why
-    if result.passed then pcall(ExternalEdits.observe,baselines,s.planet,s.seed,s.operations,u)
+    if result.passed then pcall(ExternalEdits.observe,baselines,s.planet,s.seed,s.operations)
     else edits,why=ExternalEdits.classify(result,baselines,s.planet,s.seed)end
     local skip=edits and edits.rows
     s.external=skip

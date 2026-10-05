@@ -1,11 +1,8 @@
 -- luajit tests/test_external_edits.lua src/external_edits.lua
-local E=dofile(arg[1])
+local H=dofile((arg[0]:match('^(.*[/\\])') or '')..'harness.lua')
+local E=H.module(arg[1])
 local function word(n)
     return string.char(n%256,math.floor(n/256)%256,math.floor(n/65536)%256,math.floor(n/16777216)%256)
-end
-local function u(s,o)
-    local a,b,c,d=s:byte(o+1,o+4);assert(d)
-    return a+b*256+c*65536+d*16777216
 end
 -- A board of rows {row={id,seed,difficulty}} as the game's 110-row buffer.
 local function buffer(rows)
@@ -41,7 +38,7 @@ end
 local planet,seed=201,1263716310
 
 -- Rows round-trip through the buffer.
-local decoded=E.rows(buffer(predicted),u)
+local decoded=E.rows(buffer(predicted))
 assert(decoded[28].id==23 and decoded[28].seed==1048270963 and decoded[28].difficulty==10 and not decoded[0])
 
 -- The log case: F6 gave row 28 a new seed; row 29 still matches.
@@ -55,7 +52,7 @@ local none,why=E.classify(compare(live),{},planet,seed)
 assert(none==nil and why:find('row=29 no matching row after it',1,true),why)
 -- With the planet seen before F6 under the same seed it is proven.
 local store={}
-assert(E.observe(store,planet,seed,buffer(predicted),u))
+assert(E.observe(store,planet,seed,buffer(predicted)))
 edits=assert(E.classify(compare(live),store,planet,seed))
 assert(edits.rows[29].evidence=='baseline')
 -- A baseline under another campaign seed proves nothing.
@@ -95,12 +92,12 @@ assert(E.classify(compare(copy(predicted)),store,planet,seed)==nil,'A pass has n
 -- The baseline keeps the first board under a seed, so an edit seen later
 -- cannot prove itself; a new seed replaces it.
 live=copy(predicted);live[29]={id=21,seed=999,difficulty=10}
-assert(not E.observe(store,planet,seed,buffer(live),u))
+assert(not E.observe(store,planet,seed,buffer(live)))
 assert(E.known(store,planet,seed) and store[planet].rows[29].seed==777)
-assert(E.observe(store,planet,seed+1,buffer(live),u) and store[planet].rows[29].seed==999)
+assert(E.observe(store,planet,seed+1,buffer(live)) and store[planet].rows[29].seed==999)
 local crowded={}
-for p=0,63 do E.observe(crowded,p,1,buffer(predicted),u)end
-E.observe(crowded,64,1,buffer(predicted),u)
+for p=0,63 do E.observe(crowded,p,1,buffer(predicted))end
+E.observe(crowded,64,1,buffer(predicted))
 local count=0;for _ in pairs(crowded)do count=count+1 end
 assert(count==1 and crowded[64],'The store stays bounded')
 
