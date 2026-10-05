@@ -12,7 +12,7 @@ local ExternalEdits,O,pointer=lib.ExternalEdits,host.O,host.pointer
 local dialog_tick,dialog_release,observe_constellations=hooks.dialog_tick,hooks.dialog_release,hooks.observe_constellations
 local observe_objectives=hooks.observe_objectives
 local on_prediction_ready,advance_prediction_search=hooks.on_prediction_ready,hooks.advance_prediction_search
-local shutdown_search_workers=hooks.shutdown_search_workers
+local shutdown_search_workers,cool_search_workers=hooks.shutdown_search_workers,hooks.cool_search_workers
 local advance_live_publication,search_clock=hooks.advance_live_publication,hooks.search_clock
 local api,game,ffi,kernel,user32
 host.when_initialized(function(n)api,game,ffi,kernel,user32=n.api,n.game,n.ffi,n.kernel,n.user32 end)
@@ -239,6 +239,8 @@ _G.update=function(...)
         local ok,err=pcall(tick)
         if not ok then
             stopped=true;reroll_session.fail(err);emit(M.status)
+            if advance_prediction_search then pcall(advance_prediction_search,'cancel',0)end
+            if cool_search_workers then pcall(cool_search_workers)end
             if advance_live_publication then pcall(advance_live_publication,'cancel',0)end
             if dialog_release then pcall(dialog_release,'error')end
         end

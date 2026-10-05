@@ -182,6 +182,42 @@ do
     assert(pool.shutdown(3)==0,'workers left open at shutdown')
 end
 
+-- Warm workers: tick makes idle VMs up to max_workers; a search reuses
+-- them with the same candidates, and they go back to idle when it ends,
+-- twice over; cold closes the idle ones and stops a running search.
+local r_warm
+do
+    assert(pool.state().idle==0 and not pool.state().warm,'a new pool is cold')
+    assert(pool.tick()==0 and pool.state().idle==0,'a cold pool makes no worker')
+    pool.warm(true)
+    wait(function()pool.tick();local s=pool.state();return s.idle==pool.max_workers and s.retired==0 end,'warm-up')
+    for _=1,10 do pool.tick()end
+    assert(pool.state().idle==pool.max_workers,'warm stops at max_workers')
+    for round=1,2 do
+        local _,r=compare(synthetic,rows,173,60000,'warm '..round)
+        assert(r.warm==pool.max_workers and r.workers==pool.max_workers,'warm '..round..': idle workers reused')
+        assert(pool.state().idle==pool.max_workers,'warm '..round..': workers back to idle')
+        r_warm=r
+    end
+    local source=assert(pool.start({paths=synthetic,rows=rows,planet=173,random=starts(7)}))
+    ffi.C.Sleep(20)
+    assert(pool.state().idle==0,'a running search holds the workers')
+    assert(pool.warm(false)==0,'no idle worker to close while searching')
+    assert(source.next()==nil and select(2,source.next())==true,'cold stops a running search')
+    wait(function()return pool.reap()==0 end,'cold reap')
+    assert(pool.state().idle==0,'cold closes returning workers')
+    pool.warm(true)
+    wait(function()pool.tick();return pool.state().idle==pool.max_workers end,'warm again')
+    assert(pool.warm(false)==pool.max_workers and pool.state().idle==0,'cold closes the idle workers')
+    -- Cold again: a search's workers close when it ends.
+    compare(synthetic,rows,173,20000,'cold after warm')
+    assert(pool.state().idle==0,'cold workers are not kept')
+    -- Shutdown closes idle workers too.
+    pool.warm(true)
+    wait(function()pool.tick();return pool.state().idle==pool.max_workers end,'warm before shutdown')
+    assert(pool.shutdown(3)==0 and pool.state().idle==0 and not pool.state().warm,'shutdown closes idle workers')
+end
+
 -- Too little memory below 2 GB: no worker starts.
 do
     local tight=assert(Workers.pool(ffi,{reserve_mb=4096,processors=8}))
@@ -199,6 +235,12 @@ do
     wait(function()return p.reap()==0 end,'reap failed set-up')
     local r=source.report()
     assert(r.failed>=1 and r.error and r.error:find('chain unavailable',1,true),'set-up failure: '..tostring(r.error))
+    -- A failed warm-up keeps no worker and warms no further.
+    p.warm(true)
+    wait(function()p.tick();return p.warm_error~=nil end,'failed warm-up')
+    for _=1,10 do assert(p.tick()==0,'warming went on after a failure')end
+    assert(p.state().idle==0 and p.warm_error:find('chain unavailable',1,true),'warm error: '..tostring(p.warm_error))
+    p.warm(false)
     local failing=module('seed_solver_workers.lua')({math=sources.math,codec=sources.codec,
         chain='return function()return {new=function()return {steps=0,next=function()error("walk failed")end}end}end'})
     p=assert(failing.pool(ffi,{max_workers=2,processors=8}))
@@ -243,5 +285,5 @@ if capture then
     real=string.format('; capture: %d paths, %.0f KB of text, %d candidates, worker heap %.0f KB after set-up, peak %.0f KB',
         #paths,r.text_kb,n,r.setup_kb,r.peak_kb)
 end
-print(string.format('test_seed_solver_workers: passed (%s; %d workers; synthetic %d candidates, worker heap %.0f KB%s)',
-    jit and jit.version or '?',r_synthetic.workers,n_synthetic,r_synthetic.setup_kb,real))
+print(string.format('test_seed_solver_workers: passed (%s; %d workers, %d warm; synthetic %d candidates, worker heap %.0f KB%s)',
+    jit and jit.version or '?',r_synthetic.workers,r_warm.warm,n_synthetic,r_synthetic.setup_kb,real))

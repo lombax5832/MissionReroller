@@ -14,6 +14,16 @@ return function(Math,Paths,Chain,Time,Inputs)
     -- Seeds sampled for the Day / Night share, and how many.
     local SHARE_SAMPLES=2048
     local function sampled_seed(i)return Math.output(i,3)end
+    -- Worker VMs only for a request rarer than one seed in this many: a
+    -- commoner one is found on the main thread before workers would pay
+    -- for their set-up and their share of the address space below 2 GB.
+    R.WORKERS_RARER_THAN=2000000
+    -- Whether a source with this estimate walks in worker VMs, or why not.
+    function R.use_workers(estimate)
+        if estimate.match*R.WORKERS_RARER_THAN<1 then return true end
+        return false,string.format('estimated 1 in %.0f, not rarer than 1 in %.0f',1/math.max(estimate.match,1e-12),
+            R.WORKERS_RARER_THAN)
+    end
     -- Per solver inputs, the operation standing for each difficulty
     -- (seed_solver_paths.lua P.shared): the dialog estimates every edit
     -- from the same inputs.
@@ -50,7 +60,7 @@ return function(Math,Paths,Chain,Time,Inputs)
     -- estimate_only to stop once the estimate is known (no next or steps),
     -- make_chain(chain spec) to walk elsewhere (src/seed_solver_workers.lua:
     -- a chain-like {next, steps, close, workers, report} or nil and why,
-    -- when the walk stays here).
+    -- when the walk stays here), asked only when R.use_workers(estimate).
     -- Returns {next(budget) -> seed | nil, done, idle; steps(); expected()
     -- (the candidates expected from the steps walked); close();
     -- workers (0 when the walk runs here) and workers_off (why), report();
@@ -194,7 +204,9 @@ return function(Math,Paths,Chain,Time,Inputs)
         local chain_spec={paths=paths,rows=rows,planet=input.planet,random=spec.random,accept=accept,
             checkpoint=spec.checkpoint}
         local workers,workers_off
-        if spec.make_chain then
+        local rare
+        rare,workers_off=R.use_workers(estimate)
+        if spec.make_chain and rare then
             local ok,made,why=pcall(spec.make_chain,chain_spec)
             if ok and made then workers=made else workers_off=ok and why or tostring(made)end
         end

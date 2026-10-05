@@ -54,6 +54,9 @@ def main():
         assert stale not in release, stale
     assert ("banner='Mission Reroller " + build.VERSION + " docked dialog'").encode() in release
     assert b"shortcut='F7 on the galactic map'" in release
+    # The identity runtime cools the worker VMs on an error and joins them at shutdown.
+    for hook in (b'cool_search_workers=search.cool_search_workers', b'shutdown_search_workers=search.shutdown_search_workers'):
+        assert hook in release, hook
     lua = os.environ['HD2_LUAJIT']
     subprocess.run([lua, str(ROOT / 'tests/test_runtime_factories.lua'), str(SRC)], check=True)
     # The host's map screen and guarded write (map_screen.lua, guarded_write.lua).

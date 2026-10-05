@@ -5,6 +5,31 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
+**Not yet validated in game: workers only for rare requests.** A search
+the seed solver seeds now walks in worker VMs only when its estimate is
+rarer than one seed in 2 million (`SeedSolver.use_workers`,
+`WORKERS_RARER_THAN`); a commoner request is found on the main thread in a
+second or less, before workers would repay their set-up and their address
+space below 2 GB, and logs `SEED_SOLVER_WORKERS workers=0
+reason=estimated 1 in <k>, not rarer than 1 in 2000000`.
+
+**Not yet validated in game: warm workers on the ship.** The worker VMs
+are no longer made per search and closed after it. While on the ship the
+pool keeps up to `max_workers` idle VMs with their modules loaded and no
+thread (`pool.warm`, made one per frame); a search reuses them and they go
+back to idle. They warm when the galactic map is on top, which only
+happens on the ship, and cool when a UI root loading or transition gate is
+set, or after 120 s without the map while no search runs
+(`src/worker_warmth.lua`). The backstop exists because nothing in the mod
+yet tells a mission from the ship and the gates' values at a drop are not
+recorded; the `SEED_SOLVER_WORKERS_COLD` line logs the screen ids and gate
+bytes to settle it. This revisits NATIVE_SOLVER_RESEARCH.md's "close
+promptly": idle VMs hold their address space below 2 GB only on the ship.
+Also fixed: the release never passed `shutdown_search_workers` to the
+frame wrapper, so quitting did not join the workers; a `STOPPED:` error
+now cools the pool as well. Test plan: the third build in
+[SOLVER_WORKERS_TEST.md](SOLVER_WORKERS_TEST.md).
+
 **Not yet validated in game: v0.35.0.** Releases the seed solver's
 worker VMs, the one-poll capture, the reachability checks that disable
 impossible starts and unreachable enemy forces and side objectives, the
