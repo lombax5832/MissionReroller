@@ -15,8 +15,10 @@ threads can walk on several cores: in the game's own `lua51.dll`, offline,
 inverter now runs in doubles instead of boxed int64, 1.3 to 2.3 times the
 walk; not yet validated in game. Measurements, risks and next steps:
 [NATIVE_SOLVER_RESEARCH.md](NATIVE_SOLVER_RESEARCH.md). The Worker Thread Probe, a
-separate research addon, tests worker VMs and the memory below 2 GB in game;
-not yet run ([WORKER_PROBE_TEST.md](WORKER_PROBE_TEST.md)).
+separate research addon, tests worker VMs and the memory below 2 GB in game.
+It ran cleanly on 2026-10-05: no GameGuard reaction, 6.1 million steps/s
+per worker, a clean join at shutdown, and only 31.9 MB free below 2 GB
+([WORKER_PROBE_TEST.md](WORKER_PROBE_TEST.md)).
 
 **Not yet validated in game: v0.34.0 seed solver search.** Searches
 with mission, enemy force, side objective or Day / Night rules now take

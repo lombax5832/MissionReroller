@@ -115,8 +115,10 @@ own VM:
 - No way round it: the game's `lua51.dll` returns NULL from `lua_newstate`
   with a custom allocator; `luaL_newstate` put a worker at `0x0d4d0378`.
   `ffi.new` memory is in the same heap.
-- About 48 MB was free below 2 GB in game
-  (`../BingusSharedLoader/docs/TECHNICAL.md`), on one machine. The loader's
+- In game on 2026-10-05 ([WORKER_PROBE_TEST.md](WORKER_PROBE_TEST.md)),
+  only 31.9 MB was free below 2 GB, the largest block 15.9 MB, with
+  2,016 MB in use. The loader had seen about 48 MB earlier
+  (`../BingusSharedLoader/docs/TECHNICAL.md`). The loader's
   24 MB heap guard reads only the main VM's `collectgarbage('count')`, so it
   does not see worker heaps.
 - A worker that runs out of memory raises an error inside its own
@@ -146,7 +148,9 @@ more than the 48 MB free. The GC settings cost nothing at 4 workers
 The design for the mod therefore:
 
 1. **One shared copy of the data.** The main VM compiles the decision
-   trees and constraints once into flat FFI arrays. Workers read them
+   trees and constraints once into flat FFI arrays, allocated outside the
+   Lua heap where they are large (`ffi.new` memory sits below 2 GB too).
+   Workers read them
    through a pointer and never build Lua tables from them, so a worker's
    heap is its module code (about 200 KB) plus garbage. Flat arrays also
    suit the JIT better than tables. Not yet measured.
@@ -168,6 +172,12 @@ found 1.86 GB free. Each trace also keeps about 1 KB of records in the
 worker's heap, which the figures above include.
 
 ### Open questions, only answerable in game
+
+The Worker Thread Probe answered three of these on 2026-10-05: GameGuard
+showed no reaction to pool threads in Lua code, the join at shutdown was
+clean, and 31.9 MB was free below 2 GB. Workers walked at 6.1 to 7.0
+million steps/s each in game (4 workers: 19.3 million). The frame rate is
+still open.
 
 - **GameGuard.** Starting threads in the game process is new for this
   workspace. Execution in LuaJIT machine code is not: every compiled trace
@@ -199,7 +209,7 @@ main thread keeps only set-up, candidate boards and publication.
 
 1. Ship the double inverter (on this branch): 1.3 to 2.3 times the walk
    with no other change.
-2. The in-game probe: `scripts/native_solver/worker_probe.lua`, built by
+2. Done 2026-10-05, clean: the in-game probe: `scripts/native_solver/worker_probe.lua`, built by
    `build_worker_probe.py` as the separate Worker Thread Probe addon and
    checked by `tests/test_worker_probe.py` (in the workspace LuaJIT and in
    the game's `lua51.dll`). It runs three scheduled runs of thread-pool
