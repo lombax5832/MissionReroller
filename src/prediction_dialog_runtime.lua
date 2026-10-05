@@ -189,9 +189,14 @@ do
     do
         local make,identity,objectives=lib.make_solver_estimate,lib.predict_identity,lib.SideObjectives
         local clock,rate=hooks.search_clock,hooks.solver_rate
-        local estimator,failure,window,logged
+        local estimator,failure,window,logged,kept
         estimate_for=function(s,now,sky,compatible,fixed)
-            if not (make and s and catalogue and compatible and not fixed and not running and filters:rule_count()>0)then return end
+            -- A running search's request cannot change: it keeps the estimate
+            -- it started with, shown until the search has its own
+            -- (src/filter_request.lua starting_text).
+            if running then return kept end
+            kept=nil
+            if not (make and s and catalogue and compatible and not fixed and filters:rule_count()>0)then return end
             if sky and (sky.blocked or sky.pending) or filters.time and not sky_planet then return end
             local estimate
             local ok,err=pcall(function()
@@ -219,6 +224,7 @@ do
                 end
             end)
             if not ok and tostring(err)~=failure then failure=tostring(err);emit('ESTIMATE_BLOCKED '..failure)end
+            kept=estimate
             return estimate
         end
     end

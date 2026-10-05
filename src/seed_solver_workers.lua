@@ -4,8 +4,10 @@
 -- and seed_solver_codec.lua as text (the build passes them in `sources`) and
 -- the request's paths as codec text. It runs on a Windows thread-pool thread
 -- at below-normal priority, started at an FFI callback it created in
--- itself, and walks the whole chain from its own random starts; candidates
--- (seed and row) come back through a ring in FFI memory. The caller's VM
+-- itself. The workers share each job's random base and split its starts
+-- into equal arcs, one each (seed_solver_chain.lua arc), so between them
+-- they walk every start once; candidates (seed and row) come back through a
+-- ring in FFI memory. The caller's VM
 -- applies `accept` (the Day / Night ID check, a closure over game data) and
 -- predicts each candidate as before.
 --
@@ -22,7 +24,7 @@ return function(sources)
     local W={}
     local Codec=assert(loadstring(sources.codec,'=seed_solver_codec.lua'))()
     local LOW=2^31
-    local LUA_GLOBALSINDEX,LUA_GCCOLLECT,LUA_GCCOUNT,LUA_GCSETPAUSE=-10002,2,3,6
+    local LUA_GLOBALSINDEX=-10002
     local MEM_FREE,WAIT_OBJECT_0=0x10000,0
     local CAP=256 -- candidates a worker may hold before it waits for the caller
     local MB=2^20
@@ -34,11 +36,13 @@ return function(sources)
     -- other addons. The callback is wrapped whole in pcall, since an error
     -- escaping a LuaJIT callback ends the process.
     local WORKER=[==[
-local math_source,chain_source,codec_source,data,shared_address,start,step_limit,event_address,cap=...
+-- Texts arrive as (address, length) of read-only buffers the pool keeps
+-- alive until this VM is closed; they are copied on the worker's thread.
+local texts,shared_address,start,step_limit,event_address,cap,index,count=...
 local ffi=require('ffi')
 ffi.cdef[[
 typedef struct { int32_t stop, finished, failed, exhausted, head, tail, limited, pad;
-    double steps, heap_kb, peak_kb; double seed[256]; int32_t row[256]; } solver_worker_t;
+    double steps, heap_kb, peak_kb, expected, setup_kb; double seed[256]; int32_t row[256]; } solver_worker_t;
 void SetEventWhenCallbackReturns(void *instance, void *event);
 int CallbackMayRunLong(void *instance);
 void *GetCurrentThread(void);
@@ -48,17 +52,27 @@ uint32_t GetCurrentThreadId(void);
 void Sleep(uint32_t ms);
 ]]
 local C=ffi.C
-local Math=assert(loadstring(math_source,'=seed_solver_math.lua'))()
-local Chain=assert(loadstring(chain_source,'=seed_solver_chain.lua'))()(Math)
-local Codec=assert(loadstring(codec_source,'=seed_solver_codec.lua'))()
-local paths,rows,planet=Codec.decode(data)
-math_source,chain_source,codec_source,data=nil,nil,nil,nil
 local shared=ffi.cast('solver_worker_t *',shared_address)
--- Walk starts as SeedSolver.starts gives them, from this worker's seed.
-local n=start
-local function random()n=(n+1)%4294967296;return Math.output(n,1)end
+local function text(name)
+    local t=texts[name]
+    return ffi.string(ffi.cast('const char *',t[1]),t[2])
+end
+-- Loads the modules and decodes the paths: on the worker's thread, so its
+-- cost (it grows with the request) never lands in the game's frame.
 local function body()
-    local chain=Chain.new({paths=paths,rows=rows,planet=planet,random=random})
+    local Math=assert(loadstring(text('math'),'=seed_solver_math.lua'))()
+    local Chain=assert(loadstring(text('chain'),'=seed_solver_chain.lua'))()(Math)
+    local Codec=assert(loadstring(text('codec'),'=seed_solver_codec.lua'))()
+    local paths,rows,planet=Codec.decode(text('data'))
+    texts=nil
+    -- Drop the set-up's garbage and collect sooner while walking.
+    collectgarbage('collect');collectgarbage('setpause',110)
+    shared.setup_kb=collectgarbage('count')
+    -- Each job's base as SeedSolver.starts gives it, from the seed every
+    -- worker of the search shares; this worker walks arc `index` of `count`.
+    local n=start
+    local function random()n=(n+1)%4294967296;return Math.output(n,1)end
+    local chain=Chain.new({paths=paths,rows=rows,planet=planet,random=random,arc={index=index,count=count}})
     while true do
         local budget=4096
         if step_limit>0 then
@@ -67,7 +81,7 @@ local function body()
             if budget<=0 then shared.limited=1;return end
         end
         local seed,done,row=chain.next(budget)
-        shared.steps=chain.steps
+        shared.steps,shared.expected=chain.steps,chain.expected()
         if seed then
             while shared.head-shared.tail>=cap do
                 if shared.stop~=0 then return end
@@ -152,7 +166,7 @@ return tonumber(ffi.cast('intptr_t',SOLVER_WORKER_ENTRY))
         end)
         if not ok then return nil,tostring(K)end
         local shared_type=ffi.typeof([=[struct { int32_t stop, finished, failed, exhausted, head, tail, limited, pad;
-            double steps, heap_kb, peak_kb; double seed[256]; int32_t row[256]; }[?]]=])
+            double steps, heap_kb, peak_kb, expected, setup_kb; double seed[256]; int32_t row[256]; }[?]]=])
         local counter=ffi.new('int64_t[1]')
         assert(K.qpf(counter)~=0,'No performance counter')
         local frequency=tonumber(counter[0])
@@ -160,6 +174,14 @@ return tonumber(ffi.cast('intptr_t',SOLVER_WORKER_ENTRY))
         local processors=options.processors or tonumber(K.processors(0xffff))
         local function address(p)return tonumber(ffi.cast('intptr_t',p))end
         local pool={processors=processors,max_workers=math.max(1,math.min(options.max_workers,math.floor(processors/2)))}
+        -- A string in FFI memory: {buffer, length}; the buffer must outlive
+        -- every worker that may read it.
+        local function buffer(value)
+            local b=ffi.new('char[?]',#value)
+            ffi.copy(b,value,#value)
+            return {b,#value}
+        end
+        local source_buffers={math=buffer(sources.math),chain=buffer(sources.chain),codec=buffer(sources.codec)}
 
         -- Address space below 2 GB, read with VirtualQuery only.
         local info=ffi.new('uint8_t[48]') -- MEMORY_BASIC_INFORMATION
@@ -232,10 +254,15 @@ return tonumber(ffi.cast('intptr_t',SOLVER_WORKER_ENTRY))
         -- started. Only the first worker starts here; next() starts the rest,
         -- about 2 ms of set-up per call, so no call holds the frame long.
         function pool.start(spec)
+            -- spec.checkpoint (the search's pause) splits this set-up so it
+            -- stays inside the frame slice.
+            local checkpoint=spec.checkpoint or function()end
             pool.reap()
             local started=now()
-            local text=Codec.encode(spec.paths,spec.rows,spec.planet)
+            local text=Codec.encode(spec.paths,spec.rows,spec.planet,checkpoint)
+            checkpoint()
             local free,largest=pool.memory()
+            checkpoint()
             local per_kb=options.base_kb+options.text_factor*#text/1024
             local fit=math.floor((free/MB-options.reserve_mb)*1024/per_kb)
             local count=math.min(pool.max_workers,fit)
@@ -247,10 +274,23 @@ return tonumber(ffi.cast('intptr_t',SOLVER_WORKER_ENTRY))
             end
             local workers={}
             local shared=ffi.new(shared_type,count)
-            -- Builds, sets up and submits the next worker; nil and why on failure.
+            local data=buffer(text)
+            text=nil
+            local texts='{'
+            for _,name in ipairs({'math','chain','codec'})do
+                local b=source_buffers[name]
+                texts=texts..string.format('%s={%.17g,%d},',name,address(b[1]),b[2])
+            end
+            texts=texts..string.format('data={%.17g,%d}}',address(data[1]),data[2])
+            checkpoint()
+            -- One base for every worker, so their arcs tile each job's starts.
+            local base=spec.random()
+            -- Builds and submits the next worker; nil and why on failure. Its
+            -- set-up runs on its own thread, so this takes well under a
+            -- millisecond whatever the request.
             local function spawn()
                 local i=#workers
-                local w={shared=shared[i],keep=shared}
+                local w={shared=shared[i],keep=shared,data=data,sources=source_buffers}
                 local ok,err=pcall(function()
                     local L=L51.newstate()
                     if L==nil then error('luaL_newstate failed')end
@@ -259,17 +299,13 @@ return tonumber(ffi.cast('intptr_t',SOLVER_WORKER_ENTRY))
                     local event=K.create_event(nil,1,0,nil)
                     if event==nil then error('CreateEventA failed')end
                     w.event=event
-                    local chunk=string.format('return (function(...)\n%s\nend)(%q,%q,%q,%q,%.17g,%.17g,%d,%.17g,%d)',
-                        WORKER,sources.math,sources.chain,sources.codec,text,address(shared+i),spec.random(),
-                        spec.step_limit or 0,address(event),CAP)
+                    local chunk=string.format('return (function(...)\n%s\nend)(%s,%.17g,%.17g,%d,%.17g,%d,%d,%d)',
+                        WORKER,texts,address(shared+i),base,spec.step_limit or 0,address(event),CAP,i,count)
                     if L51.loadbuffer(L,chunk,#chunk,'=seed_solver_worker')~=0 or L51.pcall(L,0,1,0)~=0 then
                         error('worker set-up: '..ffi.string(L51.tolstring(L,-1,nil)))
                     end
                     w.entry=ffi.cast('void *',ffi.cast('intptr_t',L51.tonumber(L,-1)))
                     L51.settop(L,0)
-                    -- Drop the set-up's garbage and collect sooner while walking.
-                    L51.gc(L,LUA_GCCOLLECT,0);L51.gc(L,LUA_GCSETPAUSE,110)
-                    w.setup_kb=L51.gc(L,LUA_GCCOUNT,0)
                 end)
                 if not ok then release(w);return nil,tostring(err)end
                 if K.submit(w.entry,nil,nil)==0 then release(w);return nil,'thread pool refused the work'end
@@ -279,8 +315,8 @@ return tonumber(ffi.cast('intptr_t',SOLVER_WORKER_ENTRY))
             end
             local first,why=spawn()
             if not first then return nil,why,report end
+            checkpoint()
             report.setup_ms=(now()-started)*1000
-            report.setup_kb=first.setup_kb
 
             local source={workers=count}
             local accept=spec.accept
@@ -297,8 +333,9 @@ return tonumber(ffi.cast('intptr_t',SOLVER_WORKER_ENTRY))
                 pool.reap()
             end
             -- A candidate seed (then nil and its row), or nil and done once
-            -- the space is covered (a worker walked every job) or no worker
-            -- is left, or nil, false, true while the workers have none ready.
+            -- the space is covered (every planned worker walked its arcs) or
+            -- no worker is left (an arc unwalked: the search then scans), or
+            -- nil, false, true while the workers have none ready.
             function source.next()
                 if closed then return nil,true end
                 calls=calls+1
@@ -310,7 +347,7 @@ return tonumber(ffi.cast('intptr_t',SOLVER_WORKER_ENTRY))
                     until spawn_error or #workers>=count or now()-t>0.002
                     if spawn_error or #workers>=count then text=nil end
                 end
-                local alive,exhausted=0,false
+                local alive,exhausted=0,0
                 for _=1,#workers do
                     at=at%#workers+1
                     local w=workers[at]
@@ -321,7 +358,7 @@ return tonumber(ffi.cast('intptr_t',SOLVER_WORKER_ENTRY))
                         s.tail=s.tail+1
                         if not accept or accept(seed,row)then return seed,nil,row end
                     end
-                    if s.exhausted~=0 and s.finished~=0 then exhausted=true end
+                    if s.exhausted~=0 and s.finished~=0 then exhausted=exhausted+1 end
                     if s.finished==0 then
                         -- The heap cap: a runaway worker stops; the rest walk on.
                         if calls%64==0 and s.heap_kb>options.heap_cap_kb then s.stop=1;w.capped=true end
@@ -329,7 +366,7 @@ return tonumber(ffi.cast('intptr_t',SOLVER_WORKER_ENTRY))
                     end
                 end
                 local starting=#workers<count and not spawn_error
-                if exhausted or (alive==0 and not starting)then retire();return nil,true end
+                if exhausted==count or (alive==0 and not starting)then retire();return nil,true end
                 return nil,false,true
             end
             function source.steps()
@@ -337,12 +374,18 @@ return tonumber(ffi.cast('intptr_t',SOLVER_WORKER_ENTRY))
                 for _,w in ipairs(workers)do total=total+w.shared.steps end
                 return total
             end
+            -- The candidates expected from the steps walked (chain.expected).
+            function source.expected()
+                local total=0
+                for _,w in ipairs(workers)do total=total+w.shared.expected end
+                return total
+            end
             source.close=retire
             active[source]=true
             -- Figures for the log: workers started, failed (with the first
             -- error), capped, the largest heap, and why starting stopped.
             function source.report()
-                local r={workers=#workers,planned=count,failed=0,capped=0,peak_kb=0,spawn_error=spawn_error}
+                local r={workers=#workers,planned=count,failed=0,capped=0,peak_kb=0,setup_kb=0,spawn_error=spawn_error}
                 for k,v in pairs(report)do if r[k]==nil then r[k]=v end end
                 for _,w in ipairs(workers)do
                     if w.shared.failed~=0 then
@@ -352,6 +395,7 @@ return tonumber(ffi.cast('intptr_t',SOLVER_WORKER_ENTRY))
                     end
                     if w.capped then r.capped=r.capped+1 end
                     r.peak_kb=math.max(r.peak_kb,w.shared.peak_kb)
+                    r.setup_kb=math.max(r.setup_kb,w.shared.setup_kb)
                 end
                 r.error=r.error or spawn_error
                 return r

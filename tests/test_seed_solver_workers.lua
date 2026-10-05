@@ -79,17 +79,11 @@ local function wait(predicate,what)
     error('timed out: '..what)
 end
 
--- Every worker's candidates equal an in-process chain from its start over
--- the same steps, budgeted as the worker budgets them.
-local function compare(paths,rows,planet,limit,label)
-    local seed=12345
-    local given=starts(seed)
-    local worker_starts={}
-    local source,reason,report=pool.start({paths=paths,rows=rows,planet=planet,step_limit=limit,
-        random=function()local s=given();worker_starts[#worker_starts+1]=s;return s end})
-    assert(source,label..': '..tostring(reason))
-    local got,count={},0
-    local done
+-- Every worker's candidates equal an in-process chain over the same arc of
+-- each job (one shared base, arc k of n) and the same steps, budgeted as the
+-- worker budgets them; so do the steps and the expected candidates.
+local function drain(source,label)
+    local got,count,done={},0,nil
     wait(function()
         while true do
             local s,d,row=source.next()
@@ -97,25 +91,62 @@ local function compare(paths,rows,planet,limit,label)
             else done=d;return d end
         end
     end,label..' candidates')
-    assert(done==true)
-    local want,expected={},0
-    for _,start in ipairs(worker_starts)do
-        local chain=Chain.new({paths=paths,rows=rows,planet=planet,random=starts(start)})
-        while chain.steps<limit do
-            local s,d,row=chain.next(math.min(4096,limit-chain.steps))
-            if s then want[key(s,row)]=(want[key(s,row)] or 0)+1;expected=expected+1 elseif d then break end
+    assert(done==true,label..': not done')
+    return got,count
+end
+local function reference(paths,rows,planet,base,n,limit)
+    local want,expected,steps={},0,0
+    for k=0,n-1 do
+        local chain=Chain.new({paths=paths,rows=rows,planet=planet,random=starts(base),arc=n>1 and {index=k,count=n} or nil})
+        while not limit or chain.steps<limit do
+            local s,d,row=chain.next(limit and math.min(4096,limit-chain.steps) or 4096)
+            if s then want[key(s,row)]=(want[key(s,row)] or 0)+1 elseif d then break end
         end
+        expected,steps=expected+chain.expected(),steps+chain.steps
     end
+    return want,expected,steps
+end
+local function same(got,want,label)
     for k,n in pairs(want)do assert(got[k]==n,label..': worker candidates differ at '..k)end
     for k,n in pairs(got)do assert(want[k]==n,label..': extra worker candidate '..k)end
-    assert(source.steps()==limit*#worker_starts,label..': steps '..source.steps())
+end
+local function compare(paths,rows,planet,limit,label)
+    local base
+    local given=starts(12345)
+    local source,reason=pool.start({paths=paths,rows=rows,planet=planet,step_limit=limit,
+        random=function()base=given();return base end})
+    assert(source,label..': '..tostring(reason))
+    local got,count=drain(source,label)
+    local n=source.workers
+    local want,expected,steps=reference(paths,rows,planet,base,n,limit)
+    same(got,want,label)
+    assert(source.steps()==steps and steps==limit*n,label..': steps '..source.steps())
+    assert(math.abs(source.expected()-expected)<=1e-9*math.max(1,expected),label..': expected candidates')
     local r=source.report()
-    assert(r.failed==0 and r.workers==#worker_starts and r.workers==r.planned,label..': report')
+    assert(r.failed==0 and r.workers==n and r.workers==r.planned,label..': report')
     wait(function()return pool.reap()==0 end,label..' reap')
     return count,r
 end
 local n_synthetic,r_synthetic=compare(synthetic,rows,173,60000,'synthetic')
 assert(n_synthetic>0,'synthetic request yielded no candidate')
+
+-- The arcs tile each job's starts: walked to the end, the workers find
+-- exactly the full walk's candidates once each, in as many steps, and the
+-- source ends because the space is covered.
+do
+    local small={{constraints={{kind='stream',position=2,lo=0,hi=149999}}}}
+    small[1].probability=Chain.mass(small[1])
+    local base
+    local source=assert(pool.start({paths=small,rows=rows,planet=173,random=function()base=1234567;return base end}))
+    local got=drain(source,'exhaustive')
+    local want,expected,steps=reference(small,rows,173,base,1)
+    same(got,want,'exhaustive')
+    assert(source.steps()==steps,'exhaustive steps: '..source.steps()..' against '..steps)
+    assert(math.abs(source.expected()-expected)<=1e-9*expected,'exhaustive expected candidates')
+    local r=source.report()
+    assert(r.workers==r.planned and r.workers>1 and r.failed==0,'exhaustive report')
+    wait(function()return pool.reap()==0 end,'exhaustive reap')
+end
 
 -- accept runs in this VM on (seed, row).
 do
@@ -158,12 +189,16 @@ do
     assert(source==nil and reason:find('memory below 2 GB',1,true),'memory refusal: '..tostring(reason))
 end
 
--- A worker whose set-up fails starts nothing; one whose walk fails reports it.
+-- Set-up runs on the worker's thread: a worker whose set-up fails, like one
+-- whose walk fails, ends the source and reports why.
 do
     local broken=module('seed_solver_workers.lua')({math=sources.math,codec=sources.codec,chain='error("chain unavailable")'})
     local p=assert(broken.pool(ffi,{max_workers=2,processors=8}))
-    local source,reason=p.start({paths=synthetic,rows=rows,planet=173,random=starts(2)})
-    assert(source==nil and reason:find('chain unavailable',1,true),'set-up failure: '..tostring(reason))
+    local source=assert(p.start({paths=synthetic,rows=rows,planet=173,random=starts(2)}))
+    wait(function()local s,d=source.next();return d==true end,'a failed set-up ends the source')
+    wait(function()return p.reap()==0 end,'reap failed set-up')
+    local r=source.report()
+    assert(r.failed>=1 and r.error and r.error:find('chain unavailable',1,true),'set-up failure: '..tostring(r.error))
     local failing=module('seed_solver_workers.lua')({math=sources.math,codec=sources.codec,
         chain='return function()return {new=function()return {steps=0,next=function()error("walk failed")end}end}end'})
     p=assert(failing.pool(ffi,{max_workers=2,processors=8}))

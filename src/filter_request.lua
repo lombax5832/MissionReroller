@@ -225,11 +225,38 @@ local function clock_text(seconds)
     local s=math.max(0,math.floor(seconds))
     return string.format('%d:%02d',math.floor(s/60),s%60)
 end
+-- A count in two or three figures: 350K, 2.4M, 28M, 1.2B.
+local function compact(n)
+    if n<10000 then return grouped(n)end
+    local function figures(v,unit)
+        if v<10 then return string.format('%.1f',math.floor(v*10+0.5)/10):gsub('%.0$','')..unit end
+        return grouped(math.floor(v+0.5))..unit
+    end
+    -- The unit by the rounded figure, so 999,999,999.9 reads 1B, not 1,000M.
+    if n<999500 then return figures(n/1e3,'K')end
+    if n<999.5e6 then return figures(n/1e6,'M')end
+    return figures(n/1e9,'B')
+end
+-- While a search starts (no seed tried, no estimate of its own yet): the
+-- estimate the request showed before the search, else a plain line, rather
+-- than a count of zero seeds.
+local function starting_text(before)
+    if type(before)=='table' and before.match and before.match>0 then return estimate_text(before,true)end
+    return 'Starting search'
+end
 -- Under a running search: its clock, then the solver's estimate or the
--- seeds searched.
-local function running_text(run,limit)
-    local what=run.estimate and estimate_text(run.estimate,true)
-        or grouped(run.progress or 0)..' of '..grouped(limit)..' seeds searched'
+-- seeds searched. With the seeds the solver has covered so far (the seeds
+-- an in-order scan would have checked for the same chance of a match), the
+-- count and the filter's strictness, compact, replace the usual time.
+-- before: the request's estimate from before the search.
+local function running_text(run,limit,before)
+    local e=run.estimate
+    local what
+    if e and e.covered and e.match>0 then
+        what=compact(e.covered)..' seeds covered - '..(e.match>=0.5 and 'most seeds match' or '1 in '..compact(1/e.match)..' match')
+    elseif e then what=estimate_text(e,true)
+    elseif (run.progress or 0)==0 then what=starting_text(before)
+    else what=grouped(run.progress)..' of '..grouped(limit)..' seeds searched' end
     return run.elapsed and clock_text(run.elapsed)..' - '..what or what
 end
 -- Under a request ready to search: its estimate (solver_estimate.lua) once
@@ -355,7 +382,7 @@ function R:model(catalogue,v)
     return {running=busy,locked=locked,ready=ready,can_start=ready and rules>0,can_clear=not locked and rules>0,
         difficulty=v.difficulty,status=tostring(status),tone=tone,
         step=busy and (running and run.step or 1) or nil,
-        detail=busy and (running and running_text(run,v.limit) or '0 of '..grouped(v.limit)..' seeds searched')
+        detail=busy and (running and running_text(run,v.limit,v.estimate) or starting_text(v.estimate))
             or ready and rules>0 and tone=='idle' and before_search(v.estimate) or '',
         faction=display and catalogue.faction or nil,scope=v.scope and 'city' or 'planet',
         section=section,items=items,page=self.page,pages=pages,groups=tabs,group=group,

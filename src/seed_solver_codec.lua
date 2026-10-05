@@ -10,9 +10,19 @@
 local C={}
 local VERSION=1
 
-function C.encode(paths,rows,planet)
+-- checkpoint, optional, is called after each mission and path (a long
+-- request encodes in pieces inside the search's frame slices).
+function C.encode(paths,rows,planet,checkpoint)
+    checkpoint=checkpoint or function()end
     local out,missions,order={},{},{}
-    local function put(v)out[#out+1]=string.format('%.17g',v)end
+    -- Integers (every value but probabilities and shares) go in as numbers,
+    -- which table.concat writes exactly without a string each: encoding
+    -- leaves the game's VM little garbage to collect mid-frame.
+    local floor=math.floor
+    local function put(v)
+        if v==floor(v) and v>-2^52 and v<2^52 then out[#out+1]=v
+        else out[#out+1]=string.format('%.17g',v)end
+    end
     local function mission_index(m)
         if not missions[m]then order[#order+1]=m;missions[m]=#order end
         return missions[m]
@@ -40,6 +50,7 @@ function C.encode(paths,rows,planet)
         else
             put(0);alternative(m)
         end
+        checkpoint()
     end
     put(#paths)
     for _,path in ipairs(paths)do
@@ -50,6 +61,7 @@ function C.encode(paths,rows,planet)
             put(s.lo and 1 or 0);put(s.lo or 0);put(s.hi or 0)
             put(s.mission and missions[s.mission] or 0)
         end
+        checkpoint()
     end
     return table.concat(out,' ')
 end

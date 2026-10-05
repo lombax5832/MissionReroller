@@ -25,8 +25,15 @@ validation, publication.
 - `src/seed_solver_codec.lua`: the paths as compact text, shared missions
   written once. On the planet 173 exclusion request that is 86 KB, and a
   worker's heap is 0.5 MB after set-up and 1.4 MB at its peak.
-- When workers cannot start (no `lua51.dll`, too little memory, a set-up
-  error), the walk runs on the main thread as in v0.34.0.
+- The workers share each job's random base and split its starts into
+  equal arcs, one each, so between them they walk every start once; the
+  space counts as covered only when every worker has finished its arcs.
+- A worker loads its modules and decodes the paths on its own thread from
+  read-only buffers, so starting one costs the game's frame well under a
+  millisecond whatever the request.
+- When workers cannot start (no `lua51.dll`, too little memory), the walk
+  runs on the main thread as in v0.34.0. A worker that fails or is capped
+  leaves its arcs unwalked; the search then scans seeds in order.
 - Cancelling or finishing a search stops its workers; quitting the game
   waits up to 3 s for them.
 
@@ -65,10 +72,10 @@ Success:
 ```
 SEED_SOLVER_WORKERS_READY max_workers=8 processors=16
 SEED_SOLVER paths=<n> rows=<r> setup_ms=<ms> match=1/<k> expected_steps=<s>
-SEED_SOLVER_WORKERS workers=8 text_kb=<kb> worker_heap_kb=<kb> setup_ms=<ms> free_mb=<mb> largest_mb=<mb> processors=16
-LUA_SEARCH_PROGRESS ... mode=solver walk_steps=<steps> workers=8
-LUA_SEARCH_MATCH seed=<seed> ... mode=solver walk_steps=<steps> workers=8 ...
-SEED_SOLVER_WORKERS_END workers=8 walk_steps=<steps> failed=0 capped=0 peak_worker_heap_kb=<kb>
+SEED_SOLVER_WORKERS workers=8 text_kb=<kb> setup_ms=<ms> free_mb=<mb> largest_mb=<mb> processors=16
+LUA_SEARCH_PROGRESS ... mode=solver walk_steps=<steps> workers=8 covered=<seeds>
+LUA_SEARCH_MATCH seed=<seed> ... mode=solver walk_steps=<steps> workers=8 covered=<seeds> ...
+SEED_SOLVER_WORKERS_END workers=8 walk_steps=<steps> failed=0 capped=0 worker_heap_kb=<kb> peak_worker_heap_kb=<kb>
 ```
 
 - The hard request's `walk_steps` over its `elapsed_s` is the walk rate:
@@ -92,6 +99,29 @@ Failure:
 | `SEED_SOLVER_WORKERS_END ... capped=<n>` | Workers passed the 16 MB heap cap and were stopped. |
 | `SEED_SOLVER_WORKERS_SHUTDOWN left_open=<n>` | Workers had not stopped 3 s after quitting began. |
 | The frame rate drops during a search | Fewer workers are needed (`max_workers` in `src/seed_solver_workers.lua`). |
+
+## Second build: arcs, seeds covered, no zero count
+
+Changes after the first result:
+
+- **Arcs.** The workers split each job's starts evenly instead of starting
+  at independent random points, so no start is walked twice.
+- **Seeds covered.** A running search's line reads like
+  `0:07 - 348M seeds covered - 1 in 28M match`: the seeds an in-order scan
+  would have checked for the same chance of a match (each job's steps at
+  its expected candidates per step, over the share of seeds that match).
+  Logged as `covered=<seeds>` on the progress and match lines.
+- **No zero count.** Pressing Begin Search no longer shows `0 of 1,000,000
+  seeds searched` while the search starts: the line keeps the estimate the
+  request showed before the search, or reads `Starting search`, until the
+  search has its own count or estimate.
+- **Set-up off the main thread**, as above.
+
+Check: the line under a running solver search shows seeds covered growing;
+the start shows no zero count; the hard request still matches;
+`LUA_SEARCH_MATCH ... covered=` is about `walk_steps` times the match odds
+over the expected steps (as a rough check: the 2026-10-05 search would have
+read about 350 million).
 
 ## Result
 

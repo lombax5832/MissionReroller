@@ -171,8 +171,8 @@ on_prediction_ready=function(s,definitions,now)
             local ms=(search_clock()-started)*1000
             local r=worker_report or {}
             if ok and result and result.workers>0 then
-                emit(string.format('SEED_SOLVER_WORKERS workers=%d text_kb=%.0f worker_heap_kb=%.0f setup_ms=%.1f free_mb=%.1f largest_mb=%.1f processors=%d',
-                    result.workers,r.text_kb or 0,r.setup_kb or 0,r.setup_ms or 0,r.free_mb or 0,r.largest_mb or 0,r.processors or 0))
+                emit(string.format('SEED_SOLVER_WORKERS workers=%d text_kb=%.0f setup_ms=%.1f free_mb=%.1f largest_mb=%.1f processors=%d',
+                    result.workers,r.text_kb or 0,r.setup_ms or 0,r.free_mb or 0,r.largest_mb or 0,r.processors or 0))
             elseif ok and result then
                 emit('SEED_SOLVER_WORKERS workers=0 reason='..tostring(result.workers_off or worker_pool_off)..'; walking on the main thread')
             end
@@ -305,7 +305,11 @@ advance_prediction_search=function(action,now)
         local rate=solver_rate
         -- A measured rate also serves the dialog's next estimates.
         if steps>=200000 and work>0.5 then rate=steps/work;solver_rate=rate end
-        reroll_session.estimate({match=e.match,seconds=SeedSolver.seconds(e.steps,rate,job.source.setup or 0),elapsed=elapsed})
+        -- covered: the seeds an in-order scan would have checked for the same
+        -- chance of a match (seed_solver_chain.lua chain.expected).
+        local covered=job.source.expected and e.match>0 and job.source.expected()/e.match or nil
+        reroll_session.estimate({match=e.match,seconds=SeedSolver.seconds(e.steps,rate,job.source.setup or 0),elapsed=elapsed,
+            covered=covered})
     else reroll_session.estimate(nil)end
     local compiled=rawget(_G,'jit') and type(jit.status)=='function' and jit.status()
     local timing=string.format('elapsed_s=%.2f slices=%d work_ms=%.0f context_ms=%.0f jit=%s',elapsed,slices,
@@ -313,6 +317,9 @@ advance_prediction_search=function(action,now)
     if job.source then
         timing=timing..string.format(' mode=%s walk_steps=%.0f workers=%d',job.solving and 'solver' or 'scan',job.source.steps(),
             job.source.workers or 0)
+        if job.source.expected and job.source.estimate and job.source.estimate.match>0 then
+            timing=timing..string.format(' covered=%.0f',job.source.expected()/job.source.estimate.match)
+        end
     end
     if job.status=='running' then
         if job.waiting then
@@ -386,8 +393,8 @@ advance_prediction_search=function(action,now)
         end
         if job.source and job.source.report then
             local r=job.source.report()
-            emit(string.format('SEED_SOLVER_WORKERS_END workers=%d walk_steps=%.0f failed=%d capped=%d peak_worker_heap_kb=%.0f%s',
-                r.workers,job.source.steps(),r.failed,r.capped,r.peak_kb,r.error and ' error='..r.error or ''))
+            emit(string.format('SEED_SOLVER_WORKERS_END workers=%d walk_steps=%.0f failed=%d capped=%d worker_heap_kb=%.0f peak_worker_heap_kb=%.0f%s',
+                r.workers,job.source.steps(),r.failed,r.capped,r.setup_kb,r.peak_kb,r.error and ' error='..r.error or ''))
         end
         release_source(job)
         current_search=nil

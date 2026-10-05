@@ -212,7 +212,7 @@ local g=R.new(options,C,labels);edit(g,2)
 local bad=R.new(options,C,labels);edit(bad,'constellation:0:2','constellation:0:4','constellation:0:6','constellation:0:6','constellation:0:4','constellation:0:2')
 local cases={
     {g,{running=true,fixed=true,report='R'},'Searching seeds','busy',2,'2,731 of 1,000,000 seeds searched'},
-    {g,{queued=true,fixed=true,fresh=false,retained=true},'Checking planet data','busy',1,'0 of 1,000,000 seeds searched'},
+    {g,{queued=true,fixed=true,fresh=false,retained=true},'Checking planet data','busy',1,'Starting search'},
     {g,{fixed=true,overdue=true},'Operation in progress. Finish or abandon it to reroll','warn'},
     {bad,{overdue=true,fresh=false,retained=true},'Updating planet data. Your choices are kept','warn'},
     {bad,{fresh=false,why='Waiting'},'Every constellation here is excluded','bad'},
@@ -251,6 +251,17 @@ for _,case in ipairs({
     local text=g:model(terminids,fresh({estimate=case[1]})).detail
     assert(text==case[2],tostring(text))
 end
+-- A search that has not tried a seed yet keeps the request's estimate from
+-- before the search.
+do
+    local v=fresh({running=true,estimate={match=1/23456,seconds=4.4}})
+    v.run={caption='Searching seeds',step=2,progress=0,elapsed=0.3}
+    local text=g:model(terminids,v).detail
+    assert(text=='0:00 - 1 in 23,000 seeds match - about 4 s',text)
+    v=fresh({queued=true,estimate={match=1/23456,seconds=4.4}})
+    text=g:model(terminids,v).detail
+    assert(text=='1 in 23,000 seeds match - about 4 s',text)
+end
 -- A running search starts its line with the time it has searched.
 for _,case in ipairs({
     {{match=0.6,seconds=0.4},0.1,'0:00 - Most seeds match - under a second'},
@@ -260,6 +271,14 @@ for _,case in ipairs({
     {{match=1e-9,seconds=900},179.9,'2:59 - 1 in 1,000,000,000 seeds match - over the 3 min limit'},
     {{match=1/23456,seconds=4.4},nil,'1 in 23,000 seeds match - about 4 s'},
     {nil,12.4,'0:12 - 2,731 of 1,000,000 seeds searched',2731},
+    -- No seed tried yet: no count of zero, only the start.
+    {nil,0.2,'0:00 - Starting search',0},
+    -- With the seeds the solver has covered: the count, then the strictness.
+    {{match=1/28177468,seconds=1.8,covered=348e6},7.4,'0:07 - 348M seeds covered - 1 in 28M match'},
+    {{match=1/28177468,seconds=1.8,covered=2.36e6},0.6,'0:00 - 2.4M seeds covered - 1 in 28M match'},
+    {{match=1/23456,seconds=4.4,covered=4321},1.2,'0:01 - 4,321 seeds covered - 1 in 23K match'},
+    {{match=1e-9,seconds=900,covered=1.24e9},65,'1:05 - 1.2B seeds covered - 1 in 1B match'},
+    {{match=0.6,seconds=0.4,covered=12},0.1,'0:00 - 12 seeds covered - most seeds match'},
 })do
     local text=solving(case[1],case[2],case[4])
     assert(text==case[3],text)

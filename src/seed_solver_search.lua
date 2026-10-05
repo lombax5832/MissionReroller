@@ -51,7 +51,8 @@ return function(Math,Paths,Chain,Time,Inputs)
     -- make_chain(chain spec) to walk elsewhere (src/seed_solver_workers.lua:
     -- a chain-like {next, steps, close, workers, report} or nil and why,
     -- when the walk stays here).
-    -- Returns {next(budget) -> seed | nil, done, idle; steps(); close();
+    -- Returns {next(budget) -> seed | nil, done, idle; steps(); expected()
+    -- (the candidates expected from the steps walked); close();
     -- workers (0 when the walk runs here) and workers_off (why), report();
     -- paths; rows;
     -- valid, ids: how many operation IDs the Day / Night window passes, of
@@ -198,11 +199,11 @@ return function(Math,Paths,Chain,Time,Inputs)
             if ok and made then workers=made else workers_off=ok and why or tostring(made)end
         end
         if workers then
-            return {next=workers.next,steps=workers.steps,close=workers.close,report=workers.report,
+            return {next=workers.next,steps=workers.steps,expected=workers.expected,close=workers.close,report=workers.report,
                 workers=workers.workers,paths=#paths,rows=#rows,valid=valid,ids=ids,estimate=estimate}
         end
         local chain=Chain.new(chain_spec)
-        return {next=chain.next,steps=function()return chain.steps end,close=function()end,workers=0,
+        return {next=chain.next,steps=function()return chain.steps end,expected=chain.expected,close=function()end,workers=0,
             workers_off=workers_off,paths=#paths,rows=#rows,valid=valid,ids=ids,estimate=estimate}
     end
     -- The search and the dialog's estimate (src/solver_estimate.lua) plan a

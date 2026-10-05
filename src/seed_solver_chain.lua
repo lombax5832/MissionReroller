@@ -373,10 +373,11 @@ return function(Math)
         return 2*before+1,2*before+2
     end
 
-    -- One job: a path solved for one row, from a random start s0. accept,
+    -- One job: a path solved for one row, walked from s0 up to stop
+    -- (exclusive, wrapping at 2^32; stop == s0 walks every start). accept,
     -- when given, is a last check on a candidate (seed, row), such as the
     -- Day / Night filter's ID check (src/seed_solver_time.lua).
-    local function job(path,row,seed_position,planet,s0,others,paths,accept)
+    local function job(path,row,seed_position,planet,s0,stop,others,paths,accept)
         local root=R.plan(path)
         local pending,count={},0
         local invert_seed=Math.inverter(seed_position)
@@ -410,8 +411,10 @@ return function(Math)
                 invert_m=Math.inverter(step.position)
             end
         end
-        -- The walk covers [s0, 2^32), then [0, s0).
-        local phase,limit=1,M32
+        -- The walk covers [s0, stop), or [s0, 2^32) then [0, stop) when it
+        -- wraps.
+        local wraps=stop<=s0
+        local phase,limit=1,wraps and M32 or stop
         local s,off=walk.start(s0)
         local j={steps=0,path=path,root=root}
         -- Up to `budget` walk steps; returns a candidate seed (then nil and
@@ -425,8 +428,8 @@ return function(Math)
                 end
                 if budget<=0 then return nil,false end
                 if not s or s>=limit then
-                    if phase==2 or s0==0 then return nil,true end
-                    phase,limit=2,s0
+                    if phase==2 or not wraps or stop==0 then return nil,true end
+                    phase,limit=2,stop
                     s,off=walk.start(0)
                 else
                     local v=s
@@ -448,15 +451,27 @@ return function(Math)
     -- seeds the accept check passes for the row}}, others={seed positions
     -- of rows an "every operation" filter checks}, planet, random=function()
     -- returning a 32-bit start, accept=optional function(seed, row),
-    -- checkpoint=optional function called before each job is set up}. Jobs
-    -- take turns of `quantum` walk steps, by yield (EVERY and TIER above).
+    -- checkpoint=optional function called before each job is set up,
+    -- arc={index, count}: walk only arc `index` (0-based) of `count` equal
+    -- arcs of each job's starts, so `count` chains given the same random
+    -- (src/seed_solver_workers.lua) cover every start once between them}.
+    -- Jobs take turns of `quantum` walk steps, by yield (EVERY and TIER
+    -- above).
     function R.new(spec)
         local created,yields={},{}
         local checkpoint=spec.checkpoint or function()end
+        local arc=spec.arc
+        assert(arc==nil or (arc.count>=1 and arc.index>=0 and arc.index<arc.count),'Invalid arc')
         for _,path in ipairs(spec.paths)do
             for _,row in ipairs(spec.rows)do
                 checkpoint()
-                local j=job(path,row.row,row.seed_position,spec.planet,spec.random(),spec.others or {},spec.paths,
+                local base=spec.random()
+                local s0,stop=base,base
+                if arc then
+                    s0=(base+math.floor(arc.index*M32/arc.count))%M32
+                    stop=(base+math.floor((arc.index+1)*M32/arc.count))%M32
+                end
+                local j=job(path,row.row,row.seed_position,spec.planet,s0,stop,spec.others or {},spec.paths,
                     spec.accept)
                 created[#created+1]=j;yields[#yields+1]=yield(path,j.root,row.share)
             end
@@ -469,6 +484,15 @@ return function(Math)
         -- job given one.
         local turn,left,turns,at,other=nil,0,0,0,0
         local chain={jobs=jobs,steps=0}
+        -- The candidates expected from the steps walked so far: each job's
+        -- steps at its yield (exhausted jobs included). Divided by the share
+        -- of seeds that match, it is how many seeds an in-order scan would
+        -- have checked for the same chance of a match.
+        function chain.expected()
+            local sum=0
+            for _,j in ipairs(created)do sum=sum+j.steps*j.yield end
+            return sum
+        end
         local sorted={}
         -- Up to `budget` walk steps in all; a candidate seed, then nil and its
         -- row (for a check made outside the chain, such as a worker VM's
