@@ -9,7 +9,7 @@ local FilterRules=lib.FilterRules
 local ExternalEdits,SideObjectives=lib.ExternalEdits,lib.SideObjectives
 local Board=lib.Board
 local SeedSolver,predict_identity=lib.SeedSolver,lib.predict_identity
-local SeedSolverWorkers=lib.SeedSolverWorkers
+local SeedSolverWorkers,WorkerWarmth=lib.SeedSolverWorkers,lib.WorkerWarmth
 local bind_constellations,on_existing_match,on_search_match=hooks.bind_constellations,hooks.on_existing_match,hooks.on_search_match
 local bind_objectives=hooks.bind_objectives
 local api,game,ffi,kernel
@@ -22,8 +22,8 @@ local default_limit=1000000
 -- Walk steps per second of a search, measured by this game's first long
 -- enough solver search; nil until then, and the dialog shows no time.
 local solver_rate
--- The seed solver's worker VMs (src/seed_solver_workers.lua), made on the
--- first search; worker_pool_off says why there is none.
+-- The seed solver's worker VMs (src/seed_solver_workers.lua), made the
+-- first time the galactic map is seen; worker_pool_off says why there is none.
 local worker_pool,worker_pool_off
 local function pool()
     if worker_pool or worker_pool_off then return worker_pool end
@@ -38,8 +38,52 @@ local function pool()
     end
     return worker_pool
 end
+-- Warm workers on the ship only (src/worker_warmth.lua): every 0.25 s the
+-- screen stack and the UI root's gates decide; the pool ticks every frame,
+-- making one idle worker per frame while warm and closing or idling the
+-- workers whose callbacks returned.
+local warmth
+local last_warmth,warm_logged=-math.huge,true
+local function screens_text(stack)
+    local list,depth=map.screens(stack)
+    return list and table.concat(list,',') or 'depth='..tostring(depth)
+end
+local function tick_workers(now)
+    if WorkerWarmth and ffi and now-last_warmth>=0.25 then
+        last_warmth=now
+        warmth=warmth or WorkerWarmth.new()
+        local ok,on_top,loading,detail=pcall(function()
+            local stack=map.stack()
+            local set,gates=map.gates()
+            return map.on_top(stack),set,'screens='..screens_text(stack)..' '..gates
+        end)
+        -- A failed read (a null root while loading) counts as loading.
+        if not ok then on_top,loading,detail=false,true,'read failed: '..tostring(on_top)end
+        local action,reason=warmth.update(now,{map=on_top,loading=loading,searching=current_search~=nil})
+        if action=='warm' and pool() then
+            worker_pool.warm(true);warm_logged=false
+            emit(string.format('SEED_SOLVER_WORKERS_WARM reason=%s %s',reason,detail))
+        elseif action=='cold' and worker_pool then
+            local closed=worker_pool.warm(false)
+            emit(string.format('SEED_SOLVER_WORKERS_COLD reason=%s closed=%d %s',reason,closed,detail))
+        end
+    end
+    if not worker_pool then return end
+    pcall(worker_pool.tick)
+    local state=worker_pool.state()
+    -- A search took the idle workers: log again once fresh ones replace them.
+    if state.warm and state.idle<worker_pool.max_workers and not state.full then warm_logged=false end
+    -- Once warming has stopped: every worker made, memory short or an error.
+    if not warm_logged and state.warm and state.retired==0 and current_search==nil
+        and (state.idle>=worker_pool.max_workers or state.full)then
+        warm_logged=true
+        emit(string.format('SEED_SOLVER_WORKERS_WARMED idle=%d max_workers=%d%s',state.idle,worker_pool.max_workers,
+            worker_pool.warm_error and ' error='..worker_pool.warm_error or ''))
+    end
+end
 -- Stops a finished or replaced search's workers; they close once their
--- callbacks return (worker_pool.reap, every frame).
+-- callbacks return (worker_pool.tick, every frame), and while warm fresh
+-- idle workers replace them.
 local function release_source(job)
     if job and job.source and job.source.close then pcall(job.source.close)end
 end
@@ -170,8 +214,8 @@ on_prediction_ready=function(s,definitions,now)
             local ms=(search_clock()-started)*1000
             local r=worker_report or {}
             if ok and result and result.workers>0 then
-                emit(string.format('SEED_SOLVER_WORKERS workers=%d text_kb=%.0f setup_ms=%.1f free_mb=%.1f largest_mb=%.1f processors=%d',
-                    result.workers,r.text_kb or 0,r.setup_ms or 0,r.free_mb or 0,r.largest_mb or 0,r.processors or 0))
+                emit(string.format('SEED_SOLVER_WORKERS workers=%d warm=%d text_kb=%.0f setup_ms=%.1f free_mb=%.1f largest_mb=%.1f processors=%d',
+                    result.workers,r.warm or 0,r.text_kb or 0,r.setup_ms or 0,r.free_mb or 0,r.largest_mb or 0,r.processors or 0))
             elseif ok and result then
                 emit('SEED_SOLVER_WORKERS workers=0 reason='..tostring(result.workers_off or worker_pool_off)..'; walking on the main thread')
             end
@@ -271,7 +315,7 @@ on_prediction_ready=function(s,definitions,now)
         s.planet,scope and scope.region or 'all',s.seed,first,tostring(resumed==true),request.difficulty,table.concat(names,' + '),limit))
 end
 advance_prediction_search=function(action,now)
-    if worker_pool then pcall(worker_pool.reap)end
+    if action=='tick' then tick_workers(now)elseif worker_pool then pcall(worker_pool.reap)end
     if not current_search then return false end
     local job=current_search
     reroll_session.progress(job.attempts)
@@ -403,6 +447,11 @@ end
 emit('Lua search checkpoint: ICBM + Geological Survey + Eradicate, difficulty 10; same shortcut cancels; alt-tab supported; '..config.search_outcome)
 return {on_prediction_ready=on_prediction_ready,advance_prediction_search=advance_prediction_search,
     search_clock=search_clock,default_limit=default_limit,solver_rate=function()return solver_rate end,
+    -- When the mod stops on an error, its frame no longer runs: no idle
+    -- worker may stay warm into a mission.
+    cool_search_workers=function()
+        if worker_pool then worker_pool.warm(false)end
+    end,
     -- At shutdown, after the search's cancel: joins its workers (bounded).
     shutdown_search_workers=function(seconds)
         if not worker_pool then return 0 end

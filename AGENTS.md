@@ -142,8 +142,10 @@ No single file in `src/` is the shipped entry. `scripts/build.py` calls
   cannot see the entry's closures. `source()` passes them
   `seed_solver_math.lua`, `seed_solver_chain.lua` and `seed_solver_codec.lua`
   as strings, so those three files stay self-contained (no build arguments,
-  no globals of the entry). The search runtime closes a search's workers when
-  the search ends and joins them at shutdown.
+  no globals of the entry). On the ship the search runtime keeps the
+  workers warm (idle VMs, no thread) between searches; it closes them when
+  `src/worker_warmth.lua` says cold (a loading gate, or 10 s away from the
+  galactic map) and joins them at shutdown.
 - Status changes go through `src/reroll_session.lua`, created on the host as
   `host.reroll_session` right after the adapter. Runtimes call `advance` /
   `finish` / `settle` / `fail`; the dialog calls `start` / `cancel` / `view`.

@@ -95,9 +95,13 @@ Failure:
 | --- | --- |
 | `SEED_SOLVER_WORKERS_OFF reason=...` | The pool could not be made (for example `lua51.dll not loaded`); every search walks on the main thread. |
 | `SEED_SOLVER_WORKERS workers=0 reason=...; walking on the main thread` | This search's workers did not start: too little memory below 2 GB, or a set-up error. The search still runs. |
+| `SEED_SOLVER_WORKERS workers=0 reason=estimated 1 in <k>, not rarer than 1 in 100000; walking on the main thread` | Expected, not a failure: a request the estimate puts at 1 in 100,000 or commoner walks on the main thread; the warm workers stay idle. |
 | `SEED_SOLVER_WORKERS_END ... failed=<n> error=...` | Workers raised errors; the search walked on with the rest, or ended its solving and scanned seeds in order. |
 | `SEED_SOLVER_WORKERS_END ... capped=<n>` | Workers passed the 16 MB heap cap and were stopped. |
 | `SEED_SOLVER_WORKERS_SHUTDOWN left_open=<n>` | Workers had not stopped 3 s after quitting began. |
+| `SEED_SOLVER_WORKERS_WARMED idle=<n> ... error=...` | Warming stopped on a worker that failed to load its modules; searches make fresh workers as before. |
+| `SEED_SOLVER_WORKERS_WARMED idle=<n>` with `<n>` below `max_workers` | Warming stopped because too little address space below 2 GB was left; searches use the idle workers and make the rest as memory allows. |
+| No `SEED_SOLVER_WORKERS_COLD` within 10 s of dropping into a mission | Neither the gates nor the 10 s backstop fired: send the log. |
 | The frame rate drops during a search | Fewer workers are needed (`max_workers` in `src/seed_solver_workers.lua`). |
 
 ## Second build: arcs, seeds covered, no zero count
@@ -129,6 +133,66 @@ shows no time, and after it shows one; the hard request still matches;
 `LUA_SEARCH_MATCH ... covered=` is about `walk_steps` times the match odds
 over the expected steps (as a rough check: the 2026-10-05 search would have
 read about 350 million).
+
+## Third build: warm workers on the ship
+
+Run in game 2026-10-05 (see Third build result below). The worker VMs stay warm on the ship and are closed in
+a mission (`src/worker_warmth.lua`, `pool.warm` in
+`src/seed_solver_workers.lua`):
+
+- **Warm.** The first time the galactic map is on top of the screen
+  stack (only possible on the ship), the pool makes up to `max_workers`
+  idle VMs, one per frame, each loading its modules on its own thread. An
+  idle VM holds no thread. A rare request starts on them, so it skips
+  making VMs and loading modules. When it ends they are closed (a VM that
+  walked keeps its peak heap until closed) and fresh idle VMs are made.
+- **Cold.** At once when a loading or transition gate of the UI root is
+  set, or a read of them fails, and also after 10 s without the map on
+  top while no search runs. Cold closes the idle VMs; a search that still
+  runs loses its workers and scans on. What the gates read at a drop has
+  not been recorded, so the 10 s backstop keeps workers out of a mission
+  whichever way the gates go. The cold line logs the screen ids and gate
+  bytes to find out.
+- **Warm again** the next time the map is opened, after any mission or
+  return to the ship.
+- A `STOPPED:` error cools the pool too, since the mod's frame no longer
+  runs. Quitting now joins the workers (the release build did not pass
+  the shutdown join to the frame wrapper before).
+
+Steps:
+
+1. Install the build as above, launch, and open the galactic map on the
+   ship.
+2. Run the hard request twice. The second should start its walk sooner.
+3. Close the map, stay on the ship for more than 10 seconds, open it
+   again.
+4. Drop into a mission, play a minute, return to the ship (finish or
+   abandon), open the map and run the hard request once more.
+5. Quit the game from the ship with the map closed.
+
+Success:
+
+```
+SEED_SOLVER_WORKERS_READY max_workers=8 processors=16
+SEED_SOLVER_WORKERS_WARM reason=galactic map open screens=<ids ending in 15> loading_gate=0 transition_gate=0 transition=0000000000000000
+SEED_SOLVER_WORKERS_WARMED idle=8 max_workers=8
+SEED_SOLVER_WORKERS workers=8 warm=8 text_kb=<kb> setup_ms=<ms> ...
+SEED_SOLVER_WORKERS_END workers=8 ... failed=0 capped=0 ...
+SEED_SOLVER_WORKERS_COLD reason=galactic map closed for 10 s closed=8 screens=<ids> ...
+SEED_SOLVER_WORKERS_COLD reason=loading or transition gate set closed=<n> screens=<ids> loading_gate=<n> transition_gate=<n> transition=<hex>
+```
+
+- `warm=8` on the hard request's workers line: all eight were idle VMs.
+  `setup_ms` there should be lower than in a cold search.
+- After each search a new `SEED_SOLVER_WORKERS_WARMED idle=8` follows, and
+  the next search's `free_mb` stays near the first one's (the first build
+  of this kept the walked VMs: 29.9, then 8.9 MB and `workers=0`).
+- Step 3 logs the 10 s cold line, then a new `WARM` line when the map
+  opens again.
+- Step 4 should log the gate cold line when the drop's loading screen
+  starts (if the gates are set then, and the 10 s line otherwise), and a
+  new `WARM` on the map after returning. Report which, with the screen ids.
+- Step 5 logs no `SEED_SOLVER_WORKERS_SHUTDOWN` line.
 
 ## Result
 
@@ -167,3 +231,41 @@ PUBLICATION_STATE_VERIFIED seed=694937979 row=29 map_ui_row_confirmed=true missi
   measured rate (`ESTIMATE match=1/28177468 seconds=1.8`).
 - **Not yet exercised:** cancelling a search with F7, and quitting the game
   during a search.
+
+## Third build result
+
+2026-10-05, the user's machine (16 logical processors), one session.
+First run of the third build: walked VMs went back to idle, and after one
+search free memory below 2 GB fell from 29.9 to 8.9 MB and the next two
+searches were refused workers (`memory below 2 GB: 8.9 MB free`); requests
+of 1 in 1.75 million and 1 in 906,000 walked on the main thread for 5.5 and
+1.6 s under the 1 in 2 million threshold. Fixed by closing walked VMs and
+warming fresh ones, and a threshold of 1 in 100,000. Second run:
+
+```
+SEED_SOLVER_WORKERS_WARM reason=galactic map open screens=15 loading_gate=0 transition_gate=0 transition=0000000000000000
+SEED_SOLVER_WORKERS_WARMED idle=8 max_workers=8
+SEED_SOLVER_WORKERS workers=8 warm=8 text_kb=70 setup_ms=4.5 free_mb=29.9 largest_mb=15.9 processors=16
+LUA_SEARCH_MATCH ... elapsed_s=0.70 ... walk_steps=10121025 workers=8          (1 in 1.77 million)
+SEED_SOLVER_WORKERS_WARMED idle=8 max_workers=8
+SEED_SOLVER_WORKERS workers=8 warm=8 text_kb=68 setup_ms=3.5 free_mb=29.9 ...
+LUA_SEARCH_MATCH ... elapsed_s=0.48 ... walk_steps=3434335 workers=8           (1 in 662,000)
+SEED_SOLVER_WORKERS workers=8 warm=8 text_kb=16 setup_ms=1.4 free_mb=29.9 ...
+LUA_SEARCH_MATCH ... elapsed_s=13.31 ... walk_steps=1081698859 workers=8       (1 in 4.34 billion)
+SEED_SOLVER_WORKERS_COLD reason=galactic map closed for 10 s closed=8 screens=14 loading_gate=0 transition_gate=0 transition=0000000000000000
+SEED_SOLVER_WORKERS_WARM reason=galactic map open screens=15 ...                (back from a mission)
+SEED_SOLVER_WORKERS workers=8 warm=8 text_kb=16 setup_ms=1.5 free_mb=29.9 ...
+LUA_SEARCH_MATCH ... elapsed_s=9.39 ... walk_steps=766142945 workers=8         (1 in 2.9 billion)
+```
+
+- **Memory holds:** `free_mb=29.9` at every search; every search ended
+  `failed=0 capped=0` with peak worker heaps of 1.0 to 1.3 MB.
+- **Mission:** the cold line came 10 s after the map was closed to start a
+  mission, still on the ship (`screens=14` is the ship with the map
+  closed); the map warmed the pool again after the mission. Quitting
+  logged no `SEED_SOLVER_WORKERS_SHUTDOWN`.
+- **The main thread:** in the 13.3 s search it spent 276 ms on search work
+  and 1,678 ms on context checks; the longest slice was 22.5 ms.
+- **Not yet exercised:** a loading or transition gate cooling the pool
+  (walking to the hellpod takes longer than 10 s), and a fast transition
+  from the map such as joining an SOS.

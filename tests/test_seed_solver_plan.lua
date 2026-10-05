@@ -3,7 +3,7 @@
 -- planet and source: which inputs a request needs, a source passed through,
 -- each decline kind (unavailable inputs, no path or no Day / Night ID with
 -- and without a campaign event row of the difficulty, in a city, any other
--- reason) and the seconds formula.
+-- reason), the seconds formula and the workers threshold.
 local R=dofile(arg[1])({},{},{},{},{})
 local returned,seen
 R.source=function(spec)seen=spec;return returned[1],returned[2]end
@@ -73,4 +73,11 @@ end
 assert(R.seconds(1000,1000,0)==1.3)
 assert(math.abs(R.seconds(800000,800000,0.2)-1.5)<1e-12)
 assert(math.abs(R.seconds(7000,1000,0.5)-7.8)<1e-12)
-print('Seed solver plan: seeded inputs, prepare, source, impossible and scan declines and seconds passed')
+-- Workers only for a request rarer than one seed in 100,000.
+assert(R.WORKERS_RARER_THAN==100000)
+assert(R.use_workers({match=1/28000000})==true,'1 in 28M uses workers')
+assert(R.use_workers({match=1/100001})==true,'just rarer than 1 in 100,000 uses workers')
+local rare,why=R.use_workers({match=1/100000})
+assert(rare==false and why=='estimated 1 in 100000, not rarer than 1 in 100000',why)
+assert(R.use_workers({match=0.5})==false,'a common request walks here')
+print('Seed solver plan: seeded inputs, prepare, source, impossible and scan declines, seconds and workers threshold passed')

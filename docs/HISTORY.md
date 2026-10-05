@@ -5,6 +5,51 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
+**Validated in game 2026-10-05: workers only for rare requests.** A search
+the seed solver seeds now walks in worker VMs only when its estimate is
+rarer than one seed in 100,000 (`SeedSolver.use_workers`,
+`WORKERS_RARER_THAN`); a commoner request expects under 200,000 steps on
+the main thread, and logs `SEED_SOLVER_WORKERS workers=0
+reason=estimated 1 in <k>, not rarer than 1 in 100000`. The first cut,
+1 in 2 million, left a request of 1 in 1.75 million on the main thread for
+5.5 s in game (2026-10-05).
+
+**Validated in game 2026-10-05, except a loading gate: warm workers on the
+ship.** Five searches in one session all started on eight warm workers
+with free memory below 2 GB steady at 29.9 MB (`SEED_SOLVER_WORKERS
+workers=8 warm=8 setup_ms=1.4 to 4.5 free_mb=29.9`), each followed by
+`SEED_SOLVER_WORKERS_WARMED idle=8`: 1 in 1.77 million in 0.70 s, 1 in
+662,000 in 0.48 s, 1 in 4.34 billion in 13.3 s, 1 in 2.9 billion in 9.4 s.
+Closing the map to start a mission logged `SEED_SOLVER_WORKERS_COLD
+reason=galactic map closed for 10 s closed=8 screens=14` on the ship before
+the drop; back from the mission, the map logged `SEED_SOLVER_WORKERS_WARM`;
+quitting logged no `SEED_SOLVER_WORKERS_SHUTDOWN`. The gate path never
+fired, since walking to the hellpod takes longer than 10 s. The worker VMs
+are no longer made per search and closed after it. While on the ship the
+pool keeps up to `max_workers` idle VMs with their modules loaded and no
+thread (`pool.warm`, made one per frame); a search starts its walk on them
+at once, and when it ends they are closed and fresh idle VMs made. A VM
+that walked keeps its peak heap until `lua_close`: in game, returning eight
+of them to idle took free memory below 2 GB from 29.9 to 8.9 MB and the
+next searches were refused workers, while eight fresh ones hold about 2 MB.
+Offline on the planet 173 capture (8 workers, 4 million steps each), eight
+walked VMs kept idle held 19, 31 and 38 MB after three searches as their
+JIT traces grew; with `jit.flush()` and a full collect in each worker they
+still held 12 MB (dlmalloc keeps up to 2 MB of free top per heap, and
+fragmentation pins segments); closed and replaced, 2.4 to 2.9 MB.
+They warm when the galactic map is on top, which only
+happens on the ship, and cool when a UI root loading or transition gate is
+set, or after 10 s without the map while no search runs
+(`src/worker_warmth.lua`). The backstop exists because nothing in the mod
+yet tells a mission from the ship and the gates' values at a drop are not
+recorded; the `SEED_SOLVER_WORKERS_COLD` line logs the screen ids and gate
+bytes to settle it. This revisits NATIVE_SOLVER_RESEARCH.md's "close
+promptly": idle VMs hold their address space below 2 GB only on the ship.
+Also fixed: the release never passed `shutdown_search_workers` to the
+frame wrapper, so quitting did not join the workers; a `STOPPED:` error
+now cools the pool as well. Test plan: the third build in
+[SOLVER_WORKERS_TEST.md](SOLVER_WORKERS_TEST.md).
+
 **Not yet validated in game: v0.35.0.** Releases the seed solver's
 worker VMs, the one-poll capture, the reachability checks that disable
 impossible starts and unreachable enemy forces and side objectives, the

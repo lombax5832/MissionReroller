@@ -30,6 +30,18 @@ return function(memory)
         local depth=u(stack,20)
         return depth>=1 and depth<=5 and u(stack,(depth-1)*4)==GALACTIC_MAP
     end
+    -- The UI root's loading and transition gates, which the adapter's
+    -- snapshot requires clear: whether any is set, and their values for the
+    -- log (`loading_gate=<n> transition_gate=<n> transition=<hex>`).
+    function map.gates()
+        local root=pointer(memory.game()+O.rva.ui_root)
+        local loading=read(root+O.ui_root.loading_gate,1):byte()
+        local transition_gate=read(root+O.ui_root.transition_gate,1):byte()
+        local transition=read(root+O.ui_root.transition,8)
+        local set=loading~=0 or transition_gate~=0 or transition~=string.rep('\0',8)
+        return set,string.format('loading_gate=%d transition_gate=%d transition=%s',loading,transition_gate,
+            (transition:gsub('.',function(c)return string.format('%02x',c:byte())end)))
+    end
     -- The map UI object.
     function map.ui()return pointer(memory.game()+O.rva.map_ui)end
     -- The planet and the difficulty the map UI shows.

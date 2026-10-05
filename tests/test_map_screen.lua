@@ -38,6 +38,22 @@ memory[stack_owner+O.screen_owner.stack]=string.rep('\0',20)..word(0)
 local list,depth=map.screens();assert(list==nil and depth==0 and not map.on_top())
 memory[stack_owner+O.screen_owner.stack]=string.rep('\0',20)..word(6)
 list,depth=map.screens();assert(list==nil and depth==6 and not map.on_top())
+
+-- The UI root's gates: clear, then each one set.
+local root=0x60000000
+pointers[game+O.rva.ui_root]=root
+local function gates(loading,transition_gate,transition)
+    memory[root+O.ui_root.loading_gate]=string.char(loading)
+    memory[root+O.ui_root.transition_gate]=string.char(transition_gate)
+    memory[root+O.ui_root.transition]=transition
+end
+gates(0,0,string.rep('\0',8))
+local set,text=map.gates()
+assert(set==false and text=='loading_gate=0 transition_gate=0 transition=0000000000000000',text)
+gates(1,0,string.rep('\0',8));assert(map.gates()==true)
+gates(0,2,string.rep('\0',8));assert(map.gates()==true)
+gates(0,0,'\0\0\0\0\0\0\0\1');set,text=map.gates()
+assert(set==true and text:find('transition=0000000000000001',1,true),text)
 -- A stack read once is decided without a second read.
 stack(15);reads={};local raw=map.stack();assert(map.on_top(raw) and map.screens(raw) and #reads==1)
 assert(reads[1]==(stack_owner+O.screen_owner.stack)..':24')

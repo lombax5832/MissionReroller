@@ -144,7 +144,8 @@ def source(search=False,publish=False,dialog=False,version=None):
     if search:
         for name, file in [('make_frozen_reads','frozen_prediction_reads.lua'), ('make_seed_search','seed_search.lua'),
                            ('Search','search_session.lua'), ('make_candidate_predictor','candidate_predictor.lua'),
-                           ('make_prediction_job','prediction_search_job.lua')]:
+                           ('make_prediction_job','prediction_search_job.lua'),
+                           ('WorkerWarmth','worker_warmth.lua')]:
             library(name,file)
         derived('make_search_job','make_prediction_job(make_frozen_reads,make_seed_search,Search)')
         planet['predictor']='make_candidate_predictor'
@@ -205,7 +206,8 @@ def source(search=False,publish=False,dialog=False,version=None):
             search_hooks+=[f'{name}=publication.{name}' for name in ('on_existing_match','on_search_match')]
         parts.append('local search_hooks={'+','.join(search_hooks)+'}')
         parts.append('local search='+factory(root,'prediction_search_runtime.lua',inputs,'host,lib,search_hooks'))
-        identity_hooks+=[f'{name}=search.{name}' for name in ('on_prediction_ready','advance_prediction_search','search_clock')]
+        identity_hooks+=[f'{name}=search.{name}' for name in ('on_prediction_ready','advance_prediction_search','search_clock',
+                                                              'cool_search_workers','shutdown_search_workers')]
     if dialog:
         parts.append('local dialog='+factory(root,'prediction_dialog_runtime.lua',inputs,'host,lib,{default_limit=search.default_limit,search_clock=search.search_clock,solver_rate=search.solver_rate}'))
         # The search validates a request against the dialog's catalogue.
