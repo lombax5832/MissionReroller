@@ -7,9 +7,13 @@ return function(make_rng,choose_category,choose_level,choose_mission,finalize)
         for _,base in ipairs(operations)do
             -- 11e5670 resets the weighted-choice usage array per operation.
             local counts={}
+            -- effect_id goes into the constructor, never stored afterwards: once this
+            -- loop is compiled, the game's LuaJIT 2.1.0-alpha reads a field stored
+            -- after the call back as the constructor's value (tests/test_game_jit.py).
+            local effect=inputs.effect_id({row=base.row,id=base.id,seed=base.seed,difficulty=base.difficulty,
+                faction=base.faction,category=base.category,explicit_hash=base.explicit_hash},planet)
             local op={row=base.row,id=base.id,seed=base.seed,difficulty=base.difficulty,
-                faction=base.faction,category=base.category,explicit_hash=base.explicit_hash}
-            op.effect_id=inputs.effect_id(op,planet)
+                faction=base.faction,category=base.category,explicit_hash=base.explicit_hash,effect_id=effect}
             local budget,total=inputs.difficulty(op.difficulty,op.category)
             local finished
             if active and active.row==op.row then

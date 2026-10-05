@@ -11,10 +11,14 @@
 return function(planet,bases,inputs,level_graph,tags,objectives)
     local operations,records,used={},{},{}
     for _,base in ipairs(bases)do
+        assert(base.explicit_hash==0,'Explicit templates are not solved')
+        -- effect_id goes into the constructor, never stored afterwards: once this
+        -- loop is compiled, the game's LuaJIT 2.1.0-alpha reads a field stored
+        -- after the call back as the constructor's value (tests/test_game_jit.py).
+        local effect=inputs.effect_id({row=0,id=base.id,seed=0,difficulty=base.difficulty,category=base.category,
+            faction=base.faction,explicit_hash=0},planet)
         local op={row=0,id=base.id,seed=0,difficulty=base.difficulty,category=base.category,faction=base.faction,
-            explicit_hash=base.explicit_hash}
-        assert(op.explicit_hash==0,'Explicit templates are not solved')
-        op.effect_id=inputs.effect_id(op,planet)
+            explicit_hash=0,effect_id=effect}
         local budget,total=inputs.difficulty(op.difficulty,op.category)
         local templates={}
         for i,template in ipairs(inputs.templates(op,planet))do

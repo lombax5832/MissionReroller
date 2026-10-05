@@ -90,6 +90,10 @@ def test_seed_solver_workers():
     subprocess.run([sys.executable, '-B', str(ROOT / 'tests/test_seed_solver_workers.py')], check=True)
 
 
+def test_game_jit():
+    subprocess.run([sys.executable, '-B', str(ROOT / 'tests/test_game_jit.py')], check=True)
+
+
 if __name__ == '__main__':
     test_package()
     test_release_version()
@@ -98,5 +102,6 @@ if __name__ == '__main__':
     test_runtime_host()
     test_bundled_roster()
     test_seed_solver_workers()
+    test_game_jit()
     test_dialog()
     print('test_package: passed')
