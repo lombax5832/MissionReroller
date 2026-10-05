@@ -156,19 +156,27 @@ function R.inverter(position)
     local ri=math.abs(p)*half+math.abs(r)*half+1
     local rj=math.abs(q)*half+math.abs(z)*half+1
     local floor,ceil=math.floor,math.ceil
-    local LIMIT=bit.lshift(1ULL,32)
+    -- The cells' s are the corner cell's plus small multiples of the basis
+    -- vectors (near 2^32 in size), so they are exact in doubles once the
+    -- corner is: it lies near the square, so its wrapping int64 value is
+    -- its true one. Only a start below 2^32 is confirmed in uint64. Boxed
+    -- int64 arithmetic per cell allocated a cdata each and took most of
+    -- the walk's time.
+    assert(math.abs(fus)<2^40 and math.abs(fvs)<2^40,'Unreduced inversion basis')
     -- Fills out[1..n] with the answers (unordered) and returns n.
     local function invert(value,out)
         local n=0
         local target=bit.lshift(u64(value),32)-c
         local cs,ct=half,tonumber(target)+half
         local ci,cj=cs*p+ct*r,cs*q+ct*z
-        for i=floor(ci-ri),ceil(ci+ri)do
-            local iu=ffi.new('int64_t',i)*us
-            for j=floor(cj-rj),ceil(cj+rj)do
-                local s=ffi.cast('uint64_t',iu+ffi.new('int64_t',j)*vs)
-                if s<LIMIT and tonumber(bit.rshift(a*s+c,32))==value then
-                    n=n+1;out[n]=tonumber(s)
+        local i0,i1,j0,j1=floor(ci-ri),ceil(ci+ri),floor(cj-rj),ceil(cj+rj)
+        local corner=tonumber(ffi.new('int64_t',i0)*us+ffi.new('int64_t',j0)*vs)
+        for i=0,i1-i0 do
+            local iu=corner+i*fus
+            for j=0,j1-j0 do
+                local s=iu+j*fvs
+                if s>=0 and s<M32 and tonumber(bit.rshift(a*u64(s)+c,32))==value then
+                    n=n+1;out[n]=s
                 end
             end
         end
