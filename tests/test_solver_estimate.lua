@@ -110,4 +110,40 @@ s={fingerprint='e',planet=100}
 repeat Unmeasured.update(s,10,nil,request({1}))until Unmeasured.view()
 v=Unmeasured.view()
 assert(v.match==1/100 and v.seconds==nil,'No rate measured: no seconds')
-print('Solver estimate: pending, slices, kept inputs, restart and retarget on edits, Day / Night, impossible, unavailable and failures passed')
+-- With the dialog's options to check, the worker goes on after the estimate
+-- to the reachability, on the mission-seed inputs; the estimate shows first.
+do
+    local seen
+    local Reaching=solver(function(spec)for _=1,5 do now=now+0.001;spec.checkpoint()end;return {estimate={match=1/10,steps=10}}end)
+    Reaching.reachability=function(prepared,spec,offered)
+        seen={seeded=prepared.solver.seeded,shown=offered(1)}
+        for _=1,8 do now=now+0.001;spec.checkpoint()end
+        if spec.required[2] then error('broken reachability')end
+        return {ok=true,tag=function(_,tag,mode)return not (tag==6 and mode=='accept')end,objective=function()return true end}
+    end
+    local R2=make(Reaching)({read=function()now=now+0.001;return '\0\0\0\0' end,clock=clock,slice=0.004,
+        options={},rate=function()return 1000 end,setup=0,bind=bind})
+    local function offered(f)return {tags={6},objectives={}}end
+    local sr={fingerprint='r',planet=100}
+    local built=builds
+    repeat R2.update(sr,10,nil,request({1}),nil,offered)until R2.view()
+    assert(R2.view().match==1/10,'The estimate is shown before the reachability')
+    local frames=0
+    repeat R2.update(sr,10,nil,request({1}),nil,offered);frames=frames+1 until R2.reachable() or frames>50
+    local reach=R2.reachable()
+    assert(reach and reach.ok and reach.tag(1,6,'accept')==false and reach.tag(1,6,'exclude'),'The reachability follows')
+    assert(seen.seeded==true and seen.shown.tags[1]==6,'Worked out on the mission-seed inputs with the options shown')
+    assert(builds==built+2,'The estimate and the mission-seed inputs are each read once: '..(builds-built))
+    -- Another edit of the same view reuses the mission-seed inputs.
+    repeat R2.update(sr,10,nil,request({3}),nil,offered)until R2.reachable()
+    assert(builds==built+2,'The mission-seed inputs are kept')
+    -- No options, or no required mission: nothing is worked out.
+    repeat R2.update(sr,10,nil,request({4}))until R2.view()
+    for _=1,5 do R2.update(sr,10,nil,request({4}))end
+    assert(R2.reachable()==nil,'No options to check')
+    -- A failure leaves the estimate and rules nothing out.
+    repeat R2.update(sr,10,nil,request({1,2}),nil,offered)until R2.view()
+    for _=1,20 do R2.update(sr,10,nil,request({1,2}),nil,offered)end
+    assert(R2.view().match==1/10 and R2.reachable()==nil,'A failed reachability is nil')
+end
+print('Solver estimate: pending, slices, kept inputs, restart and retarget on edits, Day / Night, impossible, unavailable, failures and reachability passed')

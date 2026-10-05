@@ -5,6 +5,27 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
+**Not yet validated in game: impossible requests cannot start, and
+unreachable enemy forces and side objectives are disabled.** On 2026-10-05
+a request the dialog already marked "No seed gives this now" (planet 268,
+difficulty 10, Search and Destroy with Light Bugs, Lidar Station and SEAF
+Artillery excluded) could still be started and scanned 261,043 seeds in
+vain. Begin Search is now disabled for such a request. And for each
+checked mission the dialog works out, after the estimate and in the same
+4 ms slices, which offered enemy forces and side objectives some draw path
+can still give or avoid with the request's other rules
+(`SeedSolver.reachability`): a rule only decides whether each kind's step
+of a path exists, so it takes the request's feasible kind choices once and
+one `mission_paths` per kind and rule, with each kind's side-objective
+paths memoised. About 0.3 s of background work per request; on a live
+capture of that board it disables Light Bugs, Bug Nursery and Balanced
+Terminids for Search and Destroy, and every answer agrees with the full
+plan (`tests/reachability_cases.lua`, in `test_seed_solver_search.py` and,
+in the game's `lua51.dll`, `test_game_jit.py`). The search's matcher uses
+the same predicted enemy forces as the solver, without map stamps, so a
+disabled option could never have matched a normal operation. Test plan:
+[DIALOG_REACHABILITY_TEST.md](DIALOG_REACHABILITY_TEST.md).
+
 **Fixed 2026-10-05, not yet validated in game: "Eligibility unavailable"
 after a few dialog openings.** In game the dialog logged
 `FILTER_CATALOGUE_BLOCKED ...: attempt to concatenate field 'effect_id' (a

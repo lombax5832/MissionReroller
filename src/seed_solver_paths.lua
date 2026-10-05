@@ -540,6 +540,10 @@ return function(choose_category,make_choose_mission,make_finalize)
             return out
         end
 
+        -- objective_paths() per kind's inputs, rule and environment: they do
+        -- not depend on the tag rules, which the dialog's reachability varies
+        -- (seed_solver_search.lua R.reachability).
+        local objective_memo=setmetatable({},{__mode='k'})
         -- Constraint sets on one mission's seed stream satisfying rule
         -- ({tags=..., objectives=...}): {{draws, mods, probability}}.
         function P.mission_paths(op,kind,rule)
@@ -556,9 +560,14 @@ return function(choose_category,make_choose_mission,make_finalize)
                 if #sorted_keys(distinct)==1 then envs={{envs[1][1],{}}}end -- one reachable environment
             end
             local cache,order={},{}
+            local memo=objective_memo[info]
+            if not memo then memo={};objective_memo[info]=memo end
+            local text=has and canon(orule) or ''
             for _,e in ipairs(envs)do
                 if cache[e[1]]==nil then
-                    cache[e[1]]=objective_paths(op,info,orule,e[1] or 0);order[#order+1]=e[1]
+                    local k=text..'@'..tostring(e[1] or 0)
+                    if memo[k]==nil then memo[k]=objective_paths(op,info,orule,e[1] or 0)end
+                    cache[e[1]]=memo[k];order[#order+1]=e[1]
                 end
             end
             if #order>1 then

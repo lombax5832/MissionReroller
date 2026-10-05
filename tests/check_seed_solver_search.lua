@@ -1,4 +1,6 @@
--- Usage: luajit check_seed_solver_search.lua <capture.lua> <src> <built entry>
+-- Usage: luajit check_seed_solver_search.lua <capture.lua> <src> <built entry> [reachability case]
+-- With a case name from tests/reachability_cases.lua, only that recorded
+-- request's reachability is checked on the capture.
 -- Runs the built entry's own search (prediction_search_runtime.lua
 -- on_prediction_ready and advance_prediction_search) on captured campaign
 -- memory of the viewed planet (scripts/check_live_planet.py), with the seed
@@ -243,6 +245,93 @@ end
 local function required(n)local r={};for i=1,n do r[fams[i]]=true end;return r end
 print(string.format('planet=%d seed=%u difficulty=%d row=%d families=%s, in progress: row %s',planet,seed,difficulty,best.row,
     table.concat(fams,','),tostring(fixed)))
+-- The dialog's reachability (SeedSolver.reachability) on one request, every
+-- offered enemy force and side objective of its missions in both modes:
+-- each answer must equal whether the plan with that option has a draw path.
+-- Returns the reachability and the refused options as
+-- '<mission>:<tag|objective>:<id>:<mode>' set.
+local estimate_for=up(up(tick,'dialog_tick'),'estimate_for')
+local function reachability(name,r,shown_catalogue)
+    local spec={identity=up(estimate_for,'identity'),difficulty=r.difficulty,required=r.required,options=Search.options,
+        constellations=r.constellations,objectives=r.objectives,row_of=up(estimate_for,'objectives').row_of,
+        checkpoint=function()end,estimate_only=true}
+    local ok,prepared=pcall(SeedSolver.prepare,model,definitions,spec,true)
+    if not ok or not prepared.solver then
+        print('  reachability, '..name..': no mission-seed inputs in this capture ('..tostring(ok and prepared.input or prepared)..')')
+        return
+    end
+    local function offered(f)
+        local out={tags={},objectives={}}
+        for _,o in ipairs((shown_catalogue.constellation_groups[f] or {}).list or {})do out.tags[#out.tags+1]=o.id end
+        for _,o in ipairs(((shown_catalogue.objective_groups or {})[f] or {}).list or {})do out.objectives[#out.objectives+1]=o.id end
+        return out
+    end
+    local started=clock()
+    local reach=SeedSolver.reachability(prepared,spec,offered)
+    local took=clock()-started
+    if not reach then print('  reachability, '..name..': nothing ruled out here');return end
+    local function with(groups,f,id,mode)
+        local out={}
+        for g,set in pairs(groups and groups.groups or {})do local c={};for k,v in pairs(set)do c[k]=v end;out[g]=c end
+        out[f]=out[f] or {};out[f][id]=mode
+        return {groups=out}
+    end
+    local checked,refused,names=0,{},{}
+    for f in pairs(r.required)do
+        local shown=offered(f)
+        for _,field in ipairs({'tags','objectives'})do
+            for _,id in ipairs(shown[field])do
+                for _,mode in ipairs(field=='tags' and {'accept','exclude'} or {'require','exclude'})do
+                    local answer
+                    local s={}
+                    for k,v in pairs(spec)do s[k]=v end
+                    if field=='tags' then answer=reach.tag(f,id,mode);s.constellations=with(spec.constellations,f,id,mode)
+                    else answer=reach.objective(f,id,mode);s.objectives=with(spec.objectives,f,id,mode)end
+                    local source,decline=SeedSolver.plan(prepared,s)
+                    local has=source~=nil or decline.reason~='no draw path'
+                    assert(answer==has,string.format('%s: %s %s %d %s: reachability says %s, the plan %s',name,
+                        Search.options[f].name,field,id,mode,tostring(answer),source and 'has paths' or decline.reason))
+                    checked=checked+1
+                    if not answer then
+                        local key=Search.options[f].name..':'..field:gsub('s$','')..':'..id..':'..mode
+                        refused[key]=true;names[#names+1]=key
+                    end
+                end
+            end
+        end
+    end
+    table.sort(names)
+    print(string.format('  reachability, %s: ok=%s, %d answers agree with the plan, worked out in %.0f ms; refused %s',name,
+        tostring(reach.ok),checked,took*1000,#names>0 and table.concat(names,', ') or 'none'))
+    return reach,refused
+end
+if arg[4] then
+    local case=assert(dofile((arg[0]:match('^(.*[/\\])') or '')..'reachability_cases.lua')[arg[4]],'Unknown case '..arg[4])
+    local function family_id(name)for i,o in ipairs(Search.options)do if o.name==name then return i end end error('No mission '..name)end
+    local shown=model.catalogue(snapshot,case.difficulty)
+    local r={difficulty=case.difficulty,required={},constellations={groups={}},objectives={groups={}}}
+    for _,name in ipairs(case.required)do
+        local f=family_id(name)
+        r.required[f]=true
+        local tags={}
+        for _,tag in ipairs((case.accept or {})[name] or {})do tags[tag]='accept'end
+        if next(tags)then r.constellations.groups[f]=tags end
+        local rows={}
+        for _,o in ipairs(((shown.objective_groups or {})[f] or {}).list or {})do
+            for _,wanted in ipairs(case.exclude_objectives or {})do
+                if o.name:find(wanted,1,true)then rows[o.id]='exclude'end
+            end
+        end
+        if next(rows)then r.objectives.groups[f]=rows end
+    end
+    local reach,refused=reachability(arg[4],r,shown)
+    assert(reach and reach.ok,arg[4]..': the request itself must have a path')
+    for _,key in ipairs(case.refused)do assert(refused[key],arg[4]..': '..key..' was not refused')end
+    local n=0;for _ in pairs(refused)do n=n+1 end
+    assert(n==#case.refused,arg[4]..': refused more than recorded')
+    print('Seed solver reachability: '..arg[4]..' passed')
+    return
+end
 jit.flush()
 local function case(name,r,expect)
     r.difficulty=r.difficulty or difficulty;r.limit=r.limit or 1000000
@@ -314,6 +403,10 @@ else
     print(string.format('  solver: %d candidates in %.2f s; scanning: %d candidates in %.2f s%s',solved,solved_s,attempts,took,
         found and '' or ' without a match'))
 end
+
+-- The dialog's reachability must agree with the plan on requests from the board.
+reachability('missions only',{difficulty=difficulty,required=required(math.min(#fams,2))},catalogue)
+reachability('the selective request',hard,catalogue)
 
 -- A city or megafactory: its operation is a campaign event with a special
 -- level graph, one row per difficulty, its levels drawn per seed.

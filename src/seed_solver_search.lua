@@ -218,8 +218,10 @@ return function(Math,Paths,Chain,Time,Inputs)
     end
     -- {solver, input} of planet (planet_model.lua) for spec's difficulty,
     -- scope and rules; solver nil and input the reason when unavailable.
-    function R.prepare(planet,definitions,spec)
-        local solver,input=planet.solver(definitions,spec.difficulty,R.seeded(spec),spec.scope and spec.scope.region)
+    -- seeded, when given, overrides whether the mission-seed inputs are read.
+    function R.prepare(planet,definitions,spec,seeded)
+        if seeded==nil then seeded=R.seeded(spec)end
+        local solver,input=planet.solver(definitions,spec.difficulty,seeded,spec.scope and spec.scope.region)
         return {solver=solver,input=input}
     end
     -- source(spec) on prepared inputs, or nil and a decline {kind, reason}:
@@ -243,6 +245,123 @@ return function(Math,Paths,Chain,Time,Inputs)
             if not others then return nil,{kind='impossible',reason=why}end
         end
         return nil,{kind='scan',reason=why}
+    end
+    -- A rule set as text, the same for equal sets: {[id]=mode} pairs sorted.
+    local function rule_text(set)
+        local list={}
+        for id,mode in pairs(set or {})do list[#list+1]=id..'='..mode end
+        table.sort(list)
+        return table.concat(list,',')
+    end
+    -- Which enemy-force and side-objective rules some draw path can still
+    -- meet, for the dialog to disable the rest (src/solver_estimate.lua).
+    -- prepared must hold the mission-seed inputs (R.prepare with seeded).
+    -- With the request's own rules of every other required mission, a
+    -- mission's rules have a path exactly when some choice of kinds that
+    -- delivers the required missions has, for each of its kinds, a
+    -- mission_paths() branch meeting that kind's rules: the rules only
+    -- decide whether each kind's step of a path exists
+    -- (seed_solver_paths.lua deliveries). Nil when nothing can be ruled out:
+    -- no required mission, inputs the solver declines, no path even without
+    -- rules, or a campaign event row of the difficulty a scan could match.
+    -- offered(family) gives the options the dialog shows for a required
+    -- mission: {tags={tag, ...}, objectives={row, ...}}. Every option is
+    -- checked here, in both modes, with the request's other rules, so the
+    -- dialog only looks the answers up.
+    -- Returns {ok, tag(family, tag, mode), objective(family, row, mode)}: ok
+    -- whether the request itself has a path; tag and objective whether one
+    -- has with that option set to mode ('accept' or 'exclude', 'require' or
+    -- 'exclude'), nil for an option not checked.
+    function R.reachability(prepared,spec,offered)
+        local solver,input=prepared.solver,prepared.input
+        if not solver or not solver.seeded then return nil end
+        local families={}
+        for family in pairs(spec.required)do families[#families+1]=family end
+        table.sort(families)
+        if #families==0 then return nil end
+        local difficulty,scope=spec.difficulty,spec.scope
+        if input.pool_count<3*input.max_difficulty then return nil end
+        if not scope then
+            for _,event in ipairs(input.specials or {})do
+                if event.minimum<=difficulty and difficulty<=event.maximum then return nil end
+            end
+        end
+        local operations={}
+        for _,op in ipairs(solver.operations)do if op.difficulty==difficulty then operations[#operations+1]=op end end
+        local sample=operations[1]
+        if not sample or #sample.extra>0 or sample.special~=(scope~=nil)then return nil end
+        local P=Paths.new({records=solver.records,row_of=spec.row_of or {},disabled_tags=solver.disabled_tags,
+            checkpoint=spec.checkpoint})
+        local known=shared_of[solver]
+        if not known then known={};shared_of[solver]=known end
+        if known[difficulty]==nil then known[difficulty]=P.shared(operations,difficulty)or false end
+        local shared=known[difficulty]
+        if not shared then return nil end
+        local level_ok
+        if scope and spec.daynight then
+            level_ok=function(node)return spec.daynight({missions={{level_index=node}}})end
+        end
+        local lists={}
+        for _,family in ipairs(families)do
+            local list={}
+            for _,kind in ipairs(spec.options[family].ids)do
+                if shared.category_of[kind]~=nil then list[#list+1]=kind end
+            end
+            lists[#lists+1]=list
+        end
+        -- The choices of kinds with a path when no mission has rules.
+        local feasible={}
+        for _,combo in ipairs(combinations(lists))do
+            if #P.paths(shared,combo,{},level_ok)>0 then feasible[#feasible+1]=combo end
+        end
+        if #feasible==0 then return nil end
+        local tags_of=spec.constellations and spec.constellations.groups or {}
+        local objectives_of=spec.objectives and spec.objectives.groups or {}
+        local met={}
+        local function meets(kind,tags,objectives)
+            local key=kind..'|'..rule_text(tags)..'|'..rule_text(objectives)
+            if met[key]==nil then
+                if spec.checkpoint then spec.checkpoint()end
+                met[key]=#P.mission_paths(shared,kind,{tags=tags or {},objectives=objectives or {}})>0
+            end
+            return met[key]
+        end
+        local function can(family,tags,objectives)
+            for _,combo in ipairs(feasible)do
+                local ok=true
+                for i,f in ipairs(families)do
+                    local t,o=tags_of[f],objectives_of[f]
+                    if f==family then t,o=tags,objectives end
+                    if not meets(combo[i],t,o)then ok=false;break end
+                end
+                if ok then return true end
+            end
+            return false
+        end
+        local function with(set,id,mode)
+            local out={};for k,v in pairs(set or {})do out[k]=v end
+            out[id]=mode
+            return out
+        end
+        local answers={}
+        for _,family in ipairs(families)do
+            local shown=offered and offered(family) or {}
+            local t,o=tags_of[family],objectives_of[family]
+            for _,tag in ipairs(shown.tags or {})do
+                for _,mode in ipairs({'accept','exclude'})do
+                    answers['t:'..family..':'..tag..':'..mode]=can(family,with(t,tag,mode),o)
+                end
+            end
+            for _,row in ipairs(shown.objectives or {})do
+                for _,mode in ipairs({'require','exclude'})do
+                    answers['o:'..family..':'..row..':'..mode]=can(family,t,with(o,row,mode))
+                end
+            end
+        end
+        local self={ok=can(families[1],tags_of[families[1]],objectives_of[families[1]])}
+        function self.tag(family,tag,mode)return answers['t:'..family..':'..tag..':'..mode]end
+        function self.objective(family,row,mode)return answers['o:'..family..':'..row..':'..mode]end
+        return self
     end
     -- The usual seconds of a search: set-up, the expected walk steps at rate
     -- steps a second, and 0.3 s to confirm the match.
