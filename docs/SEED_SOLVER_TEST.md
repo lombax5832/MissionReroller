@@ -68,7 +68,10 @@ ran out (not expected). Send the whole log after the session.
    - Also note: the request may be impossible (`SEED_SOLVER_OFF reason=no
      draw path`): pick other rules.
    - **Estimate.** While it searches, the line under the progress strip
-     reads `1 IN <n> SEEDS MATCH - EXPECT ...`. Note it and compare with
+     reads `<m>:<ss> - 1 IN <n> SEEDS MATCH - ABOUT ...`, the clock counting
+     the seconds searched (waits for the game's backend left out, as the
+     3 min limit counts them); a scanned search reads `<m>:<ss> - <n> OF
+     1,000,000 SEEDS SEARCHED`. The line fits inside the panel. Note it and compare with
      `elapsed_s=`: the estimate is right within a few times either way.
      The `SEED_SOLVER` line's `match=1/<n> expected_steps=<n>` and the
      match line's `walk_steps=` give the numbers behind it. The text fits

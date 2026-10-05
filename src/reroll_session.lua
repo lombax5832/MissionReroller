@@ -55,7 +55,7 @@ return function(M,emit,options)
     local phase=phases[M.status] and M.status or 'initializing'
     local running,outcome,detail,run=false,nil,nil,0
     -- The run record. pending: a start the pipeline has not taken yet.
-    local request,pending,cancelling,report,progress,result,estimate=nil,false,false,nil,0,nil,nil
+    local request,pending,cancelling,report,progress,result,estimate,elapsed=nil,false,false,nil,0,nil,nil,nil
     local self={phases=phases}
     local function set(name,text)phase=name;detail=text;M.status=name end
     local function close(name,text)
@@ -86,7 +86,7 @@ return function(M,emit,options)
             if not p.entry then return reject(name..' outside a run')end
             running=true;outcome=nil;run=run+1
             -- The last run's record must not stand for this one.
-            request,pending,report,progress,result,estimate=nil,false,nil,0,nil,nil
+            request,pending,report,progress,result,estimate,elapsed=nil,false,nil,0,nil,nil,nil
         elseif p.stage<phases[phase].stage then
             return reject(name..' after '..phase)
         end
@@ -135,17 +135,18 @@ return function(M,emit,options)
         local asked=cancelling;cancelling=false;return asked
     end
     -- The search's side of the record. report is the dialog's text for an
-    -- outcome that needs more than its caption; progress counts seeds tried;
+    -- outcome that needs more than its caption; progress counts seeds tried
+    -- and, once the search runs, the seconds it has searched;
     -- estimate is the seed solver's {match, seconds, elapsed} while it
     -- searches; result is the finished search job.
     function self.report(text)report=text end
-    function self.progress(attempts)progress=attempts or 0 end
+    function self.progress(attempts,seconds)progress=attempts or 0;if seconds then elapsed=seconds end end
     function self.estimate(value)estimate=value end
     function self.result(job)result=job end
     function self.view()
         local p=phases[phase]
         local view={phase=phase,running=running,outcome=outcome,detail=detail,run=run,
-            request=request,report=report,progress=progress,result=result,estimate=estimate}
+            request=request,report=report,progress=progress,result=result,estimate=estimate,elapsed=elapsed}
         if running then
             view.caption=p.caption or 'Checking planet data';view.tone='busy';view.step=p.step or 1
         elseif outcome=='stopped' then view.caption,view.tone=M.status,'bad'

@@ -233,8 +233,8 @@ m=g:model(terminids,fresh({running=true}))
 assert(m.running and m.locked and not m.can_start and not m.can_clear)
 -- A solved search shows how strict its filter is and how long it usually
 -- takes, in place of the seed count.
-local function solving(e)
-    local v=fresh({running=true});v.run={caption='Searching seeds',step=2,progress=3,estimate=e}
+local function solving(e,elapsed,progress)
+    local v=fresh({running=true});v.run={caption='Searching seeds',step=2,progress=progress or 3,estimate=e,elapsed=elapsed}
     return g:model(terminids,v).detail
 end
 -- Before a search, the request's estimate replaces the general line once
@@ -250,15 +250,18 @@ for _,case in ipairs({
     local text=g:model(terminids,fresh({estimate=case[1]})).detail
     assert(text==case[2],tostring(text))
 end
+-- A running search starts its line with the time it has searched.
 for _,case in ipairs({
-    {{match=0.6,seconds=0.4,elapsed=0.1},'Most seeds match - expect under a second'},
-    {{match=1/23456,seconds=4.4,elapsed=1},'1 in 23,000 seeds match - expect about 4 s'},
-    {{match=1/7.3,seconds=12,elapsed=30},'1 in 7 seeds match - expect about 12 s, running long'},
-    {{match=1/1234567,seconds=150,elapsed=20},'1 in 1,200,000 seeds match - expect about 3 min'},
-    {{match=1e-9,seconds=900,elapsed=400},'1 in 1,000,000,000 seeds match - over the 3 min limit'},
+    {{match=0.6,seconds=0.4},0.1,'0:00 - Most seeds match - under a second'},
+    {{match=1/23456,seconds=4.4},1.7,'0:01 - 1 in 23,000 seeds match - about 4 s'},
+    {{match=1/7.3,seconds=12},30,'0:30 - 1 in 7 seeds match - about 12 s'},
+    {{match=1/1234567,seconds=150},75.2,'1:15 - 1 in 1,200,000 seeds match - about 3 min'},
+    {{match=1e-9,seconds=900},179.9,'2:59 - 1 in 1,000,000,000 seeds match - over the 3 min limit'},
+    {{match=1/23456,seconds=4.4},nil,'1 in 23,000 seeds match - about 4 s'},
+    {nil,12.4,'0:12 - 2,731 of 1,000,000 seeds searched',2731},
 })do
-    local text=solving(case[1])
-    assert(text==case[2],text)
+    local text=solving(case[1],case[2],case[4])
+    assert(text==case[3],text)
 end
 m=g:model(terminids,fresh({fixed=true}))
 assert(not m.ready and not m.can_start and not m.locked and m.can_clear,'An operation in progress blocks the start, not editing')

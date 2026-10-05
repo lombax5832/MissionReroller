@@ -200,7 +200,8 @@ end
 local function count(n)return n==0 and 'Any' or n..(n==1 and ' rule' or ' rules')end
 -- How strict a solved search's filter is and how long it usually takes
 -- (prediction_search_runtime.lua: {match, seconds, elapsed}).
-local function estimate_text(e)
+-- running: the shorter form a running search shows after its clock.
+local function estimate_text(e,running)
     if e.match<=0 then return 'No seed gives this now' end
     local strict
     if e.match>=0.5 then strict='Most seeds match'
@@ -211,11 +212,23 @@ local function estimate_text(e)
     end
     local s=e.seconds
     -- One unmeasured text redrawn every frame: kept under the panel's width.
-    local usual=s<1 and 'expect under a second' or s<90 and string.format('expect about %d s',math.floor(s+0.5))
-        or s<=180 and string.format('expect about %d min',math.floor(s/60+0.5))
+    local expect=running and '' or 'expect '
+    local usual=s<1 and expect..'under a second' or s<90 and string.format('%sabout %d s',expect,math.floor(s+0.5))
+        or s<=180 and string.format('%sabout %d min',expect,math.floor(s/60+0.5))
         or 'over the 3 min limit'
-    local late=(e.elapsed or 0)>math.max(2,2*s) and s<=180 and ', running long' or ''
-    return strict..' - '..usual..late
+    return strict..' - '..usual
+end
+-- A search's elapsed time, as the clock at the start of its line: 0:07.
+local function clock_text(seconds)
+    local s=math.max(0,math.floor(seconds))
+    return string.format('%d:%02d',math.floor(s/60),s%60)
+end
+-- Under a running search: its clock, then the solver's estimate or the
+-- seeds searched.
+local function running_text(run,limit)
+    local what=run.estimate and estimate_text(run.estimate,true)
+        or grouped(run.progress or 0)..' of '..grouped(limit)..' seeds searched'
+    return run.elapsed and clock_text(run.elapsed)..' - '..what or what
 end
 -- Under a request ready to search: its estimate (solver_estimate.lua) once
 -- worked out.
@@ -343,8 +356,7 @@ function R:model(catalogue,v)
     return {running=busy,locked=locked,ready=ready,can_start=ready and rules>0,can_clear=not locked and rules>0,
         difficulty=v.difficulty,status=tostring(status),tone=tone,
         step=busy and (running and run.step or 1) or nil,
-        detail=busy and (running and run.estimate and estimate_text(run.estimate)
-            or grouped(running and run.progress or 0)..' of '..grouped(v.limit)..' seeds searched')
+        detail=busy and (running and running_text(run,v.limit) or '0 of '..grouped(v.limit)..' seeds searched')
             or ready and rules>0 and tone=='idle' and before_search(v.estimate) or '',
         faction=display and catalogue.faction or nil,scope=v.scope and 'city' or 'planet',
         section=section,items=items,page=self.page,pages=pages,groups=tabs,group=group,

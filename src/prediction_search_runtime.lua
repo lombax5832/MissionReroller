@@ -280,8 +280,10 @@ advance_prediction_search=function(action,now)
         local spent=search_clock()-started
         slices=slices+1;step_time=step_time+spent;max_slice=math.max(max_slice,spent*1000)
     end
-    reroll_session.progress(job.attempts)
+    -- The search's own time, as its time limit counts it: waits for the
+    -- game's backend are left out.
     local elapsed=math.max(now-search_started-wait_total-waiting,0.001)
+    reroll_session.progress(job.attempts,elapsed)
     -- The dialog's estimate: the solver's expected walk at the walk rate
     -- measured so far, or a typical in-game rate before there is one, plus
     -- the set-up and the match's confirmation.

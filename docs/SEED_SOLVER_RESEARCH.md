@@ -429,7 +429,8 @@ Day / Night window, much less for missions alone.
 
 ### The estimate in the dialog, 2026-10-04
 
-While the solver searches, the line under the progress strip shows how
+Every running search's line now starts with the time it has searched
+(`0:12 - ...`, the time limit's own clock). While the solver searches, the line under the progress strip shows how
 strict the filter is and how long such a search usually takes, in place of
 the seed count: `1 in 23,000 seeds match - expect about 4 s` (`Most seeds
 match`, `expect under a second`, `over the 3 min limit`, and `, running
