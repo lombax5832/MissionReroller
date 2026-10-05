@@ -50,6 +50,8 @@ int GetThreadPriority(void *thread);
 int SetThreadPriority(void *thread, int priority);
 uint32_t GetCurrentThreadId(void);
 void Sleep(uint32_t ms);
+// The thread pool's simple callback (PTP_SIMPLE_CALLBACK): instance, context.
+typedef void (*solver_worker_entry_t)(void *, void *);
 ]]
 local C=ffi.C
 local shared=ffi.cast('solver_worker_t *',shared_address)
@@ -103,7 +105,7 @@ local function body()
         if shared.stop~=0 then return end
     end
 end
-SOLVER_WORKER_ENTRY=ffi.cast('void (*)(void *, void *)',function(instance)
+SOLVER_WORKER_ENTRY=ffi.cast('solver_worker_entry_t',function(instance)
     local ok,err=pcall(function()
         -- Set once this callback has returned: only then may the VM close.
         C.SetEventWhenCallbackReturns(instance,ffi.cast('void *',event_address))
