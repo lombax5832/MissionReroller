@@ -22,8 +22,10 @@ local selection=word(268)..word(268)..word(4294967295)..word(4294967295)..word(0
 local s={board=0x20000000,planet=268,seed=500,fingerprint='stable',context='same',selection=selection,
     decoded={operations=planet_ops,highlighted_operation=3}}
 local composition
+-- unstable: every capture differs, so the run stays in the capture.
+local unstable,captures=false,0
 local probe={
-    capture=function()return {fingerprint='stable',input={pool_count=35},level_graphs={},composition=composition,definitions=0x30000000}end,
+    capture=function()captures=captures+1;return {fingerprint=unstable and tostring(captures) or 'stable',input={pool_count=35},level_graphs={},composition=composition,definitions=0x30000000}end,
     compare=function()return {passed=true,matched=30,observed=30,predicted=30,errors={}}end,
     compare_levels=function()return {passed=true,checked=72,category_draws=3,errors={}}end,
 }
@@ -103,14 +105,16 @@ local function start()
     if not up(dialog,'filters').selected[2] then action=2;frame()end
     assert(up(dialog,'filters').selected[2],'Survey checked')
     action='start';frame()
-    assert(M.status=='waiting_for_stable_inputs' and not session.take_request(),'The pipeline took the request in the same frame')
+    -- The request's first poll runs in this frame and may already pass.
+    assert(session.view().phase~='requested' and not session.take_request(),'The pipeline took the request in the same frame')
     return mark
 end
 
 -- 1. No match: request, capture, comparison, search, exhausted.
 open();frame();assert(last().status=='Choose what the operation must contain')
 composition={passed=true,operations=1,templates=1,modifiers=1,checked=1,errors={},independent_bases=true,bases=1}
-local mark=start()
+-- The first poll fails, so the request can be narrowed before the search.
+unstable=true;local mark=start();unstable=false
 session.view().request.limit=256
 local result=until_idle()
 local ok,missing=saw(mark,{{'Checking planet data',1},{'Searching seeds',2}});assert(ok,missing)
@@ -132,7 +136,8 @@ composition.independent_bases=true
 planet_ops[1].missions[1].native_type=22
 mark=start()
 result=until_idle()
-ok,missing=saw(mark,{{'Checking planet data',1},{'Opening matching operation',4}});assert(ok,missing)
+-- The capture passes in the start frame, so the dialog goes straight to selection.
+ok,missing=saw(mark,{{'Opening matching operation',4}});assert(ok,missing)
 assert(not router.opened,'Success closes the dialog')
 assert(M.status=='publication_test_passed' and up(dialog,'report')=='Matching operation selected' and up(dialog,'report_tone')=='good')
 assert(table.concat(logs):find('EXISTING_MATCH row=3 seed=500',1,true))
@@ -154,7 +159,7 @@ do
         return {passed=false,checked=1,failed_rows={[3]=true},general=0,independent_bases=true}
     end end
     local from=#logs
-    open();mark=start()
+    open();unstable=true;mark=start();unstable=false
     session.view().request.limit=256
     result=until_idle()
     assert(M.status=='search_exhausted' and router.opened,M.status)
@@ -167,12 +172,13 @@ do
 end
 
 -- 4. Cancel during the capture: the dialog asks, the pipeline answers.
-open();planet_ops[1].missions[1].native_type=0
+open();planet_ops[1].missions[1].native_type=0;unstable=true
 mark=start()
 frame();assert(last().running and last().status=='Checking planet data' and last().step==1)
 action='cancel';frame();frame()
 assert(not last().running and last().status=='Search cancelled' and last().tone=='idle')
 assert(M.status=='cancelled' and not session.take_cancel() and not session.view().running)
+unstable=false
 for _=1,12 do frame()end;assert(M.status=='cancelled','The cancelled capture never completes')
 
 -- 5. A night-only search. Its window follows war time; a match whose side ends
@@ -219,7 +225,7 @@ catalogue.missions={{id=1,name='Launch ICBM'},{id=2,name='Survey'}};catalogue.mi
 catalogue.profiles={{masks={[compatibility.mask({[1]=true})]=true,[compatibility.mask({[2]=true})]=true},modifiers={}}}
 open();filters.time=nil;filters.selected={};filters.excluded={[1]=true}
 mark=#logs
-action='start';frame()
+unstable=true;action='start';frame();unstable=false
 assert(session.view().request.excluded[1] and next(session.view().request.required)==nil,'The exclusion reaches the request')
 session.view().request.limit=64
 result=until_idle()

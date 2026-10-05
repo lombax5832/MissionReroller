@@ -208,7 +208,9 @@ local fake_probe={
     capture=function(_,s)
         capture_attempts=capture_attempts+1
         if fail_capture=='always' or fail_capture==capture_attempts then collect_invalid(0,{id=0,category=0})end
-        return {fingerprint=changing and tostring(now)..tostring(calls) or 'stable',input={pool_count=35},level_graphs={},composition=composition}
+        -- In game a poll's two captures are frames apart, so a changing board
+        -- differs between them.
+        return {fingerprint=changing and tostring(capture_attempts) or 'stable',input={pool_count=35},level_graphs={},composition=composition}
     end,
     compare=function()calls=calls+1;return {passed=true,matched=30,observed=30,predicted=30,errors={}}end,
     compare_levels=function()return {passed=level_ok,checked=72,category_draws=3,errors=level_ok and {} or {'synthetic level mismatch'}}end,
@@ -224,39 +226,44 @@ up(tick,'user32',{
 },true)
 up(tick,'snapshot',function()return ready and snapshot or nil,'open galactic map'end,true)
 local function frame()now=now+0.5;local a,b,c=update();assert(a=='original' and b==nil and c==7)end
-frame();down=true;frame();focused=false
-for _=1,5 do frame()end
+-- A board that matches passes on the poll the request starts, alt-tabbed too.
+frame();down=true;ready=false;frame();focused=false;ready=true
+local from=#logs;frame()
 assert(calls==1 and MissionRerollerExperiment.status=='identity_and_level_tests_passed','Must finish while alt-tabbed')
+assert(table.concat(logs,'',from+1):find('capture_s=0.500 polls=2 ',1,true),'One agreeing poll is enough')
 for _=1,5 do frame()end;assert(calls==1,'One check per shortcut')
 focused=true;down=false;frame();down=true;ready=false;frame()
 for _=1,62 do frame()end
 assert(MissionRerollerExperiment.status=='capture_timeout' and calls==1)
-ready=true;down=false;frame();down=true;frame()
-changing=true
+ready=true;down=false;frame();changing=true;down=true;frame()
 for _=1,8 do frame()end
 assert(calls==1,'Changing inputs must not pass stability gate')
 changing=false
 level_ok=false
-for _=1,5 do frame()end
-assert(calls==2,'Timeout and changed data must allow retry')
+from=#logs
+-- A mismatch after one poll is confirmed over four stable polls: the first
+-- frame finds it, three more agree, and only then is it reported.
+frame();assert(calls==2 and MissionRerollerExperiment.status=='waiting_for_stable_inputs','A mismatch is rechecked, not reported')
+assert(table.concat(logs,'',from+1):find('LUA_IDENTITY_RECHECK levels differs after one poll',1,true))
+for _=1,2 do frame()end;assert(MissionRerollerExperiment.status=='waiting_for_stable_inputs')
+frame();assert(calls==3,'Timeout and changed data must allow retry')
 assert(MissionRerollerExperiment.status=='level_test_mismatch','Identity pass must not hide level failure')
+assert(table.concat(logs,'',from+1):find('capture_s=%d+%.%d+ polls=1[0-9] '),'The report names the time and polls it took')
 -- A rejected graph must discard the capture without permanently killing the probe.
 level_ok=true;down=false;frame();down=true
 fail_capture=capture_attempts+2;frame() -- reject the second capture of this poll
 assert(MissionRerollerExperiment.status=='capture_retry','Invalid graph must be retryable')
-assert(calls==2,'Rejected capture must never be compared')
+assert(calls==3,'Rejected capture must never be compared')
 fail_capture=nil
-for _=1,3 do frame()end
-assert(calls==2,'Recovery still requires four new stable polls')
-frame();assert(calls==3 and MissionRerollerExperiment.status=='identity_and_level_tests_passed')
+frame();assert(calls==4 and MissionRerollerExperiment.status=='identity_and_level_tests_passed')
 down=false;frame();down=true;fail_capture='always';frame()
 for _=1,62 do frame()end
-assert(calls==3 and MissionRerollerExperiment.status=='capture_timeout','Persistent invalid graphs must time out, never pass')
+assert(calls==4 and MissionRerollerExperiment.status=='capture_timeout','Persistent invalid graphs must time out, never pass')
 local joined=table.concat(logs)
 assert(joined:find('LUA_CAPTURE_RETRY',1,true) and joined:find('root=12 nodes=12',1,true),'Retain exact failed bounds in diagnostic log')
 fail_capture=nil;down=false;frame();down=true;frame()
 for _=1,4 do frame()end
-assert(calls==4,'A failed capture session must allow a later shortcut retry')
+assert(calls==5,'A failed capture session must allow a later shortcut retry')
 for _,passed in ipairs({true,false})do
     composition={passed=passed,operations=30,templates=30,modifiers=30,checked=72,independent_bases=true,bases=30,errors=passed and {} or {'synthetic composition mismatch'}}
     down=false;frame();down=true;frame()
@@ -352,9 +359,9 @@ assert(calls==before+1 and MissionRerollerExperiment.status=='composition_test_p
 -- Without a search stage the run ends at its last checkpoint.
 local session=up(tick,'reroll_session')
 local view=session.view();assert(not view.running and view.outcome=='composition_test_passed',view.phase)
-assert(reads==4*2*5 and most<=2 and frames>=20,string.format('Polls must spread over frames: reads=%d most=%d frames=%d',reads,most,frames))
+assert(reads==2*5 and most<=2 and frames>=5,string.format('Polls must spread over frames: reads=%d most=%d frames=%d',reads,most,frames))
 -- A new request mid-poll discards the poll in flight.
-down=false;frame();down=true;frame();assert(reads>40 and calls==before+1)
+down=false;frame();down=true;frame();assert(reads>10 and calls==before+1)
 down=false;frame();down=true;frame()
 for _=1,40 do frame()end
 assert(calls==before+2,'Only the restarted request may complete')
