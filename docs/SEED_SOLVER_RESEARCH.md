@@ -600,11 +600,80 @@ against 100,000 random operation seeds; its own LCG is too regular for
 that (it skews the offsets by up to 5 points), so those checks draw from
 `math.random`.
 
+### Two draws per walk, 2026-10-04
+
+Question: can a job walk only the mission seeds m that pass two draw
+intervals at once, so fewer root solutions fail the mission check? Answer:
+yes, exactly, but it is not worth shipping now; nothing in `src/` changed.
+
+- **Method** (prototype outside the repo). The root solutions are the
+  points of the lattice {(m, t): t = A_p1 m + c mod 2^64} in the box
+  [0, 2^32) x [0, W1). The walk's two gaps (q1, d1) and (q2, -d2) are a basis
+  of it (checked: q1 d2 + q2 d1 = 2^64); Gauss reduction in the box's
+  scaled norm gives a short vector b and another B. The points split into
+  rows P0 + iB + jb; along a row the second draw's offset moves by the fixed
+  e = A_p2 b_m, so a second three-gap walk over j, with its own two steps
+  and one Euclid per row for its start, visits exactly the row's points
+  that pass both. A row's j range is computed in doubles and settled with
+  the exact root test on m, valid near the box; the set-up declines a
+  root share above 1/4, fewer than 1,024 values or |b_t| < 2^20 (the walk
+  stays 1-D). Rows go from a random one, cyclically, so every solution
+  comes once. Set-up 40 µs (120 µs with the JIT off), about 17,000 rows of
+  about 20,000 solutions for a root share of 0.13, 0.3 µs a row (2.7 µs
+  JIT off).
+- **Exactness.** Against the 1-D walk filtered by the second draw over all
+  2^32 seeds: 185 random cases (positions 1 to 128, root shares 4e-9 to
+  7e-4, second shares 0.001 to 0.98) gave identical sets with no
+  duplicates; 6 cases with root shares 0.04 to 0.20 and second shares 0.24
+  to 0.73 (up to 619 million solutions) gave equal counts and checksums.
+- **Second draw.** The narrowest draw every alternative constrains besides
+  the root, over the hull of their intervals. On the audit's request
+  (planet 173, 84, 65 and 59 each with its enemy force and Lidar Station
+  and SEAF Artillery excluded) the root is the enemy-force draw (0.135)
+  and each of the four objective draws has a hull of 0.6: an exclusion
+  removes 40% of a draw, never more. With one objective required instead
+  (Recover SSSD for 84, Spore Spewer for 59) the second draw is 1/6.
+- **Where the time goes.** Per root solution of the excluded-objectives
+  request, offline: walk step 10 ns (255 ns with the JIT off), mission
+  check 136 ns (1,490 ns), inversion of the 13% that pass 58 ns (3,000 ns,
+  about 23 µs each), path check 14 ns (50 ns). With the JIT off, as the
+  game runs, the inversion is two thirds of the walk; the second draw
+  saves only steps that fail the check.
+- **Measured**, per mission seed that passes the whole mission check (the
+  unit both walks share; each is then inverted and path-checked):
+
+| Request | JIT | 1-D walk | Two draws | Gain |
+| --- | --- | --- | --- | --- |
+| Enemy force and both exclusions (second 0.6) | on | 1.70 µs | 1.39 µs | 1.22x |
+| | off | 36.8 µs | 33.8 µs | 1.09x |
+| Enemy force and a required objective (second 1/6) | on | 1.12 µs | 0.70 µs | 1.6x |
+| | off | 27.4 µs | 21.8 µs | 1.26x |
+
+  The first request is the slow one in game (4.79 million walk steps on
+  planet 268): about 8% less work with the JIT off. The second has about
+  3,000 steps per candidate and already ends in milliseconds.
+- **The inversion instead.** `Math.inverter` builds two int64 cdata per
+  probed point. Computing the base point once in int64 and the about 32
+  neighbours in doubles (exact, the offsets are small) gave the same
+  answers on 20,000 random values and took 3.3 µs instead of 19.3 µs with
+  the JIT off (250 against 400 ns with it). Per passing seed that is
+  18.4 µs instead of 36.8 µs with the JIT off on the excluded-objectives
+  request, twice as fast. With it, two draws would gain 1.19x there and
+  1.9x on the required-objective request (12.6 µs to 6.6 µs).
+- **More draws.** All five constrained positions would leave 13% of the
+  root's steps, but a third draw needs rows inside rows, with a Euclid per
+  inner row of about 100 points, which costs about what it saves.
+
 ## Next steps, if pursued
 
 1. The in-game test ([SEED_SOLVER_TEST.md](SEED_SOLVER_TEST.md)).
-2. A compiled lattice enumerator (fpylll, or C) for the joined-row systems,
+2. An inversion without cdata allocations (**Two draws per walk**): half
+   the time of the slowest requests with the JIT off.
+3. Two draws per walk after that, for a job whose second draw is narrow
+   (a required side objective), with `expected_steps` counting a step as a
+   seed that passes both draws.
+4. A compiled lattice enumerator (fpylll, or C) for the joined-row systems,
    which would let every operation of a difficulty be solved in one lattice
    instead of sampled and checked.
-3. Operation-level rules (group 0) and per-ID paths, so fewer requests fall
+5. Operation-level rules (group 0) and per-ID paths, so fewer requests fall
    back to scanning.
