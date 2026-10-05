@@ -199,6 +199,26 @@ local function verify_offsets()
     end
     return #names,anchored
 end
+-- The user32 functions the runtimes call, resolved by address. The first
+-- `ffi.cdef` of a name wins for the whole VM and later ones are silently
+-- ignored, so an addon that declared `uint16_t GetAsyncKeyState(int)` first
+-- made a held key read 32768 instead of negative, and F7 never fired.
+-- Unnamed function pointers with untyped pointer parameters cannot be
+-- changed by any declaration elsewhere (src/window_cursor.lua).
+local function import_user32(ffi)
+    ffi.cdef[[void *GetModuleHandleA(const char *); void *GetProcAddress(void *, const char *);]]
+    ffi.load('user32')
+    local module=kernel.GetModuleHandleA('user32.dll')
+    assert(module~=nil,'user32 not loaded')
+    local function import(name,signature)
+        local address=kernel.GetProcAddress(module,name)
+        assert(address~=nil,name..' unavailable')
+        return ffi.cast(signature,address)
+    end
+    return {GetAsyncKeyState=import('GetAsyncKeyState','int16_t (*)(int)'),
+        GetForegroundWindow=import('GetForegroundWindow','void *(*)(void)'),
+        GetWindowThreadProcessId=import('GetWindowThreadProcessId','uint32_t (*)(void *, void *)')}
+end
 local function initialize()
     ffi=require('ffi'); api=create_api(); kernel=ffi.load('kernel32')
     ffi.cdef[[
@@ -210,9 +230,6 @@ local function initialize()
         size_t VirtualQuery(const void *, void *, size_t);
         uint32_t GetCurrentThreadId(void);
         uint32_t GetCurrentProcessId(void);
-        int16_t GetAsyncKeyState(int key);
-        void *GetForegroundWindow(void);
-        uint32_t GetWindowThreadProcessId(void *, uint32_t *);
     ]]
     game=assert(api.module('game.dll'),'missing game.dll')
     local exe=assert(api.module(nil))
@@ -220,7 +237,7 @@ local function initialize()
     assert(api.module_hash(exe)==hashes.exe,'executable hash mismatch')
     bases.game,bases.exe=game,exe
     local signatures,anchors=verify_offsets()
-    user32=ffi.load('user32')
+    user32=import_user32(ffi)
     initialized=true
     for _,bind in ipairs(binders)do bind({api=api,game=game,ffi=ffi,kernel=kernel,user32=user32})end
     emit('build='..O.build..' hashes=verified signatures='..signatures..' anchors='..anchors..' verified')

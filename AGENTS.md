@@ -216,7 +216,11 @@ to do, and which log lines prove it worked or failed.
 ## Release workflow
 
 1. Work on a branch in a worktree; merge into `main` as
-   `Merge the <change> into main`.
+   `Merge the <change> into main`. Create the worktree from local `main`,
+   never from `origin/main`: local `main` carries merged work that is not
+   pushed yet. From the main checkout:
+   `git worktree add .claude/worktrees/<name> -b <branch> main`, then enter
+   it by path (EnterWorktree's default base is `origin/main`).
 2. Release commit `Release <ver>: <what changed>`: bump `DEFAULT_VERSION`
    in `scripts/build.py` (local builds use it), add a `docs/HISTORY.md` entry at the top marked **Not yet validated in game**
    and a `CHANGELOG.md` section (see **Publishing a tag**).
