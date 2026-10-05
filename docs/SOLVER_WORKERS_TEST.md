@@ -2,7 +2,9 @@
 
 In-game check of the seed solver's walk in worker VMs
 ([NATIVE_SOLVER_RESEARCH.md](NATIVE_SOLVER_RESEARCH.md), probe results in
-[WORKER_PROBE_TEST.md](WORKER_PROBE_TEST.md)). **Not yet run in game.**
+[WORKER_PROBE_TEST.md](WORKER_PROBE_TEST.md)). **Run in game 2026-10-05: a
+request matched by one seed in 28 million was found, published and verified
+in 8.3 s. Cancel and quit during a search not yet exercised.**
 
 ## What changed
 
@@ -93,4 +95,38 @@ Failure:
 
 ## Result
 
-Not yet run.
+2026-10-05, the user's machine (16 logical processors), planet 268,
+difficulty 10, by day. The request was Launch ICBM, Geological Survey and
+Search and Destroy, each with its enemy force (3), Lidar Station and SEAF
+Artillery excluded, and one modifier excluded. The log is kept as
+`artifacts/solver-workers/MissionRerollerExperiment-2026-10-05.log`.
+
+```
+SEED_SOLVER_WORKERS workers=8 text_kb=70 worker_heap_kb=405 setup_ms=5.4 free_mb=31.9 largest_mb=15.9 processors=16
+SEED_SOLVER paths=4 rows=2 setup_ms=195 match=1/28177468 expected_steps=50978248 daynight_ids=6/35
+LUA_SEARCH_MATCH seed=694937979 row=29 attempts=1 ... max_slice_ms=22.362 elapsed_s=8.33 slices=954 work_ms=305 context_ms=1007 jit=true mode=solver walk_steps=315178725 workers=8 ...
+SEED_SOLVER_WORKERS_END workers=8 walk_steps=315592421 failed=0 capped=0 peak_worker_heap_kb=1335
+PREDICTION_VERIFIED selected_row=29 active_preserved=true
+PUBLICATION_STATE_VERIFIED seed=694937979 row=29 map_ui_row_confirmed=true mission_unselected=true
+```
+
+- **One in 28 million seeds, found in 8.3 s.** The walk took 315 million
+  steps, 6.2 times the expected 51 million, at about 38 million steps/s
+  over the 8.3 s (a 0.75 s backend wait is not counted). On the main thread
+  at 3.5 million steps/s of work and about half the wall time, the same walk
+  needed about 180 s, the search's time limit.
+- **The main thread was nearly idle:** 305 ms of search work and 1,007 ms
+  of context checks in 954 slices. The context check is now most of the
+  main thread's share. The longest slice was 22 ms, as before the change.
+- **Correct:** the first candidate matched, and the published board was
+  verified: prediction, Day / Night, constellation and side objectives all
+  agree (`PREDICTION_CHECK descriptors_match=true`,
+  `CONSTELLATION_CHECK ... agree=true`, `SIDE_OBJECTIVE_CHECK ... agree=true`).
+- **Memory:** 31.9 MB free below 2 GB at the start; each worker held 405 KB
+  after set-up and at most 1,335 KB. The pool's estimate charged 1,072 KB
+  per worker (512 + 8 × 70 KB), a little under the peak, inside the 16 MB
+  reserve.
+- After the search the dialog estimated the same request at 1.8 s from the
+  measured rate (`ESTIMATE match=1/28177468 seconds=1.8`).
+- **Not yet exercised:** cancelling a search with F7, and quitting the game
+  during a search.

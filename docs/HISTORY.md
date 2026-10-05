@@ -5,7 +5,15 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
-**Not yet validated in game: the seed solver walks in worker VMs.**
+**Validated in game 2026-10-05 except cancel and quit: the seed solver
+walks in worker VMs.** A request one seed in 28 million matches (planet
+268, difficulty 10, three missions with their enemy forces, two objectives
+and a modifier excluded, by day) was found, published and verified in 8.3
+s: `LUA_SEARCH_MATCH ... elapsed_s=8.33 ... walk_steps=315178725 workers=8`,
+`SEED_SOLVER_WORKERS_END workers=8 ... failed=0 capped=0
+peak_worker_heap_kb=1335`, `PREDICTION_VERIFIED selected_row=29`. That is
+about 38 million walk steps a second; on the main thread the same walk
+needed about 180 s.
 Unreleased, on the `worktree-native-solver-research` branch with
 `arch/deepening` merged. A search the seed solver seeds now walks in up
 to eight worker VMs (fresh LuaJIT VMs from the game's `lua51.dll` on
