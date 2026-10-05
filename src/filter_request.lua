@@ -1,9 +1,11 @@
 -- The player's Filters in the dialog, and the panel's view model built from
 -- them. Pure: the dialog runtime reads the game, the session and the mouse,
 -- and hands this module plain tables.
+-- Its chunk arguments are O, unused, and Rules (src/filter_rules.lua).
 -- new(options,catalogue,labels,stamped): options are Search.options,
 -- catalogue is src/filter_catalogue.lua (possible, validate), labels the
 -- constellation names, stamped the tags a map stamp can add.
+local _,Rules=...
 local R={}
 R.__index=R
 local PAGE=24
@@ -65,25 +67,26 @@ end
 function R:tag_filter(selected)return group_rules(self,'constellations',selected)end
 -- The side-objective rules of the active groups, as a copy.
 function R:objective_filter(selected)return group_rules(self,'objectives',selected)end
+-- The Filters as filter rules (src/filter_rules.lua), with selected,
+-- excluded or the side-objective groups in place of the request's own when
+-- given. Constellation and side-objective rules are those of the active
+-- groups of selected.
+function R:rules(selected,excluded,objectives)
+    selected=selected or self.selected
+    return Rules.new({required=selected,excluded=excluded or self.excluded,modifiers=self.modifiers,
+        constellations=self:tag_filter(selected),objectives=objectives or self:objective_filter(selected),time=self.time})
+end
 -- Checked and excluded missions, modifier rules, constellation rules and the
 -- time of day.
-function R:rule_count()
-    local n=self.time and 1 or 0
-    for _,id in ipairs(self:groups())do if id~=0 then n=n+1 end end
-    for _ in pairs(self.excluded)do n=n+1 end
-    for _ in pairs(self.modifiers)do n=n+1 end
-    for _,tags in pairs(self:tag_filter().groups)do for _ in pairs(tags)do n=n+1 end end
-    for _,rows in pairs(self:objective_filter().groups)do for _ in pairs(rows)do n=n+1 end end
-    return n
-end
+function R:rule_count()return (self:rules():count())end
 -- Whether the request can be met; true without a catalogue.
 function R:possible(catalogue)
     if not catalogue then return true end
-    return self.catalogue.possible(catalogue,self.selected,self.modifiers,self:tag_filter(),self.excluded,self:objective_filter())
+    return self.catalogue.possible(catalogue,self:rules())
 end
 -- Raises with the reason the request cannot be searched.
 function R:validate(catalogue)
-    self.catalogue.validate(catalogue,self.selected,self.modifiers,self:tag_filter(),self.time,self.excluded,self:objective_filter())
+    self.catalogue.validate(catalogue,self:rules())
 end
 -- The request reroll_session.start takes, as a copy.
 function R:to_request(scope,difficulty)
@@ -129,11 +132,10 @@ end
 -- with the reason when not; and whether it could be excluded. Requiring the
 -- first mission discards the any-mission rules, so they do not count.
 function R:can_require(id,catalogue)
-    local selected=copy(self.selected,id,true)
-    return self.catalogue.possible(catalogue,selected,self.modifiers,self:tag_filter(selected),self.excluded,self:objective_filter(selected))
+    return self.catalogue.possible(catalogue,self:rules(copy(self.selected,id,true)))
 end
 function R:can_exclude(id,catalogue)
-    return self.catalogue.possible(catalogue,self.selected,self.modifiers,self:tag_filter(),copy(self.excluded,id,true),self:objective_filter())
+    return self.catalogue.possible(catalogue,self:rules(nil,copy(self.excluded,id,true)))
 end
 -- Whether a side-objective row of a group could take a mode, with the
 -- reason when not.
@@ -141,7 +143,7 @@ function R:can_objective(group,row,mode,catalogue)
     if not catalogue then return true end
     local filter=self:objective_filter()
     filter.groups[group]=copy(filter.groups[group] or {},row,mode)
-    return self.catalogue.possible(catalogue,self.selected,self.modifiers,self:tag_filter(),self.excluded,filter)
+    return self.catalogue.possible(catalogue,self:rules(nil,nil,filter))
 end
 -- Edits the request: clear, a mission id, 'modifier:<id>',
 -- 'constellation:<group>:<id>', 'objective:<group>:<row>' or
@@ -199,7 +201,8 @@ local function grouped(n)
 end
 local function count(n)return n==0 and 'Any' or n..(n==1 and ' rule' or ' rules')end
 -- How strict a solved search's filter is and how long it usually takes
--- (prediction_search_runtime.lua: {match, seconds, elapsed}).
+-- (prediction_search_runtime.lua: {match, seconds, elapsed}); without
+-- seconds (this machine's walk rate not yet measured) only how strict.
 -- running: the shorter form a running search shows after its clock.
 local function estimate_text(e,running)
     if e.match<=0 then return 'No seed gives this now' end
@@ -211,6 +214,7 @@ local function estimate_text(e,running)
         strict='1 in '..grouped(math.floor(n/scale+0.5)*scale)..' seeds match'
     end
     local s=e.seconds
+    if not s then return strict end
     -- One unmeasured text redrawn every frame: kept under the panel's width.
     local expect=running and '' or 'expect '
     local usual=s<1 and expect..'under a second' or s<90 and string.format('%sabout %d s',expect,math.floor(s+0.5))
@@ -223,11 +227,38 @@ local function clock_text(seconds)
     local s=math.max(0,math.floor(seconds))
     return string.format('%d:%02d',math.floor(s/60),s%60)
 end
+-- A count in two or three figures: 350K, 2.4M, 28M, 1.2B.
+local function compact(n)
+    if n<10000 then return grouped(n)end
+    local function figures(v,unit)
+        if v<10 then return string.format('%.1f',math.floor(v*10+0.5)/10):gsub('%.0$','')..unit end
+        return grouped(math.floor(v+0.5))..unit
+    end
+    -- The unit by the rounded figure, so 999,999,999.9 reads 1B, not 1,000M.
+    if n<999500 then return figures(n/1e3,'K')end
+    if n<999.5e6 then return figures(n/1e6,'M')end
+    return figures(n/1e9,'B')
+end
+-- While a search starts (no seed tried, no estimate of its own yet): the
+-- estimate the request showed before the search, else a plain line, rather
+-- than a count of zero seeds.
+local function starting_text(before)
+    if type(before)=='table' and before.match and before.match>0 then return estimate_text(before,true)end
+    return 'Starting search'
+end
 -- Under a running search: its clock, then the solver's estimate or the
--- seeds searched.
-local function running_text(run,limit)
-    local what=run.estimate and estimate_text(run.estimate,true)
-        or grouped(run.progress or 0)..' of '..grouped(limit)..' seeds searched'
+-- seeds searched. With the seeds the solver has covered so far (the seeds
+-- an in-order scan would have checked for the same chance of a match), the
+-- count and the filter's strictness, compact, replace the usual time.
+-- before: the request's estimate from before the search.
+local function running_text(run,limit,before)
+    local e=run.estimate
+    local what
+    if e and e.covered and e.match>0 then
+        what=compact(e.covered)..' seeds covered - '..(e.match>=0.5 and 'most seeds match' or '1 in '..compact(1/e.match)..' match')
+    elseif e then what=estimate_text(e,true)
+    elseif (run.progress or 0)==0 then what=starting_text(before)
+    else what=grouped(run.progress)..' of '..grouped(limit)..' seeds searched' end
     return run.elapsed and clock_text(run.elapsed)..' - '..what or what
 end
 -- Under a request ready to search: its estimate (solver_estimate.lua) once
@@ -255,15 +286,12 @@ function R:model(catalogue,v)
     local group=groups[1]
     for _,id in ipairs(groups)do if id==self.group_choice then group=id end end
     self.group_choice=group
-    local filter=self:tag_filter()
-    local names,modifier_rules,tag_rules,objective_rules={},0,0,0
+    local names={}
     for _,id in ipairs(groups)do if id~=0 then names[#names+1]=options[id].name end end
     local checked=#names
     for id,option in ipairs(options)do if excluded[id]then names[#names+1]='not '..option.name end end
-    for _ in pairs(modifiers)do modifier_rules=modifier_rules+1 end
-    for _,tags in pairs(filter.groups)do for _ in pairs(tags)do tag_rules=tag_rules+1 end end
-    for _,rows in pairs(self:objective_filter().groups)do for _ in pairs(rows)do objective_rules=objective_rules+1 end end
-    local rules=#names+modifier_rules+tag_rules+objective_rules+(self.time and 1 or 0)
+    local rules,kinds=self:rules():count()
+    local modifier_rules,tag_rules,objective_rules=kinds.modifiers,kinds.constellations,kinds.objectives
     local compatible,compatibility_reason=self:possible(catalogue)
     local running,fresh,retained,fixed=v.running,v.fresh,v.retained,v.fixed
     local busy=running or v.queued
@@ -356,7 +384,7 @@ function R:model(catalogue,v)
     return {running=busy,locked=locked,ready=ready,can_start=ready and rules>0,can_clear=not locked and rules>0,
         difficulty=v.difficulty,status=tostring(status),tone=tone,
         step=busy and (running and run.step or 1) or nil,
-        detail=busy and (running and running_text(run,v.limit) or '0 of '..grouped(v.limit)..' seeds searched')
+        detail=busy and (running and running_text(run,v.limit,v.estimate) or starting_text(v.estimate))
             or ready and rules>0 and tone=='idle' and before_search(v.estimate) or '',
         faction=display and catalogue.faction or nil,scope=v.scope and 'city' or 'planet',
         section=section,items=items,page=self.page,pages=pages,groups=tabs,group=group,

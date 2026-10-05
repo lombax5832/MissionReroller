@@ -20,7 +20,7 @@ local function factory(file,params,g)
     return setfenv(chunk,env)()
 end
 -- The adapter's inputs (build_identity_probe.ADAPTER).
-local ADAPTER='core,config,make_map_screen,offsets,O,sha256'
+local ADAPTER='core,config,make_map_screen,offsets,O,sha256,Board'
 local lines={}
 local binders={}
 local make_reroll_session=factory('reroll_session.lua','',{})()
@@ -29,6 +29,7 @@ local offsets=dofile(src..'/offsets.lua')
 local O=dofile(src..'/offset_values.lua')(offsets)
 local function sha256()return '' end
 local make_map_screen=factory('map_screen.lua','...',{})(O)
+local Board=factory('board_records.lua','...',{})(O)
 local function fake_host(config)
     local M,emit={status='initializing'},function(s)lines[#lines+1]=s end
     return {M=M,config=config,emit=emit,reroll_session=make_reroll_session(M,emit,{strict=true}),
@@ -47,7 +48,7 @@ local function last()return lines[#lines]end
 
 -- The adapter: its host, and nothing when the loader is unsupported.
 local g={CowboyBingusModLoader={api=1,version=18,open_log=function()return nil end}}
-local host=factory('experiment_adapter.lua',ADAPTER,g)({},config,make_map_screen,offsets,O,sha256)
+local host=factory('experiment_adapter.lua',ADAPTER,g)({},config,make_map_screen,offsets,O,sha256,Board)
 local M=g.MissionRerollerExperiment
 assert(host and host.M==M and host.config==config and M.read_only==false and M.preview_prediction==true and M.version=='9.9.9')
 for _,name in ipairs({'emit','hex','u','read','pointer','page','participants','snapshot','initialize','when_initialized','close_log'})do
@@ -64,10 +65,10 @@ local write=factory('guarded_write.lua','',{})()({read=function()end,page=functi
 assert(type(write)=='function' and #write_binders==1)
 assert(host.O==O and type(host.verify_code)=='function' and host.u('\1\2\0\0',0)==513)
 local old={CowboyBingusModLoader={api=1,version=15}}
-assert(factory('experiment_adapter.lua',ADAPTER,old)({},{read_only=true},make_map_screen,offsets,O,sha256)==nil)
+assert(factory('experiment_adapter.lua',ADAPTER,old)({},{read_only=true},make_map_screen,offsets,O,sha256,Board)==nil)
 assert(old.MissionRerollerExperiment.status=='unsupported_loader' and old.MissionRerollerExperiment.read_only==true)
 local again={MissionRerollerExperiment={}}
-assert(factory('experiment_adapter.lua',ADAPTER,again)({},config,make_map_screen,offsets,O,sha256)==nil,'A second copy stays inert')
+assert(factory('experiment_adapter.lua',ADAPTER,again)({},config,make_map_screen,offsets,O,sha256,Board)==nil,'A second copy stays inert')
 
 -- The runtimes, created in the assembler's order.
 local runtime='host,lib,hooks'

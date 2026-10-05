@@ -57,3 +57,11 @@ for `tests/test_seed_solver_lua.py`, which checks the LuaJIT port
 release entry's own search with the solver on the viewed-planet capture. `profile_seed_solver.lua`
 times the solver's set-up and walk on a hard request from a capture, for
 LuaJIT's sampling profiler (its header gives the commands).
+`native_solver/` measures faster walks (`docs/NATIVE_SOLVER_RESEARCH.md`):
+`dump_jobs.lua` writes a request's solver jobs with LuaJIT's candidates and
+time, `solver_bench.c` runs them in C (single and multi-threaded) and checks
+the candidates, and `worker_threads.py` runs `worker_threads.lua` in the
+game's own `lua51.dll`, outside the game, walking the jobs in worker VMs on
+OS or thread-pool threads. `build_worker_probe.py` packages `worker_probe.lua`, the
+Worker Thread Probe research addon (`docs/WORKER_PROBE_TEST.md`), which
+`tests/test_worker_probe.py` checks.

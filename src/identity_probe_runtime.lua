@@ -12,6 +12,7 @@ local ExternalEdits,O,pointer=lib.ExternalEdits,host.O,host.pointer
 local dialog_tick,dialog_release,observe_constellations=hooks.dialog_tick,hooks.dialog_release,hooks.observe_constellations
 local observe_objectives=hooks.observe_objectives
 local on_prediction_ready,advance_prediction_search=hooks.on_prediction_ready,hooks.advance_prediction_search
+local shutdown_search_workers=hooks.shutdown_search_workers
 local advance_live_publication,search_clock=hooks.advance_live_publication,hooks.search_clock
 local api,game,ffi,kernel,user32
 host.when_initialized(function(n)api,game,ffi,kernel,user32=n.api,n.game,n.ffi,n.kernel,n.user32 end)
@@ -67,7 +68,7 @@ local function observe_baseline(now)
         local planet=u(read(b+O.board.selection,8),4)
         if planet>=512 or ExternalEdits.known(baselines,planet,u(read(b+O.board.seed,4),0)) then return end
         local s=snapshot(true)
-        if s and ExternalEdits.observe(baselines,s.planet,s.seed,s.operations,u) then
+        if s and ExternalEdits.observe(baselines,s.planet,s.seed,s.operations) then
             emit(string.format('BASELINE_RECORDED planet=%d seed=%u',s.planet,s.seed))
         end
     end)
@@ -145,7 +146,7 @@ local function tick()
     -- on the live board; the search's baseline and existing-match check read
     -- them from s.external.
     local edits,why
-    if result.passed then pcall(ExternalEdits.observe,baselines,s.planet,s.seed,s.operations,u)
+    if result.passed then pcall(ExternalEdits.observe,baselines,s.planet,s.seed,s.operations)
     else edits,why=ExternalEdits.classify(result,baselines,s.planet,s.seed)end
     local skip=edits and edits.rows
     s.external=skip
@@ -227,6 +228,8 @@ end
 _G.shutdown=function(...)
     stopped=true
     if advance_prediction_search then pcall(advance_prediction_search,'cancel',0)end
+    -- No worker VM may still be walking when the game's VM goes away.
+    if shutdown_search_workers then pcall(shutdown_search_workers,3)end
     if advance_live_publication then pcall(advance_live_publication,'cancel',0)end
     if dialog_release then pcall(dialog_release,'shutdown')end
     host.close_log()

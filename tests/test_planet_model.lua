@@ -123,7 +123,7 @@ local function read(a,n)
 end
 local function pointer(s)local value=ffi.new('uint64_t[1]');ffi.copy(value,s,8);if value[0]==0 then return nil end;return ffi.cast('uint8_t*',value[0])end
 local Planet=H.planet_model(root)
-local verify=dofile(root..'/verify_predicted_board.lua')
+local verify=H.module(root..'/verify_predicted_board.lua')
 local game=ffi.cast('uint8_t*',tonumber(fixture.game));local definitions=tonumber(fixture.definitions)
 local board=definitions-O.board.definitions[1]
 local boards,descriptors=0,0
@@ -159,7 +159,7 @@ for index,case in ipairs(fixture.cases)do
         local copy={};for k,v in pairs(edited)do copy[k]=v end;copy.seed=seed;changed.operations[1]=copy
         local tampered={board=board,planet=planet,seed=case.seed,decoded=changed,
             operations=bytes:sub(1,at+12)..word(seed)..bytes:sub(at+17)}
-        local E=dofile(root..'/external_edits.lua')
+        local E=H.module(root..'/external_edits.lua')
         local failed=Planet.capture(read,u,pointer,game)(tampered,definitions)
         local rows=0;for row in pairs(failed.failed_rows)do assert(row==edited.row);rows=rows+1 end
         assert(not failed.passed and rows==1 and failed.general==0,table.concat(failed.errors,'; '))
@@ -168,7 +168,7 @@ for index,case in ipairs(fixture.cases)do
     local model=Planet.bind(read,u,pointer,game,board,planet)
     local predict=model.predictor(definitions)
     local complete=predict(case.seed)
-    assert(verify(snapshot,complete,u),'The predictor reproduces the displayed board')
+    assert(verify(snapshot,complete),'The predictor reproduces the displayed board')
     local narrow=predict(case.seed,10)
     for _,op in ipairs(narrow)do assert(op.difficulty==10)end
     local catalogue=model.catalogue(snapshot,10)

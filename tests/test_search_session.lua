@@ -8,21 +8,21 @@ local s=S.new();s:start(p,10,{[1]=true,[2]=true},0)
 s:advance(p,0,function()error('existing match must not call')end)
 assert(s.match and s.calls==0 and not s.running)
 local result=s.status;s:cancel('Dialog closed');assert(s.status==result and s.match)
-assert(S.find(packet(2,{81,85,65}),10,{[2]=true,[4]=true}))
-assert(S.find(packet(2,{82,85,59}),10,{[2]=true,[4]=true}))
-assert(not S.find(packet(2,{81,59,65}),10,{[2]=true,[4]=true}))
-assert(not S.find(packet(1,{59,65}),10,{[1]=true,[2]=true}))
+assert(S.find(packet(2,{81,85,65}),10,{required={[2]=true,[4]=true}}))
+assert(S.find(packet(2,{82,85,59}),10,{required={[2]=true,[4]=true}}))
+assert(not S.find(packet(2,{81,59,65}),10,{required={[2]=true,[4]=true}}))
+assert(not S.find(packet(1,{59,65}),10,{required={[1]=true,[2]=true}}))
 -- The day/night check vetoes an otherwise matching operation, and alone
 -- selects among the operations of the difficulty.
 local asked={}
 local function dark(op)asked[#asked+1]=op.row;return op.row==3 end
 local two=packet(2,{81,85,65});two.operations[2]={row=3,difficulty=10,missions={{native_type=85}}}
-assert(not S.find(two,10,{[2]=true,[4]=true},nil,nil,nil,function()return false end),'day/night veto')
-assert(S.find(two,10,{[2]=true,[4]=true},nil,nil,nil,function()return true end).row==2)
-assert(S.find(two,10,{},nil,nil,nil,dark).row==3 and #asked==2,'day/night alone')
-asked={};assert(not S.find(two,10,{[2]=true,[4]=true},nil,nil,nil,dark) and #asked==1,'asked only for a matching operation')
+assert(not S.find(two,10,{required={[2]=true,[4]=true}},nil,function()return false end),'day/night veto')
+assert(S.find(two,10,{required={[2]=true,[4]=true}},nil,function()return true end).row==2)
+assert(S.find(two,10,{required={}},nil,dark).row==3 and #asked==2,'day/night alone')
+asked={};assert(not S.find(two,10,{required={[2]=true,[4]=true}},nil,dark) and #asked==1,'asked only for a matching operation')
 local split=packet(1,{59});split.operations[2]={row=3,difficulty=10,missions={{native_type=81}}}
-assert(not S.find(split,10,{[1]=true,[2]=true}),'must match one operation')
+assert(not S.find(split,10,{required={[1]=true,[2]=true}}),'must match one operation')
 local n=0
 local function call()n=n+1 end
 s=S.new();p=packet(1,{65});s:start(p,10,{[1]=true},0);s:advance(p,0,call)
@@ -84,13 +84,13 @@ local board={operations={
 }}
 local function rows(group,rules)return {groups={[group]=rules}}end
 local icbm={[1]=true}
-assert(S.find(board,10,icbm,nil,nil,nil,nil,nil,rows(1,{[lidar]='require'})).row==1)
-assert(S.find(board,10,icbm,nil,nil,nil,nil,nil,rows(1,{[lidar]='require',[artillery]='exclude'})).row==2,'Excluded on the mission')
-assert(S.find(board,10,icbm,nil,nil,nil,nil,nil,rows(1,{[lidar]='require',[sam]='require'})).row==2,'Every required row')
-assert(not S.find(board,10,icbm,nil,nil,nil,nil,nil,rows(1,{[lidar]='require',[artillery]='require',[sam]='require'})),'All of them')
-assert(S.find(board,10,{},nil,nil,nil,nil,nil,rows(0,{[sam]='require',[artillery]='require'})).row==2,'Across the operation')
-assert(not S.find(board,10,{},nil,nil,nil,nil,nil,rows(0,{[lidar]='require',[artillery]='exclude'})),'Excluded anywhere in the operation')
-assert(not S.find({operations={board.operations[3]}},10,{},nil,nil,nil,nil,nil,rows(0,{[lidar]='exclude'})),'Unresolved objectives never match')
-assert(not S.find({operations={board.operations[3]}},10,icbm,nil,nil,nil,nil,nil,rows(1,{[lidar]='exclude'})))
-assert(S.find({operations={board.operations[3]}},10,icbm,nil,nil,nil,nil,nil,{groups={}}).row==3,'No rules, no objectives needed')
+assert(S.find(board,10,{required=icbm,objectives=rows(1,{[lidar]='require'})}).row==1)
+assert(S.find(board,10,{required=icbm,objectives=rows(1,{[lidar]='require',[artillery]='exclude'})}).row==2,'Excluded on the mission')
+assert(S.find(board,10,{required=icbm,objectives=rows(1,{[lidar]='require',[sam]='require'})}).row==2,'Every required row')
+assert(not S.find(board,10,{required=icbm,objectives=rows(1,{[lidar]='require',[artillery]='require',[sam]='require'})}),'All of them')
+assert(S.find(board,10,{required={},objectives=rows(0,{[sam]='require',[artillery]='require'})}).row==2,'Across the operation')
+assert(not S.find(board,10,{required={},objectives=rows(0,{[lidar]='require',[artillery]='exclude'})}),'Excluded anywhere in the operation')
+assert(not S.find({operations={board.operations[3]}},10,{required={},objectives=rows(0,{[lidar]='exclude'})}),'Unresolved objectives never match')
+assert(not S.find({operations={board.operations[3]}},10,{required=icbm,objectives=rows(1,{[lidar]='exclude'})}))
+assert(S.find({operations={board.operations[3]}},10,{required=icbm,objectives={groups={}}}).row==3,'No rules, no objectives needed')
 print('search: existing match, AND, pacing, timeout, legacy budget, uncapped mode, cancellation, context, operation in progress and side objectives passed')

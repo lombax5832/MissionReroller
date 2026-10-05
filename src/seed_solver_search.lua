@@ -8,6 +8,9 @@
 -- request is one the chain cannot seed; the search then scans seeds in order.
 return function(Math,Paths,Chain,Time,Inputs)
     local R={inputs=Inputs}
+    -- The declines that mean no normal operation of the difficulty can
+    -- match (R.plan tells them from the others).
+    local NO_PATH,NO_DAYNIGHT='no draw path','no operation passes Day / Night'
     -- Seeds sampled for the Day / Night share, and how many.
     local SHARE_SAMPLES=2048
     local function sampled_seed(i)return Math.output(i,3)end
@@ -44,8 +47,14 @@ return function(Math,Paths,Chain,Time,Inputs)
     -- ({groups}) or nil, scope, daynight (checker.accepts) or nil, row_of
     -- (side_objective_prediction.lua), random() returning a 32-bit start,
     -- checkpoint() called often while the paths and walks are set up,
-    -- estimate_only to stop once the estimate is known (no next or steps).
-    -- Returns {next(budget) -> seed | nil, done; steps(); paths; rows;
+    -- estimate_only to stop once the estimate is known (no next or steps),
+    -- make_chain(chain spec) to walk elsewhere (src/seed_solver_workers.lua:
+    -- a chain-like {next, steps, close, workers, report} or nil and why,
+    -- when the walk stays here).
+    -- Returns {next(budget) -> seed | nil, done, idle; steps(); expected()
+    -- (the candidates expected from the steps walked); close();
+    -- workers (0 when the walk runs here) and workers_off (why), report();
+    -- paths; rows;
     -- valid, ids: how many operation IDs the Day / Night window passes, of
     -- how many; estimate={match, steps}} or nil, reason. estimate.match is
     -- the share of campaign seeds whose board matches the paths (one row of
@@ -123,7 +132,7 @@ return function(Math,Paths,Chain,Time,Inputs)
             if not found then return nil,'operations at the difficulty differ'end
             for _,path in ipairs(found)do paths[#paths+1]=path end
         end
-        if #paths==0 then return nil,'no draw path'end
+        if #paths==0 then return nil,NO_PATH end
         -- Linked draws make the paths' own probabilities rough.
         for _,path in ipairs(paths)do
             if spec.checkpoint then spec.checkpoint()end
@@ -153,7 +162,7 @@ return function(Math,Paths,Chain,Time,Inputs)
             local set
             set,valid,ids=Time.valid_ids(operations,difficulty,spec.daynight) -- set, count, total
             -- Only city rows can match: the search scans for them.
-            if valid==0 then return nil,'no operation passes Day / Night'end
+            if valid==0 then return nil,NO_DAYNIGHT end
             accept=Time.accept(operations,difficulty,spec.daynight,spec.identity,input,'any')
             local passing={}
             for id in pairs(set)do passing[#passing+1]=id end
@@ -182,10 +191,61 @@ return function(Math,Paths,Chain,Time,Inputs)
         local estimate={match=1-none,steps=2*Chain.expected_steps(paths,shares,4096)}
         -- The dialog's estimate before a search needs no walks.
         if spec.estimate_only then return {paths=#paths,rows=#rows,valid=valid,ids=ids,estimate=estimate}end
-        local chain=Chain.new({paths=paths,rows=rows,planet=input.planet,random=spec.random,accept=accept,
-            checkpoint=spec.checkpoint})
-        return {next=chain.next,steps=function()return chain.steps end,paths=#paths,rows=#rows,valid=valid,ids=ids,
-            estimate=estimate}
+        local chain_spec={paths=paths,rows=rows,planet=input.planet,random=spec.random,accept=accept,
+            checkpoint=spec.checkpoint}
+        local workers,workers_off
+        if spec.make_chain then
+            local ok,made,why=pcall(spec.make_chain,chain_spec)
+            if ok and made then workers=made else workers_off=ok and why or tostring(made)end
+        end
+        if workers then
+            return {next=workers.next,steps=workers.steps,expected=workers.expected,close=workers.close,report=workers.report,
+                workers=workers.workers,paths=#paths,rows=#rows,valid=valid,ids=ids,estimate=estimate}
+        end
+        local chain=Chain.new(chain_spec)
+        return {next=chain.next,steps=function()return chain.steps end,expected=chain.expected,close=function()end,workers=0,
+            workers_off=workers_off,paths=#paths,rows=#rows,valid=valid,ids=ids,estimate=estimate}
     end
+    -- The search and the dialog's estimate (src/solver_estimate.lua) plan a
+    -- request the same way: prepare reads the planet's solver inputs, plan
+    -- turns them into a source or says why not. spec is source's spec
+    -- without solver and input.
+    -- Whether spec's rules need the mission-seed inputs: any enemy-force or
+    -- side-objective group, as source checks them.
+    function R.seeded(spec)
+        local function any(rules)return rules~=nil and next(rules.groups or {})~=nil end
+        return any(spec.constellations) or any(spec.objectives)
+    end
+    -- {solver, input} of planet (planet_model.lua) for spec's difficulty,
+    -- scope and rules; solver nil and input the reason when unavailable.
+    function R.prepare(planet,definitions,spec)
+        local solver,input=planet.solver(definitions,spec.difficulty,R.seeded(spec),spec.scope and spec.scope.region)
+        return {solver=solver,input=input}
+    end
+    -- source(spec) on prepared inputs, or nil and a decline {kind, reason}:
+    -- kind 'impossible' when no seed can match now (no path, or Day / Night
+    -- passing no operation ID, and no campaign event row of the difficulty
+    -- that a scan could still match: a city has none besides its own),
+    -- otherwise 'scan'. Either way the search scans seeds in order.
+    function R.plan(prepared,spec)
+        if not prepared.solver then return nil,{kind='scan',reason=prepared.input}end
+        local s={solver=prepared.solver,input=prepared.input}
+        for k,v in pairs(spec)do s[k]=v end
+        local source,why=R.source(s)
+        if source then return source end
+        if why==NO_PATH or why==NO_DAYNIGHT then
+            local others=false
+            if not spec.scope then
+                for _,event in ipairs(prepared.input.specials or {})do
+                    if event.minimum<=spec.difficulty and spec.difficulty<=event.maximum then others=true end
+                end
+            end
+            if not others then return nil,{kind='impossible',reason=why}end
+        end
+        return nil,{kind='scan',reason=why}
+    end
+    -- The usual seconds of a search: set-up, the expected walk steps at rate
+    -- steps a second, and 0.3 s to confirm the match.
+    function R.seconds(steps,rate,setup)return setup+steps/rate+0.3 end
     return R
 end

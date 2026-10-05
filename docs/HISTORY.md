@@ -5,6 +5,52 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
+**Validated in game 2026-10-05 except cancel and quit: the seed solver
+walks in worker VMs.** A request one seed in 28 million matches (planet
+268, difficulty 10, three missions with their enemy forces, two objectives
+and a modifier excluded, by day) was found, published and verified in 8.3
+s: `LUA_SEARCH_MATCH ... elapsed_s=8.33 ... walk_steps=315178725 workers=8`,
+`SEED_SOLVER_WORKERS_END workers=8 ... failed=0 capped=0
+peak_worker_heap_kb=1335`, `PREDICTION_VERIFIED selected_row=29`. That is
+about 38 million walk steps a second; on the main thread the same walk
+needed about 180 s. Since then, not yet validated in game: the workers split
+each job's starts into equal arcs instead of random starts; a running
+search shows the seeds it has covered (`0:07 - 348M seeds covered - 1 in
+28M match`, logged as `covered=`); the start no longer flashes `0 of
+1,000,000 seeds searched`; workers set themselves up on their own
+threads, so starting one costs the frame well under a millisecond; and the
+request's estimate shows no time until a search has measured this
+machine's walk rate (the fixed 800,000 steps/s guess is gone).
+Unreleased, on the `worktree-native-solver-research` branch with
+`arch/deepening` merged. A search the seed solver seeds now walks in up
+to eight worker VMs (fresh LuaJIT VMs from the game's `lua51.dll` on
+thread-pool threads at below-normal priority, `src/seed_solver_workers.lua`)
+instead of on the main thread. Each walks the whole chain from its own
+starts, and hands back seed and row. The main thread applies the Day / Night
+check, predicts and matches as before, and yields while the workers have
+nothing ready. Paths travel as compact text (`src/seed_solver_codec.lua`).
+The pool scans the address space below 2 GB, starts only the workers that
+fit beside a 16 MB reserve, starts them over several frames, caps their
+heaps, and closes a VM only after its thread has left it. Without workers the
+walk stays on the main thread. Offline the workers' candidates equal the
+in-process chain's in both LuaJITs. Test plan:
+[SOLVER_WORKERS_TEST.md](SOLVER_WORKERS_TEST.md).
+
+**Research, 2026-10-05: native code and worker threads for the seed
+solver.** A C port of the solver's job loop runs 5 to 7 times faster than
+LuaJIT per core, but no way of running native code in the game fits the
+mod's rules (`LoadLibrary`, `VirtualAlloc` and `VirtualProtect` are banned).
+The game's `lua51.dll` exports the Lua C API, so extra LuaJIT VMs on worker
+threads can walk on several cores: in the game's own `lua51.dll`, offline,
+12 workers ran 8 to 14 times one VM with identical candidates. The lattice
+inverter now runs in doubles instead of boxed int64, 1.3 to 2.3 times the
+walk; not yet validated in game. Measurements, risks and next steps:
+[NATIVE_SOLVER_RESEARCH.md](NATIVE_SOLVER_RESEARCH.md). The Worker Thread Probe, a
+separate research addon, tests worker VMs and the memory below 2 GB in game.
+It ran cleanly on 2026-10-05: no GameGuard reaction, 6.1 million steps/s
+per worker, a clean join at shutdown, and only 31.9 MB free below 2 GB
+([WORKER_PROBE_TEST.md](WORKER_PROBE_TEST.md)).
+
 **Not yet validated in game: v0.34.0 seed solver search.** Searches
 with mission, enemy force, side objective or Day / Night rules now take
 their candidates from the seed solver (`src/seed_solver_*.lua`): draw

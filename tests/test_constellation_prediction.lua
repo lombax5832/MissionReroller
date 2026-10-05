@@ -62,7 +62,7 @@ local function find(op,required,groups)
     for group,list in pairs(groups)do
         sets[group]={};for _,tag in ipairs(list)do sets[group][math.abs(tag)]=tag<0 and 'exclude' or 'accept' end
     end
-    return S.find({operations={op}},10,required,{},{groups=sets})
+    return S.find({operations={op}},10,{required=required,constellations={groups=sets}})
 end
 local mixed=operation({59,{2}},{68,{4,9}},{65,{6}})
 assert(find(mixed,{[1]=true,[7]=true},{}),'No constellation imposes no constraint')
@@ -79,7 +79,7 @@ assert(find(twice,{[3]=true},{[3]={4}}),'Either mission of a repeated family may
 local unknown=operation({59,{2}},{68,{4}});unknown.missions[1].tags=nil
 assert(not find(unknown,{[1]=true},{[1]={2}}) and find(unknown,{[1]=true,[7]=true},{[7]={4}}),'Unresolved tags never match')
 assert(not find(unknown,{},{[0]={2}}) and find(unknown,{},{[0]={4}}))
-assert(S.find({operations={unknown}},10,{[1]=true},{}),'Operations without constellations are unaffected')
+assert(S.find({operations={unknown}},10,{required={[1]=true}}),'Operations without constellations are unaffected')
 -- Exclusion: the checked mission carries none of the excluded tags.
 assert(find(mixed,{[7]=true},{[7]={-2,-3,-6}}) and not find(mixed,{[7]=true},{[7]={-2,-9}}),'Several tags can be excluded')
 assert(not find(mixed,{[7]=true},{[7]={-4}}) and find(mixed,{[1]=true},{[1]={-4,-9,-6}}),'Exclusion follows its own mission')
@@ -94,7 +94,7 @@ assert(not find(unknown,{},{[0]={-3}}) and not find(operation(),{},{[0]={-3}}),'
 -- City scope: region r owns rows 30+10r .. 39+10r.
 local function at(row,kind)return {row=row,difficulty=10,missions={{native_type=kind,tags={[4]=true}}}}end
 local planet_op,city,other=at(29,59),at(49,59),at(59,59)
-local function scoped(ops,scope)return S.find({operations=ops},10,{[1]=true},{},{groups={}},scope)end
+local function scoped(ops,scope)return S.find({operations=ops},10,{required={[1]=true},constellations={groups={}}},scope)end
 assert(scoped({planet_op,city,other},nil)==planet_op,'Without a scope the whole planet is searched')
 assert(scoped({planet_op,city,other},{region=1})==city and scoped({planet_op,city,other},{region=2})==other)
 assert(not scoped({planet_op,city},{region=2}) and not scoped({planet_op},{region=0}),'Other rows never match a city')

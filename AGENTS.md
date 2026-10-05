@@ -101,9 +101,12 @@ No single file in `src/` is the shipped entry. `scripts/build.py` calls
   `MissionReroller` renamed to `MissionRerollerExperimentCore`.
 - `src/offsets.lua`, without its `research` section, becomes `local offsets`,
   and `src/offset_values.lua` turns it into the numbers `O`.
+- `src/board_records.lua` becomes `local Board`: the Board's operation and
+  mission records, their sizes and fields. Only the core keeps its own copy.
 - Each library module is wrapped as `local name=(function(...) <file>
-  end)(O)`, so a module file starts with `local O=...` when it reads memory
-  and ends in `return <value>`. A new module needs a line in the list in
+  end)(O,Board)`, so a module file starts with `local O=...` when it reads
+  memory (`local O,Board=...` when it decodes records) and ends in
+  `return <value>`. A new module needs a line in the list in
   `source()`; `source()` also collects them into a `lib` table. Tests load a
   module the same way with `H.module(path)` (`tests/harness.lua`).
 - The build's mode is data: `config()` in `build_identity_probe.py` gives
@@ -111,7 +114,7 @@ No single file in `src/` is the shipped entry. `scripts/build.py` calls
   `shortcut` name and a few log phrases. The chunk declares it as
   `local config={...}`. No source text is rewritten.
 - `experiment_adapter.lua` runs as a function of
-  `build_identity_probe.ADAPTER` (`core,config,make_map_screen,offsets,O,sha256`)
+  `build_identity_probe.ADAPTER` (`core,config,make_map_screen,offsets,O,sha256,Board`)
   and ends in `return {M=M,config=config,emit=...,O=O,verify_code=...}`: the
   runtimes' host. It returns nothing when another copy runs or the loader is
   too old, and the chunk then stops (`if not host then return end`).
@@ -134,6 +137,13 @@ No single file in `src/` is the shipped entry. `scripts/build.py` calls
   reach into an assembled entry with `tests/harness.lua`: `H.up` for a
   closure variable, `H.natives(update,{...})` to hand every runtime fake
   native handles as `initialize()` would.
+- The seed solver's walk runs in worker VMs (`src/seed_solver_workers.lua`):
+  fresh `luaL_newstate`s from `lua51.dll` on thread-pool threads, which
+  cannot see the entry's closures. `source()` passes them
+  `seed_solver_math.lua`, `seed_solver_chain.lua` and `seed_solver_codec.lua`
+  as strings, so those three files stay self-contained (no build arguments,
+  no globals of the entry). The search runtime closes a search's workers when
+  the search ends and joins them at shutdown.
 - Status changes go through `src/reroll_session.lua`, created on the host as
   `host.reroll_session` right after the adapter. Runtimes call `advance` /
   `finish` / `settle` / `fail`; the dialog calls `start` / `cancel` / `view`.

@@ -168,7 +168,7 @@ local family=up(ready,'Search').options[7];family.ids[#family.ids+1]=72
 M.dialog_enabled=true;search({[7]=true},{[7]={[4]='accept'}})
 assert(existing and existing.row==3 and existing.missions[1].tags[4] and not evaluated,'Displayed operations are tagged before searching')
 M.dialog_enabled=false;search({[7]=true},{[7]={[4]='accept',[6]='accept',[2]='exclude'}})
-assert(M.status=='search_matched' and matched.seed==501 and matched.constellations.groups[7][2]=='exclude',tostring(M.status))
+assert(M.status=='search_matched' and matched.seed==501 and matched.rules.constellations.groups[7][2]=='exclude',tostring(M.status))
 assert(matched.operation.missions[1].tags[4] and matched.operation.missions[2].tags[4])
 assert(#matched.operations==2 and matched.operations[2].missions[1].tags,'The complete board is tagged as well')
 text=table.concat(logs,'\n')

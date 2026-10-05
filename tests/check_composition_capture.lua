@@ -126,20 +126,20 @@ for case_index,case in ipairs(fixture.cases)do
         for id,opt in ipairs(search.options)do for _,m in ipairs(op.missions)do for _,kind in ipairs(opt.ids)do
             if m.native_type==kind then required[id]=true end
         end end end
-        assert(module('filter_catalogue').possible(catalogue,required,rules),'Native operation rejected by compatibility')
+        assert(module('filter_catalogue').possible(catalogue,{required=required,modifiers=rules}),'Native operation rejected by compatibility')
     end end
-    assert(module('verify_predicted_board')(snapshot,output,u))
+    assert(module('verify_predicted_board')(snapshot,output))
     local observed_type=decoded.operations[1].missions[1].native_type
     decoded.operations[1].missions[1].native_type=255
-    assert(not module('verify_predicted_board')(snapshot,output,u),'Publication must reject a wrong mission')
+    assert(not module('verify_predicted_board')(snapshot,output),'Publication must reject a wrong mission')
     decoded.operations[1].missions[1].native_type=observed_type
     if not baseline_snapshot then baseline_snapshot=snapshot end
     local catalogue=module('search_session')
     local search=module('seed_search')(function(seed)
         local candidate,keep=bases(read,u,pointer,game,board,definitions,planet,inputs)(seed)
         return predict(candidate,planet,inputs,function(op)return levels(definitions,op)end,keep)
-    end,catalogue,{seed=case.seed,limit=1,difficulty=10,required={[1]=true,[2]=true,[3]=true}})
-    local expected=catalogue.find(decoded,10,{[1]=true,[2]=true,[3]=true})
+    end,catalogue,{seed=case.seed,limit=1,difficulty=10,rules=module('filter_rules').new({required={[1]=true,[2]=true,[3]=true}})})
+    local expected=catalogue.find(decoded,10,{required={[1]=true,[2]=true,[3]=true}})
     assert(search:step()==(expected and 'matched' or 'exhausted'),'Independent filter result must agree with oracle board')
     if expected then assert(search.operation.row==expected.row and search.seed==case.seed)end
     local result,fingerprint=capture(snapshot,definitions)
@@ -185,7 +185,7 @@ if arg[6] then
     local job=search_factory(read,function(take)
         assert(Planet.capture(take,u,pointer,game)(s,definitions).passed)
     end,function(take)return candidate_factory(take,s.planet)end,
-        {seed=0,limit=256,difficulty=10,required={[1]=true,[2]=true,[3]=true},quantum=512})
+        {seed=0,limit=256,difficulty=10,rules=module('filter_rules').new({required={[1]=true,[2]=true,[3]=true}}),quantum=512})
     local frames,max_seconds=0,0
     while job.status=='running' do
         local start=os.clock();job:step(function()end);max_seconds=math.max(max_seconds,os.clock()-start)
@@ -193,7 +193,7 @@ if arg[6] then
     end
     assert(job.status=='matched',job.status..': '..tostring(job.error))
     local options=module('search_session')
-    assert(options.find({operations={job.operation}},10,{[1]=true,[2]=true,[3]=true}))
+    assert(options.find({operations={job.operation}},10,{required={[1]=true,[2]=true,[3]=true}}))
     print(string.format('Packaged cooperative search matched seed=%u row=%d attempts=%d frames=%d ranges=%d max_slice_ms=%.3f',job.seed,job.operation.row,job.attempts,frames,job.ranges,max_seconds*1000))
 end
 if arg[4] then

@@ -113,7 +113,7 @@ ready(s,2000000,now)
 request.required={[5]=true}
 for _=1,12 do frame()end
 assert(MissionRerollerExperiment.status=='search_matched','Custom filter must reach predictor instead of fixed ICBM/Survey/Eradicate')
-assert(run().result.required[4],'Running filter is frozen')
+assert(run().result.rules.required[4],'Running filter is frozen')
 -- Packages without the constellation modules must refuse such rules.
 request={difficulty=10,required={},constellations={groups={[0]={[2]='accept'}}}}
 count=evaluations;ready(s,2000000,now);frame()

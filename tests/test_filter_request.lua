@@ -1,7 +1,8 @@
 -- The dialog's Filters and view model, plain tables in and out.
 -- Usage: luajit tests/test_filter_request.lua <src folder>
 local root=arg[1]
-local R=dofile(root..'/filter_request.lua');local C=dofile(root..'/filter_catalogue.lua')
+local Rules=dofile(root..'/filter_rules.lua')
+local R=assert(loadfile(root..'/filter_request.lua'))(nil,Rules);local C=dofile(root..'/filter_catalogue.lua')
 local compatibility=dofile(root..'/mission_compatibility.lua');local options=dofile(root..'/search_session.lua').options
 local labels={[2]='Constellation 2 (Tag2)',[9]='Predator Strain (Tag9)'}
 local spores,gunships=0x1101e25c,0xf6f1b0c7
@@ -65,7 +66,7 @@ do
     -- Excluding a mission the request requires, or one every operation
     -- holds, or one not offered here, is refused by validation.
     local function refused(required,excluded,why)
-        local ok,err=pcall(C.validate,terminids,required,{},nil,nil,excluded)
+        local ok,err=pcall(C.validate,terminids,{required=required,excluded=excluded})
         assert(not ok and tostring(err):find(why,1,true),tostring(err))
     end
     refused({[2]=true},{[2]=true},'A mission cannot be both required and excluded')
@@ -73,12 +74,12 @@ do
     refused({},{[1]=true},'Excluded mission is unavailable on this planet/difficulty')
     refused({},{[2]='exclude'},'Excluded mission is unavailable on this planet/difficulty')
     refused({[9]=true},{[2]=true,[4]=true},'Incompatible')
-    C.validate(terminids,{},{},nil,nil,{[9]=true})
-    C.validate(terminids,{[4]=true},{},nil,nil,{[2]=true})
+    C.validate(terminids,{required={},excluded={[9]=true}})
+    C.validate(terminids,{required={[4]=true},excluded={[2]=true}})
     -- Without compatibility data, excluding every mission offered is still refused.
-    local possible,why=C.possible(automatons,{},{},nil,{[4]=true})
+    local possible,why=C.possible(automatons,{required={},excluded={[4]=true}})
     assert(not possible and why=='Every mission here is excluded')
-    assert(not pcall(C.validate,automatons,{},{},nil,nil,{[4]=true}))
+    assert(not pcall(C.validate,automatons,{required={},excluded={[4]=true}}))
     local alone=R.new(options,C,labels);alone:toggle(4,automatons);alone:toggle(4,automatons)
     assert(not alone.selected[4] and not alone.excluded[4],'The only mission here cannot be excluded')
 end
@@ -211,7 +212,7 @@ local g=R.new(options,C,labels);edit(g,2)
 local bad=R.new(options,C,labels);edit(bad,'constellation:0:2','constellation:0:4','constellation:0:6','constellation:0:6','constellation:0:4','constellation:0:2')
 local cases={
     {g,{running=true,fixed=true,report='R'},'Searching seeds','busy',2,'2,731 of 1,000,000 seeds searched'},
-    {g,{queued=true,fixed=true,fresh=false,retained=true},'Checking planet data','busy',1,'0 of 1,000,000 seeds searched'},
+    {g,{queued=true,fixed=true,fresh=false,retained=true},'Checking planet data','busy',1,'Starting search'},
     {g,{fixed=true,overdue=true},'Operation in progress. Finish or abandon it to reroll','warn'},
     {bad,{overdue=true,fresh=false,retained=true},'Updating planet data. Your choices are kept','warn'},
     {bad,{fresh=false,why='Waiting'},'Every constellation here is excluded','bad'},
@@ -243,12 +244,25 @@ for _,case in ipairs({
     {nil,'Rerolls every unstarted operation of the campaign'},
     {'pending','Working out how strict this is'},
     {{match=1/23456,seconds=4.4},'1 in 23,000 seeds match - expect about 4 s'},
+    -- No walk rate measured yet on this machine: no time.
+    {{match=1/23456},'1 in 23,000 seeds match'},
     {{match=0,seconds=math.huge},'No seed gives this now'},
     {{impossible=true},'No seed gives this now'},
     {{unavailable='no required mission'},'Rerolls every unstarted operation of the campaign'},
 })do
     local text=g:model(terminids,fresh({estimate=case[1]})).detail
     assert(text==case[2],tostring(text))
+end
+-- A search that has not tried a seed yet keeps the request's estimate from
+-- before the search.
+do
+    local v=fresh({running=true,estimate={match=1/23456,seconds=4.4}})
+    v.run={caption='Searching seeds',step=2,progress=0,elapsed=0.3}
+    local text=g:model(terminids,v).detail
+    assert(text=='0:00 - 1 in 23,000 seeds match - about 4 s',text)
+    v=fresh({queued=true,estimate={match=1/23456,seconds=4.4}})
+    text=g:model(terminids,v).detail
+    assert(text=='1 in 23,000 seeds match - about 4 s',text)
 end
 -- A running search starts its line with the time it has searched.
 for _,case in ipairs({
@@ -258,7 +272,16 @@ for _,case in ipairs({
     {{match=1/1234567,seconds=150},75.2,'1:15 - 1 in 1,200,000 seeds match - about 3 min'},
     {{match=1e-9,seconds=900},179.9,'2:59 - 1 in 1,000,000,000 seeds match - over the 3 min limit'},
     {{match=1/23456,seconds=4.4},nil,'1 in 23,000 seeds match - about 4 s'},
+    {{match=1/23456},1.7,'0:01 - 1 in 23,000 seeds match'},
     {nil,12.4,'0:12 - 2,731 of 1,000,000 seeds searched',2731},
+    -- No seed tried yet: no count of zero, only the start.
+    {nil,0.2,'0:00 - Starting search',0},
+    -- With the seeds the solver has covered: the count, then the strictness.
+    {{match=1/28177468,seconds=1.8,covered=348e6},7.4,'0:07 - 348M seeds covered - 1 in 28M match'},
+    {{match=1/28177468,seconds=1.8,covered=2.36e6},0.6,'0:00 - 2.4M seeds covered - 1 in 28M match'},
+    {{match=1/23456,seconds=4.4,covered=4321},1.2,'0:01 - 4,321 seeds covered - 1 in 23K match'},
+    {{match=1e-9,seconds=900,covered=1.24e9},65,'1:05 - 1.2B seeds covered - 1 in 1B match'},
+    {{match=0.6,seconds=0.4,covered=12},0.1,'0:00 - 12 seeds covered - most seeds match'},
 })do
     local text=solving(case[1],case[2],case[4])
     assert(text==case[3],text)
@@ -297,7 +320,7 @@ m=t:model(terminids,fresh({sky={blocked='ignored'}}))
 assert(m.status=='Choose what the operation must contain' and not m.time_sky,'Any time ignores the sky')
 edit(t,'time:day',2);assert(t:rule_count()==2)
 edit(t,'clear');assert(t.time==nil and t:rule_count()==0,'Clear resets the time of day')
-assert(not pcall(C.validate,terminids,{},{},nil,'dusk'),'Only day or night')
+assert(not pcall(C.validate,terminids,{required={},time='dusk'}),'Only day or night')
 -- Side objectives: per checked mission or the operation, cycling any,
 -- required, excluded; a mode the catalogue rules out is skipped.
 do

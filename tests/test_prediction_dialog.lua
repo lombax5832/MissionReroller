@@ -370,7 +370,7 @@ click('section:missions');frame()
 click('start');frame()
 assert(not requested(),'Retained data must not start a search')
 assert(last_model.running and last_model.locked and last_model.step==1 and last_model.tone=='busy'
-    and last_model.status=='Checking planet data' and last_model.detail=='0 of 1,000,000 seeds searched',last_model.status)
+    and last_model.status=='Checking planet data' and last_model.detail=='Starting search',last_model.status..': '..tostring(last_model.detail))
 assert(find('cancel').enabled and not find('start') and find(4).enabled==false and find('clear').enabled==false)
 assert(shown('CANCEL SEARCH') and shown('1 CHECK PLANET') and shown('CHECKING PLANET DATA'))
 local searches=#logs

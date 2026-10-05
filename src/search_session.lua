@@ -167,14 +167,15 @@ function S.scope(value)
     assert(type(region)=='number' and region>=0 and region<8 and region==math.floor(region),'Invalid city scope')
     return {region=region}
 end
--- daynight, when given, must also accept the operation (src/day_night.lua).
--- excluded families must not appear in the operation at all, whatever their
--- constellations. objectives holds side-objective groups; a required family
--- needs one mission that satisfies both its constellation and its
--- side-objective rules.
-function S.find(snapshot,difficulty,required,modifiers,constellations,scope,daynight,excluded,objectives)
-    local groups=constellations and constellations.groups or {}
-    local rows=objectives and objectives.groups or {}
+-- rules: src/filter_rules.lua, or any table with its fields. daynight,
+-- when given, must also accept the operation (src/day_night.lua). Excluded
+-- families must not appear in the operation at all, whatever their
+-- constellations. A required family needs one mission that satisfies both
+-- its constellation and its side-objective rules.
+function S.find(snapshot,difficulty,rules,scope,daynight)
+    local required,modifiers,excluded=rules.required,rules.modifiers,rules.excluded
+    local groups=rules.constellations and rules.constellations.groups or {}
+    local rows=rules.objectives and rules.objectives.groups or {}
     for _,op in ipairs(snapshot.operations) do
         if op.difficulty==difficulty and S.in_scope(op.row,scope) then
             local found={};local yes=operation_satisfies(groups[0],op) and operation_objectives(rows[0],op)
@@ -234,7 +235,7 @@ function S.new(options)
         if self.pending then
             if s.seed~=self.pending then self.pending=nil else return end
         end
-        local op=S.find(s,self.difficulty,self.required)
+        local op=S.find(s,self.difficulty,{required=self.required})
         if op then self.match=op;self:cancel('Matched operation row '..op.row);return end
         if limit and self.calls>=limit then self:cancel('Session call limit reached');return end
         if now-self.last_call<interval then self.status='Waiting for pacing interval';return end

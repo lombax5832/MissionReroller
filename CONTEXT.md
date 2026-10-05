@@ -7,6 +7,12 @@ The words this project uses for its own concepts. Game facts are in
   unstarted operation. In a lobby, only the host may reroll.
 - **Board**: the operations on the viewed planet's war table, as the game
   holds them in memory.
+- **Board records** (`src/board_records.lua`, `lib.Board`): the Board's
+  92-byte operation records and 76-byte mission records, decoded in one
+  place. Field readers take a buffer and a row (`Board.category(bytes, row)`;
+  a lone record such as the active operation is row 0) and allocate
+  nothing; `Board.operation` gives the base fields as a table, and
+  `Board.hovered(read, board)` the mission the map previews.
 - **Prediction**: the board that the Lua port of the game's operation
   generator computes for a candidate seed. It is compared with the live board
   before any search.
@@ -27,6 +33,11 @@ The words this project uses for its own concepts. Game facts are in
   makes the request for the reroll session and builds the panel's model,
   status included. Pure: the dialog runtime reads the game and hands it
   plain tables.
+- **Filter rules** (`src/filter_rules.lua`, `lib.FilterRules`): the Filters
+  of one request as one value. `FilterRules.new(request)` copies them once
+  and drops the empty parts; the catalogue checks, `Search.find`, the search
+  job and publication take the value whole. It offers `check(options)`,
+  `count()`, `seeded()` (constellation or side-objective rules) and `key()`.
 - **Reroll session** (`src/reroll_session.lua`): one run from the player's
   request to its outcome. It is the only writer of the run's **phase**.
   - **Phase**: where the run stands (`waiting_for_stable_inputs`,

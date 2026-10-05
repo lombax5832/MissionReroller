@@ -12,14 +12,14 @@
 -- * later_rows: only the operation seed differs and a later row matches.
 --   Every row draws its seed the same way, and a port error in the draws
 --   would carry into the rows after it.
+local _,Board=...
 local E={}
 -- id, seed and difficulty of each displayed row of a 110-row operation buffer.
-function E.rows(operations,u)
+function E.rows(operations)
     local rows={}
     for row=0,109 do
-        local at=row*92
-        if operations:byte(at+53)~=0 then
-            rows[row]={id=operations:byte(at+25),seed=u(operations,at+12),difficulty=operations:byte(at+33)}
+        if Board.valid(operations,row)then
+            rows[row]={id=Board.operation_id(operations,row),seed=Board.seed(operations,row),difficulty=Board.difficulty(operations,row)}
         end
     end
     return rows
@@ -28,7 +28,7 @@ local PLANETS=64
 -- Keeps the first board seen per planet under a campaign seed. A later board
 -- under the same seed never replaces it, so an edit cannot become its own
 -- proof. Returns true when it stored a new board.
-function E.observe(store,planet,seed,operations,u)
+function E.observe(store,planet,seed,operations)
     local known=store[planet]
     if known and known.seed==seed then return false end
     if not known then
@@ -36,7 +36,7 @@ function E.observe(store,planet,seed,operations,u)
         for _ in pairs(store)do count=count+1 end
         if count>=PLANETS then for key in pairs(store)do store[key]=nil end end
     end
-    store[planet]={seed=seed,rows=E.rows(operations,u)}
+    store[planet]={seed=seed,rows=E.rows(operations)}
     return true
 end
 -- Whether the planet's board under this seed is already stored.
