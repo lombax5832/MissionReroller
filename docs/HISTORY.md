@@ -5,7 +5,7 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
-**Not yet validated in game: workers only for rare requests.** A search
+**Validated in game 2026-10-05: workers only for rare requests.** A search
 the seed solver seeds now walks in worker VMs only when its estimate is
 rarer than one seed in 100,000 (`SeedSolver.use_workers`,
 `WORKERS_RARER_THAN`); a commoner request expects under 200,000 steps on
@@ -14,7 +14,17 @@ reason=estimated 1 in <k>, not rarer than 1 in 100000`. The first cut,
 1 in 2 million, left a request of 1 in 1.75 million on the main thread for
 5.5 s in game (2026-10-05).
 
-**Not yet validated in game: warm workers on the ship.** The worker VMs
+**Validated in game 2026-10-05, except a loading gate: warm workers on the
+ship.** Five searches in one session all started on eight warm workers
+with free memory below 2 GB steady at 29.9 MB (`SEED_SOLVER_WORKERS
+workers=8 warm=8 setup_ms=1.4 to 4.5 free_mb=29.9`), each followed by
+`SEED_SOLVER_WORKERS_WARMED idle=8`: 1 in 1.77 million in 0.70 s, 1 in
+662,000 in 0.48 s, 1 in 4.34 billion in 13.3 s, 1 in 2.9 billion in 9.4 s.
+Closing the map to start a mission logged `SEED_SOLVER_WORKERS_COLD
+reason=galactic map closed for 10 s closed=8 screens=14` on the ship before
+the drop; back from the mission, the map logged `SEED_SOLVER_WORKERS_WARM`;
+quitting logged no `SEED_SOLVER_WORKERS_SHUTDOWN`. The gate path never
+fired, since walking to the hellpod takes longer than 10 s. The worker VMs
 are no longer made per search and closed after it. While on the ship the
 pool keeps up to `max_workers` idle VMs with their modules loaded and no
 thread (`pool.warm`, made one per frame); a search starts its walk on them

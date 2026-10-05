@@ -136,7 +136,7 @@ read about 350 million).
 
 ## Third build: warm workers on the ship
 
-Not yet run in game. The worker VMs stay warm on the ship and are closed in
+Run in game 2026-10-05 (see Third build result below). The worker VMs stay warm on the ship and are closed in
 a mission (`src/worker_warmth.lua`, `pool.warm` in
 `src/seed_solver_workers.lua`):
 
@@ -231,3 +231,41 @@ PUBLICATION_STATE_VERIFIED seed=694937979 row=29 map_ui_row_confirmed=true missi
   measured rate (`ESTIMATE match=1/28177468 seconds=1.8`).
 - **Not yet exercised:** cancelling a search with F7, and quitting the game
   during a search.
+
+## Third build result
+
+2026-10-05, the user's machine (16 logical processors), one session.
+First run of the third build: walked VMs went back to idle, and after one
+search free memory below 2 GB fell from 29.9 to 8.9 MB and the next two
+searches were refused workers (`memory below 2 GB: 8.9 MB free`); requests
+of 1 in 1.75 million and 1 in 906,000 walked on the main thread for 5.5 and
+1.6 s under the 1 in 2 million threshold. Fixed by closing walked VMs and
+warming fresh ones, and a threshold of 1 in 100,000. Second run:
+
+```
+SEED_SOLVER_WORKERS_WARM reason=galactic map open screens=15 loading_gate=0 transition_gate=0 transition=0000000000000000
+SEED_SOLVER_WORKERS_WARMED idle=8 max_workers=8
+SEED_SOLVER_WORKERS workers=8 warm=8 text_kb=70 setup_ms=4.5 free_mb=29.9 largest_mb=15.9 processors=16
+LUA_SEARCH_MATCH ... elapsed_s=0.70 ... walk_steps=10121025 workers=8          (1 in 1.77 million)
+SEED_SOLVER_WORKERS_WARMED idle=8 max_workers=8
+SEED_SOLVER_WORKERS workers=8 warm=8 text_kb=68 setup_ms=3.5 free_mb=29.9 ...
+LUA_SEARCH_MATCH ... elapsed_s=0.48 ... walk_steps=3434335 workers=8           (1 in 662,000)
+SEED_SOLVER_WORKERS workers=8 warm=8 text_kb=16 setup_ms=1.4 free_mb=29.9 ...
+LUA_SEARCH_MATCH ... elapsed_s=13.31 ... walk_steps=1081698859 workers=8       (1 in 4.34 billion)
+SEED_SOLVER_WORKERS_COLD reason=galactic map closed for 10 s closed=8 screens=14 loading_gate=0 transition_gate=0 transition=0000000000000000
+SEED_SOLVER_WORKERS_WARM reason=galactic map open screens=15 ...                (back from a mission)
+SEED_SOLVER_WORKERS workers=8 warm=8 text_kb=16 setup_ms=1.5 free_mb=29.9 ...
+LUA_SEARCH_MATCH ... elapsed_s=9.39 ... walk_steps=766142945 workers=8         (1 in 2.9 billion)
+```
+
+- **Memory holds:** `free_mb=29.9` at every search; every search ended
+  `failed=0 capped=0` with peak worker heaps of 1.0 to 1.3 MB.
+- **Mission:** the cold line came 10 s after the map was closed to start a
+  mission, still on the ship (`screens=14` is the ship with the map
+  closed); the map warmed the pool again after the mission. Quitting
+  logged no `SEED_SOLVER_WORKERS_SHUTDOWN`.
+- **The main thread:** in the 13.3 s search it spent 276 ms on search work
+  and 1,678 ms on context checks; the longest slice was 22.5 ms.
+- **Not yet exercised:** a loading or transition gate cooling the pool
+  (walking to the hellpod takes longer than 10 s), and a fast transition
+  from the map such as joining an SOS.
