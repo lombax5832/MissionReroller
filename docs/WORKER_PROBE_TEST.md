@@ -1,7 +1,8 @@
 # Worker Thread Probe test
 
 In-game check for [NATIVE_SOLVER_RESEARCH.md](NATIVE_SOLVER_RESEARCH.md),
-next step 2. **Not yet run in game.**
+next step 2. **Run in game 2026-10-05: workers ran and joined cleanly; frame
+rate not yet reported.**
 
 ## What it answers
 
@@ -107,4 +108,35 @@ Failure looks like:
 
 ## Result
 
-Not yet run.
+2026-10-05, v0.1.0, on the user's machine with their usual mods (16 logical
+processors, Bingus Shared Loader v17). The game was on the ship. After run
+3 had walked 56 s, a normal window close quit the game. The log is kept as
+`artifacts/worker-probe/WorkerThreadProbe-2026-10-05.log` (main checkout).
+
+- **No reaction.** `mods/ipodalexei/worker_thread_probe: loaded`. GameGuard
+  showed nothing, the game kept running through all three runs, and it
+  quit normally. No `STOPPED` line, and nothing new in
+  `BingusSharedLoader.log`.
+- **Speed.** Run 1: one worker, 61.3 million steps in 10.00 s,
+  `steps_per_second=6126320`. Run 2: four workers,
+  `steps_per_second=19269228`, 3.1 times run 1. Run 3: 6.98 million
+  steps/s over 56 s. That beats the 5.0 million offline, probably because
+  the game's cores were idle on the ship.
+- **Correctness.** `failed=0` in every run: every one of 648 million
+  inversions gave its start back.
+- **Memory below 2 GB.** At start-up: `used_mb=2016.0 free_mb=31.9
+  largest_free_mb=15.9 regions=18`. That is less than the loader's earlier
+  48 MB, and the largest block is half of it. Workers took
+  `added_mb=0.3` (one) and `1.0` (four), with a peak worker heap of 121 to
+  126 KB, and released everything (`held_after_close_mb=0.0`). The main
+  VM's heap was about 3.6 MB after start-up (27 MB at the first frame,
+  before the game's own collection).
+- **Scan cost.** `scan_ms` 0.16 to 0.91 over 18 to 26 regions: cheap
+  enough to check before every search.
+- **Shutdown.** `PROBE_SHUTDOWN joined=1 run=3 waited_ms=0`, after
+  `PROBE_DONE run=3 ... failed=0`.
+- **Not yet known:** the frame rate during runs 2 and 3, which needs the
+  user's observation.
+- **Minor:** `lua51=?`. The handle came back in a form whose `tostring`
+  has no `0x`, probably because another addon declared `GetModuleHandleA`
+  first with an integer return. The lookups worked regardless.
