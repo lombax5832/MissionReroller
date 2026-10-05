@@ -125,7 +125,9 @@ local fixed_difficulty=fixed and active:byte(33)
 -- Times the paths and chain set-up apart from the input reads.
 -- gap_ms is the longest work between two of its pauses (yield points).
 local source_ms,gap_ms,gap_at=0,0,nil
-local Timed=setmetatable({source=function(spec)
+-- SeedSolver.plan calls SeedSolver.source, so the timing wraps it in place.
+local untimed=SeedSolver.source
+SeedSolver.source=function(spec)
     local started=clock()
     local pause=spec.checkpoint
     local last,count=started,0
@@ -136,12 +138,12 @@ local Timed=setmetatable({source=function(spec)
         pause()
         last=clock()
     end
-    local result,why=SeedSolver.source(spec)
+    local result,why=untimed(spec)
     local now=clock()
     if (now-last)*1000>gap_ms then gap_ms,gap_at=(now-last)*1000,'end' end
     source_ms=(now-started)*1000
     return result,why
-end},{__index=SeedSolver})
+end
 -- The dialog's estimate before the search (src/solver_estimate.lua, as the
 -- built dialog makes it): worked out a slice at a time on the capture, it
 -- must give the numbers the search then logs.
@@ -168,7 +170,7 @@ local function search(name,r,solver,bounded)
     local early,frames
     if solver~=false then early,frames=before(r)end
     request=r;logs={};session.status=nil;source_ms,gap_ms,gap_at=0,0,nil;estimate=nil
-    set(ready,'SeedSolver',solver~=false and Timed or nil)
+    set(ready,'SeedSolver',solver~=false and SeedSolver or nil)
     local started=clock()
     ready(snapshot,definitions,started)
     local current=up(advance,'current_search')

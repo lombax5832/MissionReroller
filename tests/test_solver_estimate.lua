@@ -1,16 +1,20 @@
 -- Usage: luajit test_solver_estimate.lua <src/solver_estimate.lua>
--- The dialog's background estimate with a stub solver and planet: pending
+-- The dialog's background estimate with a stub planet and the plan of
+-- src/seed_solver_search.lua (beside it) over a stub source: pending
 -- until worked out, a slice per update, inputs kept across edits, an edit
 -- restarting the paths or retargeting the input read, no seed possible,
 -- unavailable, and a new snapshot dropping what was kept.
 local make=dofile(arg[1])
 local Rules=dofile((arg[1]:gsub('solver_estimate%.lua$','filter_rules.lua')))
+local make_solver=dofile((arg[1]:match('^(.*[/\\])') or '')..'seed_solver_search.lua')
+-- The solver's prepare and plan with source replaced.
+local function solver(source)local R=make_solver({},{},{},{},{});R.source=source;return R end
 local now=0
 local function clock()return now end
 -- Each read and each solver checkpoint costs 1 ms of the clock.
 local reads,builds,sources=0,0,0
 local planned={}
-local Solver={source=function(spec)
+local Solver=solver(function(spec)
     sources=sources+1
     for _=1,5 do now=now+0.001;spec.checkpoint()end
     local plan=planned[next(spec.required) or 0]
@@ -18,7 +22,7 @@ local Solver={source=function(spec)
     if plan=='off' then return nil,'operations at the difficulty differ'end
     if plan=='dark' then return nil,'no operation passes Day / Night'end
     return {estimate={match=1/(plan or 100),steps=1000*(spec.daynight and 7 or 1)}}
-end}
+end)
 local specials={}
 local function bind(read,s)
     return {definitions=function()read(1,4);return 0x1000 end,
@@ -94,7 +98,7 @@ planned[6]='off'
 v=settle(request({6}))
 assert(v.unavailable=='operations at the difficulty differ')
 -- A failure inside the work is a result, not an error.
-local Broken=make({source=function()error('broken paths')end})({read=function()return '' end,clock=clock,slice=1,
+local Broken=make(solver(function()error('broken paths')end))({read=function()return '' end,clock=clock,slice=1,
     options={},rate=function()return 1 end,bind=bind})
 Broken.update(s,10,nil,request({1}))
 assert(tostring(Broken.view().unavailable):find('broken paths',1,true))

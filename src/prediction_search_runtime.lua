@@ -128,13 +128,12 @@ on_prediction_ready=function(s,definitions,now)
         if SeedSolver then
             local started=search_clock()
             local ok,result,why=pcall(function()
-                local solver,input=planet.solver(definitions,request.difficulty,rules:seeded(),
-                    scope and scope.region)
-                if not solver then return nil,input end
-                return SeedSolver.source({solver=solver,input=input,identity=predict_identity,difficulty=request.difficulty,
+                local spec={identity=predict_identity,difficulty=request.difficulty,
                     required=required,options=Search.options,constellations=constellations,objectives=objectives,scope=scope,
                     daynight=daynight and daynight.accepts,row_of=SideObjectives and SideObjectives.row_of,
-                    random=SeedSolver.starts(s.seed+math.floor(started*1000000)),checkpoint=pause})
+                    random=SeedSolver.starts(s.seed+math.floor(started*1000000)),checkpoint=pause}
+                local source,decline=SeedSolver.plan(SeedSolver.prepare(planet,definitions,spec),spec)
+                return source,decline and decline.reason
             end)
             local ms=(search_clock()-started)*1000
             if ok and result then
@@ -265,7 +264,7 @@ advance_prediction_search=function(action,now)
         local rate=solver_rate
         -- A measured rate also serves the dialog's next estimates.
         if steps>=200000 and work>0.5 then rate=steps/work;solver_rate=rate end
-        reroll_session.estimate({match=e.match,seconds=(job.source.setup or 0)+e.steps/rate+0.3,elapsed=elapsed})
+        reroll_session.estimate({match=e.match,seconds=SeedSolver.seconds(e.steps,rate,job.source.setup or 0),elapsed=elapsed})
     else reroll_session.estimate(nil)end
     local compiled=rawget(_G,'jit') and type(jit.status)=='function' and jit.status()
     local timing=string.format('elapsed_s=%.2f slices=%d work_ms=%.0f context_ms=%.0f jit=%s',elapsed,slices,
