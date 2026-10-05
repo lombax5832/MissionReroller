@@ -8,9 +8,10 @@
 -- before a match is exposed. Without a clock it validates and yields after
 -- every candidate.
 --
--- bind_predictor returns the search predictor and, optionally, a complete one.
--- The search predictor may cover only the operations that can match; a match
--- is then confirmed against the complete prediction of the same seed.
+-- bind_predictor(read, pause) returns the search predictor and,
+-- optionally, a complete one and a seed source (seed_search.lua options.source). The search predictor
+-- may cover only the operations that can match; a match is then confirmed
+-- against the complete prediction of the same seed.
 return function(make_reads,make_search,catalogue)
     return function(read,baseline,bind_predictor,options)
         local self={status='running',phase='capture',attempts=0,next_seed=options.seed}
@@ -25,21 +26,36 @@ return function(make_reads,make_search,catalogue)
             steps=steps+1
             if steps>=quantum or (clock and steps%64==0 and clock()>=deadline)then steps=0;coroutine.yield()end
         end
+        -- For long pure work (the seed solver's set-up): yields at the slice
+        -- deadline, checked on every call, or as checkpoint does without a clock.
+        local function pause()
+            if not clock then checkpoint()
+            elseif clock()>=deadline then steps=0;coroutine.yield()end
+        end
         local frozen,revalidation,pending_status
         local thread=coroutine.create(function()
             frozen=make_reads(read,checkpoint,options.input_limits)
             baseline(frozen.read)
-            local predict,complete=bind_predictor(frozen.read)
+            local predict,complete,source=bind_predictor(frozen.read,pause)
+            self.source=source
+            -- The solver's set-up may have used most of this slice.
+            if source then coroutine.yield()end
+            local search_options=options
+            if source then
+                search_options={}
+                for k,v in pairs(options)do search_options[k]=v end
+                search_options.source=source
+            end
             self.phase='validate baseline';frozen:validate()
             local search=make_search(function(seed)
                 self.phase='evaluate';self.candidate_seed=seed
                 local operations=predict(seed)
                 if not clock then self.phase='validate candidate';self.ranges,self.bytes=frozen:validate()end
                 return operations
-            end,catalogue,options)
+            end,catalogue,search_options)
             local validated,evaluated=clock and clock(),0
             repeat
-                search:step();self.attempts=search.attempts;self.next_seed=search.next_seed
+                search:step();self.attempts=search.attempts;self.next_seed=search.next_seed;self.solving=search.solving
                 if search.status=='searching' then
                     evaluated=evaluated+1
                     if not clock then coroutine.yield()

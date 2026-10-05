@@ -251,14 +251,423 @@ no mission-seed draw and no composition draw has no root and scans y (still
 with cheap checks); per-ID paths, operation-level rules, families,
 modifiers, city scope and special operations are not covered, as above.
 
+## The LuaJIT port, 2026-10-04
+
+Four library modules in `src/`, which the search uses since the next
+section's change (**In the search**):
+
+| Module | Port of | What it does |
+| --- | --- | --- |
+| `seed_solver_math.lua` | `seed_chain.py` `Walk`, `Inverter`; `seed_solver.py` `_first` | Jump-ahead tables, the 128-bit Euclid (setup only), the three-gap walk, the per-position inversion |
+| `seed_solver_inputs.lua` | the oracle's `tables` export | Every normal operation's finalization, composition, enemy-tag, side-objective and environment inputs, from the input objects the predictor uses |
+| `seed_solver_paths.lua` | `Planet.paths`, `mission_paths` and the `Objectives` walk | Draw paths for a filter; template, category and kind draws run the real choice modules on a one-output stub generator |
+| `seed_solver_chain.lua` | `seed_chain.Chain` | Candidate campaign seeds, resumable in budgets of walk steps for the 16 ms frame slice |
+
+The chain returns candidates; the caller predicts each candidate's board and
+keeps the matches, so the mod's predictor remains the judge.
+`scripts/seed_solver_capture.lua` replays a capture through `src` for the
+oracle and the tests; the oracle's JSON export is unchanged (same inputs
+and the same Python paths for every filter on both captures).
+
+`python -B tests/test_seed_solver_lua.py` runs the LuaJIT tests on cases the
+Python prototype computes:
+
+- `test_seed_solver_math.lua`: 3,000 Euclid solves, 400 walks from random
+  starts and 3,000 inversions at positions 1 to 128 equal Python's.
+- `test_seed_solver_paths.lua` (needs the captures): the step-wise enemy-tag
+  and side-objective draws resolve 12,240 missions (every kind of every
+  operation on planet 173, 8 random seeds each) exactly as
+  `constellation_prediction.lua` and `side_objective_prediction.lua` do,
+  and the draw paths of every filter equal Python's (3,938 paths).
+- `test_seed_solver_chain.lua` (needs the captures): solves each filter in
+  LuaJIT and predicts every candidate with the mod's own predictor: 16 seeds
+  on planet 173 and 9 on planet 268, all matching; the two impossible
+  filters have no path.
+
+LuaJIT work per seed offline, predictor boards included: 2 ms for 59 with
+Bile Bugs, Upload and Lidar Station, 6 ms for 59 with 84, 7 ms for 59, 84
+and 65, about one to three boards each. In game, with the search working
+about a quarter of each frame, that is some tens of milliseconds where the
+brute-force search takes 4 s and 39 s for the last two. The planet 173
+"every operation" filter (outside the use case) took 38 s per seed, so the
+chain test leaves it out.
+
+### Time of day
+
+The Day / Night filter (`src/day_night.lua`) passes an operation when every
+mission's level node stays on the chosen side for the buffer. A normal
+operation's missions take its level nodes slot by slot
+(`mission_level_choice.lua` draws a level only for special graphs), and
+every slot below min(total, #levels) holds a mission whenever the template
+has candidates. So where an operation's missions stand is fixed by its ID,
+not by the seed, and `src/seed_solver_time.lua` decides before the search
+which IDs of the difficulty can pass: those whose nodes the checker's
+`accepts` passes in the current window. None valid means no seed can match
+now. The paths come from the valid operations, and the chain keeps a
+candidate only when the identity stage (`operation_identity.lua`) gives
+its row a valid ID; with "every operation", every generated row. The check
+goes through `accepts`, so it follows the window as the search refreshes it.
+
+`test_seed_solver_chain.lua` adds a night and a day variant of each filter
+on a synthetic sky (15.7-hour spin) with the captures' real node
+longitudes. On 200 random boards per filter the IDs found valid before the
+search agree with the checker on every predicted operation (400 on planet
+173, 600 on planet 268). At the test's war time 6 of 30 IDs were valid at
+night and 9 by day on planet 173, 9 and 8 of 34 on planet 268; every
+solved seed passed the predictor and the checker (73 seeds over both
+captures, with and without Day / Night). The cost grows with the share of
+IDs ruled out, as brute force's does: 59, 84 and 65 at night took 0.12 s
+per seed offline against 0.003 s without it.
+
+Not ported: the sampling lattice (offline reference only), per-ID paths
+(`shared_paths` returns nil when operations of a difficulty differ in more
+than level tiles), operation-level rules (group 0), and special operations
+other than a scoped city (**Cities** below).
+
+## In the search, 2026-10-04
+
+The release build's search takes its candidates from the chain when it can
+seed the request, and scans seeds in order otherwise. Nothing else about a
+search changed: each candidate is predicted from the frozen reads and judged
+by `search_session.find`, a match is confirmed on the complete board and
+revalidated, then published as before.
+
+- **Inputs.** `planet_model.lua` `planet.solver(definitions, difficulty,
+  seeded)` builds `seed_solver_inputs` for one difficulty through the
+  search's frozen reads, so its bytes are revalidated with the predictor's.
+  The operation bases are every ID below the definitions' pool count, with
+  the category and faction `operation_base_inputs.lua` gives its normal
+  rows (it now also returns its identity input). The environment weights
+  come from `side_objective_inputs.lua` `environment_tables`, which keeps
+  the tables the oracle used to read from closures with `debug.getupvalue`
+  (identical on the 1,530 operation and kind pairs of the planet 173
+  capture). Enemy-tag and side-objective inputs are read only when the
+  request has such rules.
+- **Request.** `src/seed_solver_search.lua` `source(spec)` maps each
+  required family to the kinds the difficulty's operations can draw (one
+  path set per choice of kind), gives each kind its family's enemy-force
+  and side-objective groups as rules, solves the difficulty's generated
+  rows (the operation in progress excluded) and, with Day / Night, adds the
+  ID check of `seed_solver_time.lua` with the live checker. Excluded
+  missions, modifier rules and the window's movement are left to the
+  predictor: they make candidates less selective, never wrong.
+- **Fallback.** `source` returns nil and a reason, and the search scans in
+  order, for a request without a required mission (group-0
+  rules, exclusions or modifiers only), operations of the difficulty that
+  differ in more than their level tiles, special levels or modifier
+  missions, a pool smaller than the rows, a difficulty above the cap, a
+  draw path set that is empty (special operations may still match), or any
+  error while building. If the chain ever ran out, the search would carry
+  on in order (`seed_search.lua` `options.source`).
+- **Frame budget.** The chain gets 4,096 walk steps per search step (about
+  1 ms). Building the paths yields at the slice deadline: `partition`, the
+  signature comparison of `shared_paths` and each chain job call the job's
+  `pause`, and the job yields once after the set-up. Walk starts come from
+  `SeedSolver.starts`, the generator's output of successive values from the
+  baseline seed and the clock.
+- **Log.** `SEED_SOLVER paths=<n> rows=<r> setup_ms=<ms>` (with
+  `daynight_ids=<valid>/<total>` for Day / Night), or `SEED_SOLVER_OFF
+  reason=<why> setup_ms=<ms>; scanning seeds in order`; progress and result
+  lines end in `mode=solver|scan walk_steps=<n>` when the solver was built.
+- **Build.** `source()` in `scripts/build_identity_probe.py` joins the five
+  modules into one local, `SeedSolver`, in every search build.
+
+`python -B tests/test_seed_solver_search.py` builds the release entry and
+runs its own `on_prediction_ready` / `advance_prediction_search` on the
+planet 173 capture (`tests/check_seed_solver_search.lua`), with requests
+from the displayed board at difficulty 9 (the operation in progress is at
+10): one, two and three missions, an enemy force, a side objective, night
+and day on a synthetic sky, and three missions with an enemy force and up to
+two side objectives all matched through the solver, each on its first
+candidate, and an exclusion-only request fell back to scanning. Set-up took
+5 to 65 ms with at most 2 ms between pauses; the longest slice was 16 to
+17 ms, as scanning's. The frozen inputs grew from 1,883 to at most 2,225
+ranges and 60 KB (limits 20,000 and 2 MB). On this capture every request
+was also common enough for scanning to match within 23 candidates; the
+speed-up on rare requests is the measurement above. The in-game test is
+[SEED_SOLVER_TEST.md](SEED_SOLVER_TEST.md).
+
+### Cities, 2026-10-04
+
+The in-game test of the search ran four solved searches on planet 268
+(difficulty 6, three missions with an enemy force and side-objective rules,
+one by day): each matched within 7 candidates in 0.42 to 1.13 s, published
+and verified, and the city search fell back with `SEED_SOLVER_OFF
+reason=city scope`, matching by scan after 3,002 seeds.
+
+A city or megafactory is a campaign event: one operation per difficulty in
+rows `30 + region*10 + difficulty - 1`, ID the region, category and faction
+from its event, and a special level graph. Three differences from a normal
+row, all fixed in draw count:
+
+- **Its seed.** `operation_identity.lua` draws the event rows' seeds after
+  every normal row (two draws each), one per event row in event order, the
+  preserved row drawing none; `seed_solver_search.lua` `event_position`
+  gives the campaign-stream position.
+- **Its levels.** `mission_level_choice.lua` takes `levels[1]` for the
+  first mission and makes one `rng:index(#levels)` draw for each later one,
+  its retries over used levels drawing nothing more. The paths
+  (`P.paths(op, required, rules, level_ok)`) place each later mission seed
+  one draw further on.
+- **Day / Night.** The levels are drawn, so the ID check does not apply.
+  With `level_ok(node)` (the live checker on one node) each level draw
+  becomes a constraint: its outcome intervals by raw index, the retry
+  replayed over the levels already used, kept when the resulting node
+  passes; the first mission's level must pass too. The walk goes on past
+  the last required mission to the operation's last slot, constraining
+  every level (the last slot's kind left free). Until the audit below it
+  stopped there, and 43% of the candidates failed the predictor's check.
+
+`planet.solver(definitions, difficulty, seeded, region)` builds the city's
+one operation; `source` solves its one row. On the planet 100 capture
+(region 2, row 54, difficulty 5) one, two and three of its missions each
+matched on the first candidate, two by day on the third or fourth (102
+paths); at night there was no path, every level the missions can take
+being on the day side then, and scanning agreed (no match in 5,000 seeds).
+The scoped scan only predicts the city's row, so it is fast (15,000 seeds/s
+offline, 4,467 in game): the solver matters for a city with rare rules or a
+Day / Night window, much less for missions alone.
+
+### The estimate in the dialog, 2026-10-04
+
+Every running search's line now starts with the time it has searched
+(`0:12 - ...`, the time limit's own clock). While the solver searches, the line under the progress strip shows how
+strict the filter is and how long such a search usually takes, in place of
+the seed count: `1 in 23,000 seeds match - expect about 4 s` (`Most seeds
+match`, `expect under a second`, `over the 3 min limit`, and `, running
+long` once a search has taken twice its estimate).
+
+- **Strictness.** The paths are disjoint outcomes of the draws, so their
+  probabilities add to q, the share of one row's operation seeds that
+  follow one; with r generated rows (1 for a city) a campaign seed matches
+  with 1 - (1 - q s_1)...(1 - q s_r), s the share of seeds whose row draws
+  an ID Day / Night passes (1 without it). Each path's probability is
+  `seed_solver_chain.lua` `mass`, and s is sampled; both are corrections
+  from the audit below. On 2,000 random seeds per filter the predicted and
+  sampled counts agreed (424 and 414, 92 and 98, 181 and 182, 92 and 83).
+  Parts of a filter the paths leave out are not counted.
+- **Time.** A job yields about p/r candidates per walk step (r the share of
+  values its root draw takes); jobs take turns of 4,096 steps (by yield
+  since the section below), so `seed_solver_chain.lua` `expected_steps`
+  sums one period of truncated exponential waits. The walk's solutions cluster, and the first
+  candidate came after 0.8 to 3.4 times that many steps on the captures'
+  filters, so the search uses twice it. The runtime divides by the walk
+  rate measured once 200,000 steps have run (800,000 steps a second until
+  then, the rate the in-game searches showed) and adds the set-up and
+  0.3 s for the match's confirmation.
+- **Log.** `SEED_SOLVER ... match=1/<n> expected_steps=<n>`; the match line's
+  `walk_steps=` is the actual count.
+- The scan has no estimate: it runs only for requests without paths.
+- **Before the search.** `src/solver_estimate.lua` works the same estimate
+  out while the player edits the filter: one coroutine, 4 ms a frame,
+  yielding inside its live reads and the path building. The planet's
+  solver inputs are kept per snapshot, difficulty, scope and whether rules
+  need the seeded inputs, so most edits rebuild only the paths; an edit
+  during the paths restarts them, one during the input read retargets it.
+  The line under a request ready to search reads `Working out how strict
+  this is`, then the estimate, or `No seed gives this now` when there is no
+  path and no other operation could match (a city, or no campaign event at
+  the difficulty). Day / Night passing no normal operation's ID counts the
+  same way: with a campaign event at the difficulty the search scans, since
+  only its row can match. The time uses the walk rate
+  the last search measured. The dialog logs `ESTIMATE match=1/<n>
+  seconds=<s>` (or `none` / `unavailable`) when it changes.
+  `tests/check_seed_solver_search.lua` runs the built dialog's estimator on
+  both captures before each search: its share and steps equal the search's
+  `SEED_SOLVER` line in every solved case (night, day and the city
+  included), worked out in 6 to 79 slices of 4 ms from cold inputs.
+
+### Excluded side objectives, 2026-10-04
+
+The in-game test of the estimate found a search for three missions, each
+with an enemy force and Lidar Station and SEAF Artillery excluded, at day
+on planet 268: estimated 1 in 100,622 seeds and under a second, it ran 51 s
+and 40.8 million walk steps, and none of its 148 candidates matched. The
+draw walk for side objectives (`draw_walk`, ported from the prototype)
+constrained only required rows and stopped once they were drawn; excluded
+rows were left to the forward check, as the prototype's docstring says.
+For the chain that check is the predictor, so the paths took no exclusion
+into account: their probability, the estimate and the candidates were all
+as if the exclusions were absent. Reproduced on planet 173: one mission
+excluding both objectives gave 3 matches in 30 candidates, three missions
+none.
+
+- **Exact exclusions.** The walk now continues while a pool left can still
+  draw an excluded row and drops every draw that gives one.
+- **Alternatives.** That leaves many constraint sets per mission (each
+  acceptable sequence of draws). A mission step now holds them as
+  `alternatives` instead of a path each, which would multiply across
+  missions; `mission_ok` passes when one does, and the walk's root is the
+  narrowest draw all alternatives constrain, over the hull of their
+  intervals.
+- **Python.** The prototype is unchanged; `test_seed_solver_paths.lua`
+  builds the comparison with `ignore_exclusions` and expands the
+  alternatives, so the 3,922 paths still match exactly.
+
+`test_seed_solver_chain.lua` adds filters from the capture's board: 84
+excluding both objectives (1 in 8, 203 of 2,000 random seeds against 249
+predicted) and 84, 65 and 59 each with its enemy force and both exclusions
+(1 in 75,884), with night and day variants: every candidate matched, 0.28 s
+per seed offline for the three missions. A filter of the Python set that
+was walked through 3,999 steps per seed now takes 102, its root chosen
+over the grouped alternatives.
+
+### Audit: where a search spends its time, 2026-10-04
+
+In game, after the exclusion fix, a search for three missions each with
+its enemy force and Lidar Station and SEAF Artillery excluded (planet 268,
+difficulty 6, by day) matched on its first candidate after 4.79 million
+walk steps (3.66 million estimated): 91 s, of which 54.7 s were the
+search's own work. Set-up took 142 ms, context checks 1.0 s, the one
+candidate a few ms; the walk was the rest, at 87,000 steps per second of
+work against about 1.6 million before the fix. Its 4,096-step budget per
+search step then took about 47 ms, so slices ran to 61 ms (13 a second).
+
+`scripts/profile_seed_solver.lua` reproduces the request on the planet 173
+capture. Each mission constraint held 80 alternatives (every combination of
+3 intervals at each of four objective draws and 5 at the last, under one
+enemy-force interval). LuaJIT's sampler put 51% of the time in
+`mission_ok`, which looped over the alternatives with `pairs()` and called
+itself for each: its traces aborted (`inner loop in root trace`), and every
+alternative recomputed the generator outputs (`output` and `u64`, 15%).
+With the JIT off it walked 16,000 steps a second, near what the game saw.
+
+- **Decision tree.** `seed_solver_chain.lua` compiles each mission
+  constraint once into a tree over (draw position, interval) steps, in flat
+  arrays walked with an explicit stack; each draw's output is computed once
+  per mission seed and environment conditions are checked where an
+  alternative ends. Steps per second on the request: 674,000 to 4,150,000
+  with the JIT, 16,000 to 245,000 without; candidates unchanged.
+- **Budget.** `seed_search.lua` gives the walk 1,024 steps per search step,
+  about 1 ms at the slowest rate seen in game.
+
+After the change the walk's samples spread over the root check (19%),
+inversions (11%) and the walk's steps (8%); one candidate's board with tags
+and objectives costs about 2 ms offline. What is left of a search's time in
+game is the frame share: the search works 16 ms a frame, about 60% of the
+wall time on 2026-10-04.
+
+### Audit: correctness and the estimate, 2026-10-04
+
+An offline audit scored about 3.6 million sampled rows with the real
+predictor and `search_session.find` (planet 173 at difficulties 1 to 10,
+planet 100 and its city, with tags, side objectives, excluded objectives and
+Day / Night). Every matching row was one the solver accepts: its path, root
+interval, walk start and both inversions. The three-gap walk visits every
+solution exactly once across all 2^32 values, and each compiled mission
+check agreed with the real resolvers on 623 rules. What it found wrong:
+
+- **City Day / Night candidates.** The later missions' levels were free (see
+  Cities): 794 accepted rows, 456 matching, estimate 1.7 times too high.
+  Now 456 of 456, estimate 0.0148 against 0.0152 sampled.
+- **Linked draws.** A mission's kind draw is the first output of m + y:
+  the high half of A1 (m + y) + C1, which is t + c + delta mod 2^32 with t
+  the mission seed's first draw (a tag or objective draw), c the operation
+  seed's first draw (template and first category) and delta one of six
+  values (a carry of 0, 1 or 2 from the low halves, with or without the
+  wrap of m + y), at weights that follow from C1 alone and match sampling
+  to 0.001. A path constraining two of the three was priced as if they were
+  independent: on a two-mission request at difficulty 3, 0.0128 against
+  0.0106 sampled; one of its paths half its stated probability, the other
+  1.5 times it. `mass` integrates the linked missions over c (256 points)
+  and intersects constraints on the same draw. Candidates were never
+  affected.
+- **Day / Night share.** It was the share of the difficulty's IDs that pass.
+  The preserved operation's ID is never drawn and the pool's used mask
+  makes IDs uneven (0.017 to 0.061 where 0.033 is even), 5 to 10% off.
+  `seed_solver_time.lua` `shares` now runs the identity stage on 2,048
+  fixed seeds per request, per row.
+- **Set-up.** Comparing the difficulty's operations (about 23 KB of text
+  each) was 37 to 56 ms of a 47 to 67 ms set-up, repeated per kind
+  combination and per edit; `seed_solver_search.lua` keeps it per solver
+  input and difficulty.
+- **Day / Night with no normal ID.** The chain ran with an empty share and
+  would never propose the city row that could match. `source` now declines
+  (`no operation passes Day / Night`), so the search scans; the dialog shows
+  `No seed gives this now` only without a campaign event at the difficulty.
+
+After the fixes, on 30,000 seeds per capture, the seed-level estimate and
+the sampled share agree on every request (difficulty 9: 0.0844 against
+0.0822 with mixed rules, 0.1443 and 0.1487 at night, 0.0580 and 0.0592 for
+excluded objectives by day; difficulty 3: 0.0314 and 0.0320, 0.1057 and
+0.1066 at night), with precision 1.000 everywhere. Left as they were:
+positions past 128 for a planet with seven or more event rows (the search's
+pcall falls back to scanning, but the dialog may show a solver estimate),
+city levels fixed when the search starts while the window moves, and
+inversions allocating (200 to 400 ns each).
+`test_seed_solver_chain.lua` checks the six offsets and each filter's mass
+against 100,000 random operation seeds; its own LCG is too regular for
+that (it skews the offsets by up to 5 points), so those checks draw from
+`math.random`.
+
+### Scheduling jobs by yield, 2026-10-04
+
+The chain ran one job per (path, row) in equal turns of 4,096 steps, paths
+by probability p. A job finds y = p s / r candidates per step (r its root
+draw's share, s its row's Day / Night share), so on a request needing many
+turns equal turns gave the mean yield of all jobs. Measured on both
+captures (planet 173 at difficulties 9 and 10, planet 100 and its city):
+
+- **Jobs.** 4 to 132 per request. On most requests every path shares one
+  root draw (r 0.135 to 0.5), so p and y order alike; on planet 100's normal
+  rows r is 0.22 or 0.5 and the most likely job is not the best. Yields
+  span 2 to 12 times; the sum of all over the best is 3 to 64. s makes rows
+  of one path differ by a few percent.
+- **Requests that finish in one turn** (most of the search check's, city
+  included): the first job's first turn finds the candidate under every
+  schedule; nothing changes.
+- **Method.** Each job's candidates were recorded once per walk start and
+  replayed under each schedule (a scratch replay, not kept): (a) equal turns by p,
+  (b) by y, (c) turns in proportion to y, y^2, y^4 (stride), (d) the best
+  job with 5, 10 or 25% of turns round robin, (e) equal turns among jobs
+  within 4 times the best, (f) equal turns among the best tier (within 1%)
+  with 10% round robin. 40 to 300 walk starts per request; steps to the 1st,
+  4th and 16th distinct candidate.
+- **Clusters decide.** Putting the turns on one best job (d) was best on
+  planet 173's hard requests but worst in the tail where that job's
+  candidates cluster: on 59 with 84 the 16th candidate's p90 went from
+  576,000 to 964,000 steps, on 59, 84 and 65 from 3.5 to 6.5 million.
+  Taking turns among the jobs of equal yield (f, usually one path's rows)
+  keeps the hedge: its mean and p90 to the first candidate were the lowest,
+  or within a quarter of the lowest, on every request a schedule changed.
+
+Chosen: (f). `seed_solver_chain.lua` sorts the jobs by y (s from
+`Time.shares`, now on each row of the spec); the tier takes turns, every
+10th turn goes to the other jobs in turn by yield, so every job is still
+walked and the candidates are the same set. `expected_steps` sums one
+period of that schedule (10 turns per job outside the tier).
+
+Real chains, old against new, same walk starts; walk steps to the first
+and fourth candidate, median / mean / p90:
+
+| Request | Trials | First, before | First, after | Fourth, before | Fourth, after |
+| --- | --- | --- | --- | --- | --- |
+| 173: 59 with 84 | 200 | 20,032 / 28,437 / 66,669 | 10,748 / 20,154 / 56,170 | 85,098 / 99,105 / 199,322 | 46,380 / 66,412 / 156,623 |
+| 173: 59, 84, 65 | 200 | 124,236 / 201,520 / 507,238 | 66,184 / 109,335 / 240,939 | 476,322 / 595,875 / 1,162,462 | 265,052 / 372,014 / 777,003 |
+| 173: 84, 65, 59, forces, exclusions | 200 | 71,317 / 93,318 / 181,866 | 33,889 / 53,171 / 127,957 | 235,518 / 273,804 / 513,117 | 154,994 / 173,452 / 320,231 |
+| 173 d10 (profile request) | 200 | 52,487 / 70,874 / 158,122 | 34,903 / 46,747 / 105,438 | 225,005 / 264,300 / 499,294 | 150,864 / 169,903 / 288,446 |
+| 173 d9: 3 missions, force, 2 exclusions | 12 | 118,677 / 200,452 / 310,222 | 77,728 / 149,264 / 287,602 | 541,871 / 691,521 / 1,206,121 | 374,305 / 475,900 / 730,911 |
+| the same at night | 12 | 238,898 / 503,323 / 1,226,800 | 410,890 / 520,356 / 916,626 | 2,456,634 / 2,748,839 / 4,093,681 | 1,833,248 / 2,371,165 / 3,660,680 |
+| the same by day | 12 | 310,222 / 590,303 / 1,434,985 | 222,709 / 388,123 / 876,468 | 2,156,992 / 2,279,872 / 3,788,200 | 1,109,123 / 1,264,212 / 1,846,857 |
+| 268: ICBM, Survey, Eradicate | 200 | 90 / 108 / 242 | 80 / 93 / 197 | 368 / 391 / 636 | 303 / 313 / 500 |
+| 100: 3 missions | 40 | 71 / 113 / 254 | 85 / 93 / 179 | 381 / 421 / 653 | 325 / 380 / 578 |
+| 100: 3 missions at night | 40 | 285 / 361 / 661 | 264 / 317 / 639 | 1,214 / 1,461 / 2,441 | 1,154 / 1,237 / 1,665 |
+| 100: 3 missions by day | 40 | 268 / 380 / 890 | 266 / 295 / 635 | 1,583 / 1,627 / 2,389 | 1,021 / 1,178 / 1,717 |
+
+The replay with 40 starts gave the hard planet 173 requests 184,000 to
+119,000 (plain), 1.17 million to 658,000 (night) and 502,000 to 317,000
+(by day) mean steps to the first candidate. Other requests of both checks,
+the city's among them, are unchanged. The first candidate's mean is now
+0.5 to 1.4 times the estimate (twice the Poisson model, as before; 0.4 to
+1.1 before the change); the dialog's estimate still equals the search's
+`SEED_SOLVER` line in every case. `test_seed_solver_chain.lua`: every
+candidate matched (1.0 candidates per seed), 72 and 25 seeds confirmed.
+
 ## Next steps, if pursued
 
-1. A compiled lattice enumerator (fpylll, or C) for the joined-row systems,
+1. The in-game test ([SEED_SOLVER_TEST.md](SEED_SOLVER_TEST.md)).
+2. A compiled lattice enumerator (fpylll, or C) for the joined-row systems,
    which would let every operation of a difficulty be solved in one lattice
    instead of sampled and checked.
-2. Operation-level rules, mission families and modifier filters, to cover
-   every filter the dialog offers.
-3. Port the chain (`seed_chain.py`) to LuaJIT as library modules fed by
-   the inputs the search already freezes, as a search mode inside the 16 ms
-   frame budget with brute force as the fallback; the lattice stays an
-   offline reference.
+3. Operation-level rules (group 0) and per-ID paths, so fewer requests fall
+   back to scanning.

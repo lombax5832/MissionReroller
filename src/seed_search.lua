@@ -1,5 +1,9 @@
 -- Pure bounded candidate search. The caller owns a frozen predictor/context;
 -- this module never refreshes the game, reads memory or publishes a seed.
+-- Seeds are tried in order from options.seed, or taken from options.source
+-- (the seed solver, src/seed_solver_search.lua): source.next(budget) returns
+-- a candidate, or nil when its budget is spent (the step tries no seed) and
+-- done when it has no more, after which the search continues in order.
 return function(evaluate,catalogue,options)
     local function integer(n,lo,hi)return type(n)=='number' and n==math.floor(n) and n>=lo and n<=hi end
     assert(type(evaluate)=='function' and type(catalogue.find)=='function','Missing predictor or matcher')
@@ -47,14 +51,29 @@ return function(evaluate,catalogue,options)
     local scope=catalogue.scope and catalogue.scope(options.scope)
     assert(scope or options.scope==nil,'City scope unavailable')
     local difficulty,limit=options.difficulty,options.limit
-    local self={status='searching',attempts=0,next_seed=options.seed}
+    local source=options.source
+    assert(source==nil or type(source.next)=='function','Invalid seed source')
+    -- Walk steps per step: about 1 ms at the slowest rate seen in game,
+    -- so a step cannot overrun the frame slice the job keeps.
+    local budget=options.source_budget or 1024
+    local self={status='searching',attempts=0,next_seed=options.seed,solving=source~=nil}
     function self:cancel()
         if self.status=='searching' then self.status='cancelled' end
     end
     function self:step()
         if self.status~='searching' then return self.status end
-        local seed=self.next_seed
-        self.attempts=self.attempts+1;self.next_seed=(seed+1)%4294967296
+        local seed
+        if source then
+            local done
+            seed,done=source.next(budget)
+            if not seed then
+                if done then source=nil;self.solving=false end
+                return self.status
+            end
+        else
+            seed=self.next_seed;self.next_seed=(seed+1)%4294967296
+        end
+        self.attempts=self.attempts+1
         local ok,operations=pcall(evaluate,seed)
         if not ok then self.status='failed';self.error=tostring(operations);return self.status end
         local valid={}

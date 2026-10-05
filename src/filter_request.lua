@@ -198,6 +198,46 @@ local function grouped(n)
     return digits
 end
 local function count(n)return n==0 and 'Any' or n..(n==1 and ' rule' or ' rules')end
+-- How strict a solved search's filter is and how long it usually takes
+-- (prediction_search_runtime.lua: {match, seconds, elapsed}).
+-- running: the shorter form a running search shows after its clock.
+local function estimate_text(e,running)
+    if e.match<=0 then return 'No seed gives this now' end
+    local strict
+    if e.match>=0.5 then strict='Most seeds match'
+    else
+        local n=1/e.match
+        local scale=10^math.max(0,math.floor(math.log10(n))-1)
+        strict='1 in '..grouped(math.floor(n/scale+0.5)*scale)..' seeds match'
+    end
+    local s=e.seconds
+    -- One unmeasured text redrawn every frame: kept under the panel's width.
+    local expect=running and '' or 'expect '
+    local usual=s<1 and expect..'under a second' or s<90 and string.format('%sabout %d s',expect,math.floor(s+0.5))
+        or s<=180 and string.format('%sabout %d min',expect,math.floor(s/60+0.5))
+        or 'over the 3 min limit'
+    return strict..' - '..usual
+end
+-- A search's elapsed time, as the clock at the start of its line: 0:07.
+local function clock_text(seconds)
+    local s=math.max(0,math.floor(seconds))
+    return string.format('%d:%02d',math.floor(s/60),s%60)
+end
+-- Under a running search: its clock, then the solver's estimate or the
+-- seeds searched.
+local function running_text(run,limit)
+    local what=run.estimate and estimate_text(run.estimate,true)
+        or grouped(run.progress or 0)..' of '..grouped(limit)..' seeds searched'
+    return run.elapsed and clock_text(run.elapsed)..' - '..what or what
+end
+-- Under a request ready to search: its estimate (solver_estimate.lua) once
+-- worked out.
+local function before_search(e)
+    if e=='pending' then return 'Working out how strict this is' end
+    if type(e)=='table' and e.impossible then return 'No seed gives this now' end
+    if type(e)=='table' and e.match then return estimate_text(e)end
+    return 'Rerolls every unstarted operation of the campaign'
+end
 local CHANGED=' - Mission changed'
 -- The panel's model. catalogue is the last one built, used for compatibility
 -- even while not shown. v: shown (the catalogue may be displayed), fresh
@@ -316,8 +356,8 @@ function R:model(catalogue,v)
     return {running=busy,locked=locked,ready=ready,can_start=ready and rules>0,can_clear=not locked and rules>0,
         difficulty=v.difficulty,status=tostring(status),tone=tone,
         step=busy and (running and run.step or 1) or nil,
-        detail=busy and grouped(running and run.progress or 0)..' of '..grouped(v.limit)..' seeds searched'
-            or ready and rules>0 and tone=='idle' and 'Rerolls every unstarted operation of the campaign' or '',
+        detail=busy and (running and running_text(run,v.limit) or '0 of '..grouped(v.limit)..' seeds searched')
+            or ready and rules>0 and tone=='idle' and before_search(v.estimate) or '',
         faction=display and catalogue.faction or nil,scope=v.scope and 'city' or 'planet',
         section=section,items=items,page=self.page,pages=pages,groups=tabs,group=group,
         slots=display and catalogue.slots or nil,checked=checked,rules=rules,

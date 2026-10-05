@@ -69,4 +69,25 @@ assert(search.seed==3 and search.operation.row==49,'A city search matches only t
 assert(not pcall(new,function()end,catalogue,{seed=1,limit=1,difficulty=10,required={[1]=true},scope={region=9}}))
 assert(not pcall(new,function()end,{options=catalogue.options,find=catalogue.find},
     {seed=1,limit=1,difficulty=10,required={[1]=true},scope={region=1}}),'A matcher without scopes must refuse one')
-print('Seed search: city scope, constellation groups, operation-wide filter, wrap, budget, cancellation, invalid operations and fail-closed prediction passed')
+-- A seed source (the seed solver): a spent budget tries no seed, each
+-- candidate is judged by the predictor, and an exhausted source falls back
+-- to seeds in order from options.seed.
+local queue={false,9,false,7}
+local tried={}
+local source={next=function(budget)
+    assert(budget==1024,'Default source budget')
+    local item=table.remove(queue,1)
+    if item==nil then return nil,true end
+    if item==false then return nil,false end
+    return item
+end}
+search=new(function(seed)tried[#tried+1]=seed;return {seed==20 and operation({0}) or operation({7})}end,catalogue,
+    {seed=19,limit=10,difficulty=10,required={[1]=true},source=source})
+assert(search.solving and search:step()=='searching' and search.attempts==0 and #tried==0,'A spent budget tries no seed')
+assert(search:step()=='searching' and tried[1]==9 and search.attempts==1,'A candidate is predicted')
+search:step();search:step()
+assert(tried[2]==7 and search.attempts==2 and search.next_seed==19,'The source leaves the scan position alone')
+assert(search:step()=='searching' and not search.solving and search.attempts==2,'An exhausted source ends solving')
+assert(search:step()=='searching' and tried[3]==19 and search:step()=='matched' and search.seed==20,'Then seeds in order')
+assert(not pcall(new,function()end,catalogue,{seed=1,limit=1,difficulty=10,required={[1]=true},source={}}),'Invalid source')
+print('Seed search: seed source and fallback, city scope, constellation groups, operation-wide filter, wrap, budget, cancellation, invalid operations and fail-closed prediction passed')

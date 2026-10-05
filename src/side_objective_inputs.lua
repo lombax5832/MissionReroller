@@ -91,13 +91,16 @@ return function(read,u,pointer,game,board,config,composition)
     end
     -- One integer weight per float weight (x1000, truncated); a pick is one
     -- LCG step from the mission seed, the last entry when none is reached,
-    -- and 0 without candidates.
+    -- and 0 without candidates. The second value holds the integer weights
+    -- and the entries they pick, for the seed solver.
     local function weighted(candidates)
-        if #candidates==0 then return function()return 0 end end
+        if #candidates==0 then return function()return 0 end,{units={},indices={}}end
         local units,total={},0
         for k,c in ipairs(candidates)do units[k]=math.floor(f(c.weight*1000));total=total+units[k]end
         assert(total>0,'Zero biome weight total')
         local modulus=ffi.new('uint64_t',total)
+        local indices={}
+        for k,c in ipairs(candidates)do indices[k]=c.index end
         return function(seed)
             local target=tonumber((ffi.new('uint64_t',seed)*6364136223846793005ULL+1442695040888963407ULL)%modulus)
             local sum=0
@@ -105,21 +108,21 @@ return function(read,u,pointer,game,board,config,composition)
                 if units[k]~=0 then sum=sum+units[k];if target<=sum then return c.index end end
             end
             return candidates[#candidates].index
-        end
+        end,{units=units,indices=indices}
     end
     -- environments(planet, kind, modifiers)(seed): the biome environment byte
     -- a mission's objectives are filtered by. The candidates depend only on
     -- the planet, the mission type and the world modifiers, so they are
     -- decoded once and each seed costs two draws.
     -- The second value is the set of environment bytes a seed can give.
-    local environments,reachable={},{}
+    local environments,reachable,weights={},{},{}
     function api.environments(planet,kind,modifiers)
         local key=planet..':'..kind..':'..table.concat(modifiers,',')
         local result=environments[key]
         if result then return result,reachable[key]end
         -- Native skips the draw for a descriptor without a planet id.
         if word(board+O.board.campaign+planet*O.campaign.definition_stride+0x18)==0 then
-            result=function()return 0 end;environments[key],reachable[key]=result,{[0]=true}
+            result=function()return 0 end;environments[key],reachable[key],weights[key]=result,{[0]=true},false
             return result,reachable[key]
         end
         local definition=assert(composition.biome_definition(planet),'Missing planet biome definition')
@@ -129,7 +132,7 @@ return function(read,u,pointer,game,board,config,composition)
         local entries=ptr(list+0x20)
         local size=O.biome_environment.size
         local present={};for _,hash in ipairs(modifiers)do present[hash]=true end
-        local biomes,inner,gives={},{},{}
+        local biomes,inner,gives,tables={},{},{},{}
         for j=0,n-1 do
             local entry=read(entries+j*0x38,0x38);local data=ptr(entries+j*0x38+0x30)
             local rows={}
@@ -154,18 +157,28 @@ return function(read,u,pointer,game,board,config,composition)
                     end
                 end
             end
-            local pick=weighted(candidates)
+            local pick,units=weighted(candidates)
             inner[j]=function(seed)return rows[pick(seed)].id end
+            local ids={}
+            for s=0,7 do ids[s+1]=rows[s].id end
+            tables[#tables+1]={biome=j,units=units.units,indices=units.indices,ids=ids}
             gives[j]={}
             for _,c in ipairs(candidates)do gives[j][rows[c.index].id]=true end
             if #candidates==0 then gives[j][rows[0].id]=true end
         end
-        local biome=weighted(biomes)
+        local biome,biome_units=weighted(biomes)
         result=function(seed)return inner[biome(seed)](seed)end
         local set={}
         for _,b in ipairs(#biomes>0 and biomes or {{index=0}})do for id in pairs(gives[b.index])do set[id]=true end end
-        environments[key],reachable[key]=result,set
+        environments[key],reachable[key],weights[key]=result,set,{biome=biome_units,inner=tables}
         return result,set
+    end
+    -- The weight tables behind environments(planet, kind, modifiers), for the
+    -- seed solver (src/seed_solver_inputs.lua): {biome={units, indices},
+    -- inner={{biome, units, indices, ids}}}, or false when no draw is made.
+    function api.environment_tables(planet,kind,modifiers)
+        api.environments(planet,kind,modifiers)
+        return weights[planet..':'..kind..':'..table.concat(modifiers,',')]
     end
     -- The descriptor inputs of 1756730 for a list of world modifier hashes:
     -- 1267a00 keeps at most eight distinct ones with a definition, whose
