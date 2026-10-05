@@ -20,11 +20,19 @@ function C.build(inputs,s,difficulty,u,options,compatibility,accepts)
     local native,seen={},{}
     for _,base in ipairs(s.decoded.operations)do
         if base.difficulty==difficulty and (not accepts or accepts(base.row))then
-            local op={id=base.operation_id,row=base.row,difficulty=difficulty,faction=Board.faction(s.operations,base.row),
-                category=Board.category(s.operations,base.row),explicit_hash=Board.explicit_hash(s.operations,base.row)}
+            -- effect_id goes into the constructor, never stored afterwards: once this
+            -- loop is compiled, the game's LuaJIT 2.1.0-alpha reads a field stored
+            -- after the call back as the constructor's value (tests/test_game_jit.py).
+            local row,id=base.row,base.operation_id
+            local faction,category=Board.faction(s.operations,row),Board.category(s.operations,row)
+            local explicit=Board.explicit_hash(s.operations,row)
+            local effect=inputs.effect_id({id=id,row=row,difficulty=difficulty,faction=faction,category=category,
+                explicit_hash=explicit},s.planet)
+            local op={id=id,row=row,difficulty=difficulty,faction=faction,category=category,explicit_hash=explicit,
+                effect_id=effect}
             assert(op.faction>=2 and op.faction<=4,'Unsupported filter faction')
             assert(not result.faction or result.faction==op.faction,'Mixed planet factions')
-            result.faction=op.faction;op.effect_id=inputs.effect_id(op,s.planet)
+            result.faction=op.faction
             result.effects[op.effect_id]=true
             local key=op.faction..':'..op.category..':'..op.effect_id..':'..op.explicit_hash
             if not seen[key]then

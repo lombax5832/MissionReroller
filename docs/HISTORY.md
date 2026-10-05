@@ -5,6 +5,21 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
+**Fixed 2026-10-05, not yet validated in game: "Eligibility unavailable"
+after a few dialog openings.** In game the dialog logged
+`FILTER_CATALOGUE_BLOCKED ...: attempt to concatenate field 'effect_id' (a
+nil value)` on every opening after two published searches, though the line
+before had just stored that field. The game's LuaJIT 2.1.0-alpha
+miscompiles the catalogue's loop once it is hot: a field stored on a fresh
+table right after a call reads back as the constructor's value (nil, or a
+placeholder put there). It reproduces offline only in the game's own
+`lua51.dll` with the JIT on, from the tenth build of the catalogue on a
+capture; v0.34.0 has it too. The catalogue, the predictor
+(`composition_prediction.lua`) and the solver inputs now work out
+`effect_id` first and build each operation table in one constructor.
+`tests/test_game_jit.py` (in the gate; skipped without the game's DLL or
+the captures) builds the catalogue 50 times in the game's DLL.
+
 **Validated in game 2026-10-05 except cancel and quit: the seed solver
 walks in worker VMs.** A request one seed in 28 million matches (planet
 268, difficulty 10, three missions with their enemy forces, two objectives
