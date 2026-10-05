@@ -6,6 +6,19 @@ GitHub release notes and, as one plain-text line each, the Nexus Mods
 changelog. How each change was
 made and tested is in the development log, [docs/HISTORY.md](docs/HISTORY.md).
 
+## v0.35.1 Searches ready before you start
+
+- While the galactic map is open on your ship, the background searchers are
+  prepared in advance, so a strict search starts at once.
+- They are released ten seconds after you close the galactic map, so they
+  hold no memory during missions, and are prepared again the next time you
+  open it.
+- Easy requests, matched by more than about 1 seed in 100,000, now search
+  without the background searchers, leaving their memory to the game; they
+  still finish in well under a second.
+- Quitting the game while a search runs now stops the background search
+  cleanly.
+
 ## v0.35.0 Faster searches on every core
 
 - Strict searches now run on several of your processor's cores in the

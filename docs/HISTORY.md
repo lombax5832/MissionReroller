@@ -5,6 +5,14 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
+**Not yet validated in game: v0.35.1.** Releases the warm worker VMs on
+the ship (made when the galactic map is open, closed and replaced after
+each search, cooled 10 s after the map closes or on a loading gate), the
+workers threshold of 1 in 100,000, and the shutdown join the v0.35.0
+release never wired. The development build of the same source was
+validated in game on 2026-10-05 (the two entries below); the tagged build
+has not been run.
+
 **Validated in game 2026-10-05: workers only for rare requests.** A search
 the seed solver seeds now walks in worker VMs only when its estimate is
 rarer than one seed in 100,000 (`SeedSolver.use_workers`,

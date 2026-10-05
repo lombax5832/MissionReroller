@@ -22,7 +22,7 @@ RELEASE_NAME = 'Operation Reroller'
 # The GUID and name of untagged (local) builds.
 DEVELOPMENT_GUID = '97a929ab-793e-49e8-b186-f39daa8984e8'
 DEVELOPMENT_NAME = 'Operation Reroller Dev'
-DEFAULT_VERSION = '0.35.0'
+DEFAULT_VERSION = '0.35.1'
 # What mod managers show for the mod and its one option.
 DESCRIPTION = ("Rerolls a planet's operations until one matches your filters. "
                'Press F7 on the galactic map.')
