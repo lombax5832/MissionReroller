@@ -169,16 +169,17 @@ return function(Math,Paths,Chain,Time,Inputs)
             end
             shares=kept[key]
         end
+        for i,row in ipairs(rows)do row.share=shares[i]end
         -- Paths are disjoint outcomes of the draws, so their probabilities add.
         local q=0
         for _,path in ipairs(paths)do q=q+path.probability end
         q=math.min(1,q)
-        local none,share=1,0
-        for _,s in ipairs(shares)do none=none*(1-q*s);share=share+s/#shares end
+        local none=1
+        for _,s in ipairs(shares)do none=none*(1-q*s)end
         -- The walk's solutions come in clusters, so the first candidate takes
-        -- longer than independent draws would: 0.8 to 3.4 times as long on
-        -- the captures' filters (tests/test_seed_solver_chain.lua).
-        local estimate={match=1-none,steps=2*Chain.expected_steps(paths,#rows,4096,share)}
+        -- longer than independent draws would: 1 to 2.7 times as long on
+        -- the captures' filters (docs/SEED_SOLVER_RESEARCH.md).
+        local estimate={match=1-none,steps=2*Chain.expected_steps(paths,shares,4096)}
         -- The dialog's estimate before a search needs no walks.
         if spec.estimate_only then return {paths=#paths,rows=#rows,valid=valid,ids=ids,estimate=estimate}end
         local chain=Chain.new({paths=paths,rows=rows,planet=input.planet,random=spec.random,accept=accept,

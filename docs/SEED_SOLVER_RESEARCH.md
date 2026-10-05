@@ -447,9 +447,9 @@ long` once a search has taken twice its estimate).
   sampled counts agreed (424 and 414, 92 and 98, 181 and 182, 92 and 83).
   Parts of a filter the paths leave out are not counted.
 - **Time.** A job yields about p/r candidates per walk step (r the share of
-  values its root draw takes); jobs take turns of 4,096 steps, most likely
-  path first, so `seed_solver_chain.lua` `expected_steps` sums one cycle of
-  truncated exponential waits. The walk's solutions cluster, and the first
+  values its root draw takes); jobs take turns of 4,096 steps (by yield
+  since the section below), so `seed_solver_chain.lua` `expected_steps`
+  sums one period of truncated exponential waits. The walk's solutions cluster, and the first
   candidate came after 0.8 to 3.4 times that many steps on the captures'
   filters, so the search uses twice it. The runtime divides by the walk
   rate measured once 200,000 steps have run (800,000 steps a second until
@@ -599,6 +599,69 @@ inversions allocating (200 to 400 ns each).
 against 100,000 random operation seeds; its own LCG is too regular for
 that (it skews the offsets by up to 5 points), so those checks draw from
 `math.random`.
+
+### Scheduling jobs by yield, 2026-10-04
+
+The chain ran one job per (path, row) in equal turns of 4,096 steps, paths
+by probability p. A job finds y = p s / r candidates per step (r its root
+draw's share, s its row's Day / Night share), so on a request needing many
+turns equal turns gave the mean yield of all jobs. Measured on both
+captures (planet 173 at difficulties 9 and 10, planet 100 and its city):
+
+- **Jobs.** 4 to 132 per request. On most requests every path shares one
+  root draw (r 0.135 to 0.5), so p and y order alike; on planet 100's normal
+  rows r is 0.22 or 0.5 and the most likely job is not the best. Yields
+  span 2 to 12 times; the sum of all over the best is 3 to 64. s makes rows
+  of one path differ by a few percent.
+- **Requests that finish in one turn** (most of the search check's, city
+  included): the first job's first turn finds the candidate under every
+  schedule; nothing changes.
+- **Method.** Each job's candidates were recorded once per walk start and
+  replayed under each schedule (a scratch replay, not kept): (a) equal turns by p,
+  (b) by y, (c) turns in proportion to y, y^2, y^4 (stride), (d) the best
+  job with 5, 10 or 25% of turns round robin, (e) equal turns among jobs
+  within 4 times the best, (f) equal turns among the best tier (within 1%)
+  with 10% round robin. 40 to 300 walk starts per request; steps to the 1st,
+  4th and 16th distinct candidate.
+- **Clusters decide.** Putting the turns on one best job (d) was best on
+  planet 173's hard requests but worst in the tail where that job's
+  candidates cluster: on 59 with 84 the 16th candidate's p90 went from
+  576,000 to 964,000 steps, on 59, 84 and 65 from 3.5 to 6.5 million.
+  Taking turns among the jobs of equal yield (f, usually one path's rows)
+  keeps the hedge: its mean and p90 to the first candidate were the lowest,
+  or within a quarter of the lowest, on every request a schedule changed.
+
+Chosen: (f). `seed_solver_chain.lua` sorts the jobs by y (s from
+`Time.shares`, now on each row of the spec); the tier takes turns, every
+10th turn goes to the other jobs in turn by yield, so every job is still
+walked and the candidates are the same set. `expected_steps` sums one
+period of that schedule (10 turns per job outside the tier).
+
+Real chains, old against new, same walk starts; walk steps to the first
+and fourth candidate, median / mean / p90:
+
+| Request | Trials | First, before | First, after | Fourth, before | Fourth, after |
+| --- | --- | --- | --- | --- | --- |
+| 173: 59 with 84 | 200 | 20,032 / 28,437 / 66,669 | 10,748 / 20,154 / 56,170 | 85,098 / 99,105 / 199,322 | 46,380 / 66,412 / 156,623 |
+| 173: 59, 84, 65 | 200 | 124,236 / 201,520 / 507,238 | 66,184 / 109,335 / 240,939 | 476,322 / 595,875 / 1,162,462 | 265,052 / 372,014 / 777,003 |
+| 173: 84, 65, 59, forces, exclusions | 200 | 71,317 / 93,318 / 181,866 | 33,889 / 53,171 / 127,957 | 235,518 / 273,804 / 513,117 | 154,994 / 173,452 / 320,231 |
+| 173 d10 (profile request) | 200 | 52,487 / 70,874 / 158,122 | 34,903 / 46,747 / 105,438 | 225,005 / 264,300 / 499,294 | 150,864 / 169,903 / 288,446 |
+| 173 d9: 3 missions, force, 2 exclusions | 12 | 118,677 / 200,452 / 310,222 | 77,728 / 149,264 / 287,602 | 541,871 / 691,521 / 1,206,121 | 374,305 / 475,900 / 730,911 |
+| the same at night | 12 | 238,898 / 503,323 / 1,226,800 | 410,890 / 520,356 / 916,626 | 2,456,634 / 2,748,839 / 4,093,681 | 1,833,248 / 2,371,165 / 3,660,680 |
+| the same by day | 12 | 310,222 / 590,303 / 1,434,985 | 222,709 / 388,123 / 876,468 | 2,156,992 / 2,279,872 / 3,788,200 | 1,109,123 / 1,264,212 / 1,846,857 |
+| 268: ICBM, Survey, Eradicate | 200 | 90 / 108 / 242 | 80 / 93 / 197 | 368 / 391 / 636 | 303 / 313 / 500 |
+| 100: 3 missions | 40 | 71 / 113 / 254 | 85 / 93 / 179 | 381 / 421 / 653 | 325 / 380 / 578 |
+| 100: 3 missions at night | 40 | 285 / 361 / 661 | 264 / 317 / 639 | 1,214 / 1,461 / 2,441 | 1,154 / 1,237 / 1,665 |
+| 100: 3 missions by day | 40 | 268 / 380 / 890 | 266 / 295 / 635 | 1,583 / 1,627 / 2,389 | 1,021 / 1,178 / 1,717 |
+
+The replay with 40 starts gave the hard planet 173 requests 184,000 to
+119,000 (plain), 1.17 million to 658,000 (night) and 502,000 to 317,000
+(by day) mean steps to the first candidate. Other requests of both checks,
+the city's among them, are unchanged. The first candidate's mean is now
+0.5 to 1.4 times the estimate (twice the Poisson model, as before; 0.4 to
+1.1 before the change); the dialog's estimate still equals the search's
+`SEED_SOLVER` line in every case. `test_seed_solver_chain.lua`: every
+candidate matched (1.0 candidates per seed), 72 and 25 seeds confirmed.
 
 ## Next steps, if pursued
 

@@ -295,29 +295,69 @@ return function(Math)
         return best
     end
 
-    -- The walk steps expected before the first candidate: a job walks the
-    -- solutions of its root draw (share r of all values) and yields on
-    -- average p/r candidates per step, p its path's probability; jobs (each
-    -- path for each of `rows` rows, as R.new orders them) take turns of
-    -- `quantum` steps. share thins the candidates (an accept check). The
-    -- most likely paths come first, so the first turns usually decide.
-    function R.expected_steps(paths,rows,quantum,share)
-        local rates={}
-        for _,path in ipairs(paths)do
-            local root=R.plan(path)
-            local r=root and (root.hi-root.lo+1)/M32 or 1
-            for _=1,rows do rates[#rates+1]=path.probability/r*(share or 1)end
+    -- A job's yield: it walks the solutions of its root draw (share r of
+    -- all values) and finds on average p s / r candidates per step, p its
+    -- path's probability, s its row's share (an accept check, 1 without).
+    local function yield(path,root,share)
+        return (path.probability or 1)*(share or 1)/(root and (root.hi-root.lo+1)/M32 or 1)
+    end
+    -- Jobs take turns of `quantum` steps by yield: the jobs of the highest
+    -- yield (the tier: within 1% of the best, such as one path's rows)
+    -- take turns, but each EVERY-th turn goes to the other jobs in turn,
+    -- by yield. Yields differ by up to 12 times among a request's jobs, and
+    -- equal turns for all averaged them; turns among the tier and the
+    -- round-robin share hedge against a job whose solutions come in sparse
+    -- clusters (docs/SEED_SOLVER_RESEARCH.md, Scheduling jobs by yield).
+    local EVERY,TIER=10,0.99
+    -- Job indices (1-based, paths outer, rows inner) by decreasing yield.
+    local function by_yield(yields)
+        local order={}
+        for i=1,#yields do order[i]=i end
+        table.sort(order,function(a,b)return yields[a]>yields[b] or (yields[a]==yields[b] and a<b)end)
+        return order
+    end
+    -- How many of the sorted yields form the tier.
+    local function tier(sorted)
+        local k=1
+        while sorted[k+1] and sorted[k+1]>=TIER*sorted[1] do k=k+1 end
+        return k
+    end
+
+    -- The walk steps expected before the first candidate, the jobs (each
+    -- path for each row, `shares` the rows' shares or their count) taking
+    -- turns as R.new runs them. The schedule repeats every EVERY turns
+    -- per job outside the tier (the tier's yields are all but equal); a
+    -- Poisson wait is summed over one period of it.
+    function R.expected_steps(paths,shares,quantum)
+        if type(shares)=='number' then
+            local n=shares;shares={}
+            for i=1,n do shares[i]=1 end
         end
-        if #rates==0 then return math.huge end
-        -- One cycle of turns: steps spent while no candidate came, and the
-        -- chance none came.
+        local yields={}
+        for _,path in ipairs(paths)do
+            local y=yield(path,R.plan(path))
+            for _,s in ipairs(shares)do yields[#yields+1]=y*s end
+        end
+        if #yields==0 then return math.huge end
+        local sorted={}
+        for k,i in ipairs(by_yield(yields))do sorted[k]=yields[i]end
+        local top=tier(sorted)
         local spent,alive=0,1
-        for _,rate in ipairs(rates)do
+        local function turn(rate)
             if rate>0 then
                 local none=math.exp(-rate*quantum)
                 spent=spent+alive*(1-none)/rate
                 alive=alive*none
             else spent=spent+alive*quantum end
+        end
+        if top==#sorted then
+            for k=1,top do turn(sorted[k])end
+        else
+            local at=0
+            for t=1,EVERY*(#sorted-top)do
+                if t%EVERY==0 then turn(sorted[top+t/EVERY])
+                else at=at%top+1;turn(sorted[at])end
+            end
         end
         if alive>=1 then return math.huge end
         return spent/(1-alive)
@@ -403,37 +443,63 @@ return function(Math)
         return j
     end
 
-    -- spec: {paths, rows={{row, seed_position}}, others={seed positions of
-    -- rows an "every operation" filter checks}, planet, random=function()
+    -- spec: {paths, rows={{row, seed_position, share=optional share of
+    -- seeds the accept check passes for the row}}, others={seed positions
+    -- of rows an "every operation" filter checks}, planet, random=function()
     -- returning a 32-bit start, accept=optional function(seed, row),
     -- checkpoint=optional function called before each job is set up}. Jobs
-    -- take turns of `quantum` walk steps.
+    -- take turns of `quantum` walk steps, by yield (EVERY and TIER above).
     function R.new(spec)
-        local jobs={}
+        local created,yields={},{}
         local checkpoint=spec.checkpoint or function()end
         for _,path in ipairs(spec.paths)do
             for _,row in ipairs(spec.rows)do
                 checkpoint()
-                jobs[#jobs+1]=job(path,row.row,row.seed_position,spec.planet,spec.random(),spec.others or {},spec.paths,
+                local j=job(path,row.row,row.seed_position,spec.planet,spec.random(),spec.others or {},spec.paths,
                     spec.accept)
+                created[#created+1]=j;yields[#yields+1]=yield(path,j.root,row.share)
             end
         end
+        local jobs={}
+        for k,i in ipairs(by_yield(yields))do jobs[k]=created[i];created[i].yield=yields[i]end
         local quantum=spec.quantum or 4096
-        local turn,left=1,quantum
+        -- The job taking the turn (an index in jobs, best first), the steps
+        -- left in it, the turns started, and the last tier job and other
+        -- job given one.
+        local turn,left,turns,at,other=nil,0,0,0,0
         local chain={jobs=jobs,steps=0}
+        local sorted={}
         -- Up to `budget` walk steps in all; a candidate seed, or nil with
         -- done=true when every job is exhausted.
         function chain.next(budget)
             while #jobs>0 and budget>0 do
-                if turn>#jobs then turn=1 end
+                if not turn then
+                    turns,left=turns+1,quantum
+                    for k,j in ipairs(jobs)do sorted[k]=j.yield end
+                    for k=#jobs+1,#sorted do sorted[k]=nil end
+                    local top=tier(sorted)
+                    if top<#jobs and turns%EVERY==0 then
+                        other=other+1
+                        if other<=top or other>#jobs then other=top+1 end
+                        turn=other
+                    else
+                        at=at+1
+                        if at>top then at=1 end
+                        turn=at
+                    end
+                end
                 local j=jobs[turn]
                 local before=j.steps
                 local seed,done=j.next(math.min(budget,left))
                 local spent=j.steps-before
                 budget,left,chain.steps=budget-spent,left-spent,chain.steps+spent
                 if seed then return seed end
-                if done then table.remove(jobs,turn);left=quantum
-                elseif left<=0 then turn,left=turn+1,quantum end
+                if done then
+                    table.remove(jobs,turn)
+                    if other>=turn then other=other-1 end
+                    if at>=turn then at=at-1 end
+                    turn=nil
+                elseif left<=0 then turn=nil end
             end
             return nil,#jobs==0
         end
