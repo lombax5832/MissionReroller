@@ -44,6 +44,7 @@ dofile(arg[3])
 local tick=up(update,'tick')
 local ready,advance=up(tick,'on_prediction_ready'),up(tick,'advance_prediction_search')
 local Planet,Search,SeedSolver=up(ready,'Planet'),up(ready,'Search'),up(ready,'SeedSolver')
+local FilterRules=up(ready,'FilterRules')
 
 local game=ffi.cast('uint8_t*',tonumber(fixture.game));local board=tonumber(fixture.board)
 local planet=u(read(board+O.board.selection,8),4);assert(planet<512,'No viewed planet')
@@ -158,7 +159,7 @@ local function before(r)
     end
     local frames=0
     repeat
-        E.update(snapshot,r.difficulty,r.scope,{required=r.required,constellations=r.constellations,objectives=r.objectives},daynight)
+        E.update(snapshot,r.difficulty,r.scope,FilterRules.new({required=r.required,constellations=r.constellations,objectives=r.objectives}),daynight)
         frames=frames+1
     until E.view() or frames>100000
     return E.view(),frames

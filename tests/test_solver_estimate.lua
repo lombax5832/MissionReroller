@@ -4,6 +4,7 @@
 -- restarting the paths or retargeting the input read, no seed possible,
 -- unavailable, and a new snapshot dropping what was kept.
 local make=dofile(arg[1])
+local Rules=dofile((arg[1]:gsub('solver_estimate%.lua$','filter_rules.lua')))
 local now=0
 local function clock()return now end
 -- Each read and each solver checkpoint costs 1 ms of the clock.
@@ -34,7 +35,7 @@ local function request(families,extra)
     local r={required={},constellations={groups={}},objectives={groups={}}}
     for _,f in ipairs(families)do r.required[f]=true end
     for k,v in pairs(extra or {})do r[k]=v end
-    return r
+    return Rules.new(r)
 end
 -- Work until the estimate is ready, counting updates.
 local function settle(r,daynight,scope)

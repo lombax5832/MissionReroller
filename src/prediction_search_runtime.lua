@@ -5,6 +5,7 @@
 local M,emit,read,u,snapshot,config=host.M,host.emit,host.read,host.u,host.snapshot,host.config
 local reroll_session,O,map=host.reroll_session,host.O,host.map
 local Search,Planet,make_search_job,DayNight=lib.Search,lib.Planet,lib.make_search_job,lib.DayNight
+local FilterRules=lib.FilterRules
 local ExternalEdits,SideObjectives=lib.ExternalEdits,lib.SideObjectives
 local SeedSolver,predict_identity=lib.SeedSolver,lib.predict_identity
 local bind_constellations,on_existing_match,on_search_match=hooks.bind_constellations,hooks.on_existing_match,hooks.on_search_match
@@ -38,45 +39,20 @@ local function search_clock()
     end
     return precise and precise() or api.time()
 end
-local function request_key(difficulty,required,modifiers,constellations,scope,time,excluded,objectives)
-    local parts={'d'..difficulty,'r'..(scope and scope.region or 'all'),'t'..(time or 'any')}
-    for id in pairs(required)do parts[#parts+1]='m'..id end
-    for id in pairs(excluded)do parts[#parts+1]='x'..id end
-    for id,mode in pairs(modifiers)do parts[#parts+1]=string.format('o%u:%s',id,mode)end
-    for group,tags in pairs(constellations and constellations.groups or {})do
-        for tag,mode in pairs(tags)do parts[#parts+1]='c'..group..':'..tag..':'..mode end
-    end
-    for group,rows in pairs(objectives and objectives.groups or {})do
-        for row,mode in pairs(rows)do parts[#parts+1]=string.format('s%d:%u:%s',group,row,mode)end
-    end
-    table.sort(parts);return table.concat(parts,',')
-end
 on_prediction_ready=function(s,definitions,now)
     assert(definitions,'Missing captured definitions')
     local request=reroll_session.view().request or {difficulty=10,required={[1]=true,[2]=true,[3]=true}}
-    local required={};for id,value in pairs(request.required)do required[id]=value end
-    local excluded={};for id,value in pairs(request.excluded or {})do excluded[id]=value end
-    local modifiers={};for id,value in pairs(request.modifiers or {})do modifiers[id]=value end
+    -- The request's Filters, copied once (src/filter_rules.lua).
+    local rules=FilterRules.new(request)
+    local required,constellations,objectives=rules.required,rules.constellations,rules.objectives
     local limit=request.limit or default_limit
     local scope=Search.scope(request.scope)
     reroll_session.report(nil)
-    local constellations
-    if request.constellations and next(request.constellations.groups)then
-        if not bind_constellations then reroll_session.finish('search_failed');emit('FILTER_BLOCKED Constellation filters unavailable');return end
-        constellations={groups={}}
-        for group,tags in pairs(request.constellations.groups)do
-            local copy={};for tag,value in pairs(tags)do copy[tag]=value end
-            constellations.groups[group]=copy
-        end
+    if constellations and not bind_constellations then
+        reroll_session.finish('search_failed');emit('FILTER_BLOCKED Constellation filters unavailable');return
     end
-    local objectives
-    if request.objectives and next(request.objectives.groups)then
-        if not bind_objectives then reroll_session.finish('search_failed');emit('FILTER_BLOCKED Side objective filters unavailable');return end
-        objectives={groups={}}
-        for group,rows in pairs(request.objectives.groups)do
-            local copy={};for row,value in pairs(rows)do copy[row]=value end
-            objectives.groups[group]=copy
-        end
+    if objectives and not bind_objectives then
+        reroll_session.finish('search_failed');emit('FILTER_BLOCKED Side objective filters unavailable');return
     end
     -- The Day / Night filter checks the viewed planet's sky (src/day_night.lua).
     local daynight
@@ -95,7 +71,7 @@ on_prediction_ready=function(s,definitions,now)
     end
     local validate_search_request=hooks.validate_search_request
     if validate_search_request then
-        local ok,err=pcall(validate_search_request,s,request)
+        local ok,err=pcall(validate_search_request,s,request,rules)
         if not ok then reroll_session.finish('search_failed');emit('FILTER_BLOCKED '..tostring(err));return end
     end
     if M.dialog_enabled and on_existing_match then
@@ -118,7 +94,7 @@ on_prediction_ready=function(s,definitions,now)
         -- An operation another mod edited (s.external) holds missions no seed
         -- gives; it is never offered as the match.
         local existing=Search.find({operations=ExternalEdits.without(s.decoded.operations,s.external)},
-            request.difficulty,required,modifiers,constellations,scope,daynight and daynight.accepts,excluded,objectives)
+            request.difficulty,rules,scope,daynight and daynight.accepts)
         if existing then reroll_session.progress(0);on_existing_match(s,existing,now);return end
     end
     -- A city has one operation per difficulty. While it is in progress no
@@ -134,7 +110,7 @@ on_prediction_ready=function(s,definitions,now)
         local result=Planet.capture(frozen_read,u,api.pointer,game)(s,definitions)
         assert(ExternalEdits.composition_passes(result,s.external) and result.independent_bases,'Frozen baseline prediction mismatch')
     end
-    local key=request_key(request.difficulty,required,modifiers,constellations,scope,request.time,excluded,objectives)
+    local key='d'..request.difficulty..',r'..(scope and scope.region or 'all')..','..rules:key()
     local first=(s.seed+1)%4294967296
     local resumed=resume and resume.key==key and resume.planet==s.planet and resume.baseline==s.seed
     if resumed then first=resume.next end
@@ -152,7 +128,7 @@ on_prediction_ready=function(s,definitions,now)
         if SeedSolver then
             local started=search_clock()
             local ok,result,why=pcall(function()
-                local solver,input=planet.solver(definitions,request.difficulty,constellations~=nil or objectives~=nil,
+                local solver,input=planet.solver(definitions,request.difficulty,rules:seeded(),
                     scope and scope.region)
                 if not solver then return nil,input end
                 return SeedSolver.source({solver=solver,input=input,identity=predict_identity,difficulty=request.difficulty,
@@ -180,15 +156,11 @@ on_prediction_ready=function(s,definitions,now)
         end
         -- Search the requested difficulty; confirm a match on the whole board.
         return function(seed)return evaluate(seed,request.difficulty)end,function(seed)return evaluate(seed)end,source
-    end,{seed=first,limit=limit,difficulty=request.difficulty,required=required,excluded=excluded,modifiers=modifiers,
-        constellations=constellations,objectives=objectives,scope=scope,daynight=daynight and daynight.accepts,
+    end,{seed=first,limit=limit,difficulty=request.difficulty,rules=rules,scope=scope,daynight=daynight and daynight.accepts,
         quantum=4096,clock=search_clock,slice=0.016,batch=256,revalidate=1})
     current_search.baseline=s
-    current_search.required=required
-    current_search.excluded=excluded
-    current_search.modifiers=modifiers
-    current_search.constellations=constellations
-    current_search.objectives=objectives
+    -- Publication reads the request back from the job (live_publication_runtime.lua).
+    current_search.rules=rules
     current_search.scope=scope
     current_search.daynight=daynight
     current_search.definitions=definitions
@@ -222,10 +194,10 @@ on_prediction_ready=function(s,definitions,now)
     search_started=now;last_progress=now;max_slice=0;reroll_session.result(nil);reroll_session.advance('search_running')
     wait_started=nil;wait_total=0;last_wait_poll=-math.huge
     local names={};for id,opt in ipairs(Search.options)do if required[id]then names[#names+1]=opt.name end end
-    local modifier_rules={};for id,mode in pairs(modifiers)do modifier_rules[#modifier_rules+1]=string.format('%u:%s',id,mode)end
+    local modifier_rules={};for id,mode in pairs(rules.modifiers)do modifier_rules[#modifier_rules+1]=string.format('%u:%s',id,mode)end
     table.sort(modifier_rules);emit('LUA_SEARCH_MODIFIERS '..table.concat(modifier_rules,','))
-    if next(excluded)then
-        local list={};for id,opt in ipairs(Search.options)do if excluded[id]then list[#list+1]=opt.name end end
+    if rules.excluded then
+        local list={};for id,opt in ipairs(Search.options)do if rules.excluded[id]then list[#list+1]=opt.name end end
         emit('LUA_SEARCH_EXCLUDED_MISSIONS '..table.concat(list,' + '))
     end
     if constellations then
@@ -340,7 +312,7 @@ advance_prediction_search=function(action,now)
         if job.status=='matched' then
             resume=nil
             local missions={};for _,mission in ipairs(job.operation.missions)do missions[#missions+1]=string.format('%d/%u/level%d',mission.native_type,mission.seed,mission.level_index)end
-            if job.constellations then
+            if job.rules.constellations then
                 local tags={}
                 for _,mission in ipairs(job.operation.missions)do
                     local list={};for tag in pairs(mission.tags or {})do list[#list+1]=tag end
@@ -349,7 +321,7 @@ advance_prediction_search=function(action,now)
                 for i,mission in ipairs(job.operation.missions)do tags[i]=mission.native_type..':'..tags[i]end
                 emit('LUA_SEARCH_MATCH_CONSTELLATIONS row='..job.operation.row..' missions='..table.concat(tags,','))
             end
-            if job.objectives then
+            if job.rules.objectives then
                 local lists={}
                 for _,mission in ipairs(job.operation.missions)do
                     lists[#lists+1]=mission.native_type..':['..SideObjectives.describe(mission.objective_list or {})..']'

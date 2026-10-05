@@ -27,6 +27,11 @@ The words this project uses for its own concepts. Game facts are in
   makes the request for the reroll session and builds the panel's model,
   status included. Pure: the dialog runtime reads the game and hands it
   plain tables.
+- **Filter rules** (`src/filter_rules.lua`, `lib.FilterRules`): the Filters
+  of one request as one value. `FilterRules.new(request)` copies them once
+  and drops the empty parts; the catalogue checks, `Search.find`, the search
+  job and publication take the value whole. It offers `check(options)`,
+  `count()`, `seeded()` (constellation or side-objective rules) and `key()`.
 - **Reroll session** (`src/reroll_session.lua`): one run from the player's
   request to its outcome. It is the only writer of the run's **phase**.
   - **Phase**: where the run stands (`waiting_for_stable_inputs`,

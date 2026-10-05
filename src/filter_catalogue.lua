@@ -272,12 +272,15 @@ local function objectives_possible(group,rules)
     end
     return false,why
 end
--- time, when given, is the Day / Night filter's side and counts as a rule.
--- excluded holds the mission families no mission of the operation may be;
--- each counts as a rule and takes no slot.
--- objectives holds side-objective groups like constellations: row ->
--- 'require' or 'exclude'; one rule group counts as a rule.
-function C.validate(catalogue,required,modifiers,constellations,time,excluded,objectives)
+-- rules: src/filter_rules.lua, or any table with its fields. Its time,
+-- when given, is the Day / Night filter's side and counts as a rule.
+-- Excluded mission families, which no mission of the operation may be,
+-- each count as a rule and take no slot. Side-objective groups are like
+-- constellation groups: row -> 'require' or 'exclude'; one rule group
+-- counts as a rule.
+function C.validate(catalogue,rules)
+    local required,modifiers,constellations,time=rules.required,rules.modifiers,rules.constellations,rules.time
+    local excluded,objectives=rules.excluded,rules.objectives
     local n,required_modifiers,total=0,0,0
     if time~=nil then assert(time=='day' or time=='night','Invalid time of day');total=1 end
     for id,value in pairs(required)do
@@ -316,9 +319,12 @@ function C.validate(catalogue,required,modifiers,constellations,time,excluded,ob
         if next(rows)then total=total+1 end
     end
     assert(total>0,'Choose at least one mission, modifier rule, constellation, side objective or time of day')
-    local possible,reason=C.possible(catalogue,required,modifiers,constellations,excluded,objectives);assert(possible,reason)
+    local possible,reason=C.possible(catalogue,rules);assert(possible,reason)
 end
-function C.possible(catalogue,required,modifiers,constellations,excluded,objectives)
+-- Whether the rules can be met here, with the reason when not; time is not checked.
+function C.possible(catalogue,rules)
+    local required,modifiers,constellations=rules.required,rules.modifiers,rules.constellations
+    local excluded,objectives=rules.excluded,rules.objectives
     local n=0;for _ in pairs(required)do n=n+1 end
     if n>catalogue.slots then return false,'No mission slots remain; uncheck a mission first' end
     -- Every operation holds at least one mission, so excluding every

@@ -1,6 +1,7 @@
 local root=arg[1];local ffi=require('ffi')
 local reads=dofile(root..'/frozen_prediction_reads.lua')
 local new=dofile(root..'/prediction_search_job.lua')(reads,dofile(root..'/seed_search.lua'),dofile(root..'/search_session.lua'))
+local Rules=dofile(root..'/filter_rules.lua')
 local memory={[65536]='A',[65537]='B'};local calls=0
 local function read(address,size)
     calls=calls+1;local value=memory[tonumber(ffi.cast('uintptr_t',address))];assert(value and #value==size);return value
@@ -16,7 +17,7 @@ local function make()
             assert(take(65536,1)=='A');take(65537,1)
             return operation(seed==12 and {0,22,7} or {0,28,7})
         end
-    end,{seed=10,limit=5,difficulty=10,required={[1]=true,[2]=true,[3]=true},quantum=2})
+    end,{seed=10,limit=5,difficulty=10,rules=Rules.new({required={[1]=true,[2]=true,[3]=true}}),quantum=2})
 end
 local job=make();local frames=0
 while job.status=='running' do
@@ -80,7 +81,7 @@ local function timed(limit,batch)
         take(65537,1)
         return function(seed)now=now+cost;return board(seed,{2})end,
             function(seed)completed[#completed+1]=seed;return board(seed,complete_rows)end
-    end,{seed=10,limit=limit,difficulty=10,required={[1]=true,[2]=true,[3]=true},quantum=64,
+    end,{seed=10,limit=limit,difficulty=10,rules=Rules.new({required={[1]=true,[2]=true,[3]=true}}),quantum=64,
         clock=function()return now end,slice=0.016,batch=batch or 256,revalidate=1})
 end
 job=timed(5000);before=calls;job:step(function()end)
@@ -112,7 +113,7 @@ memory[65537]='B';target=30;job=timed(5000);job:step(function()end);memory[65537
 while job.status=='running' do job:step(function()end)end
 assert(job.status=='failed' and not job.seed and not job.operation,'A match on changed inputs is rejected')
 memory[65537]='B';target=nil
-assert(not pcall(timed,5000,0) and not pcall(new,read,function()end,function()end,{seed=1,limit=1,difficulty=10,required={[1]=true},clock=1}))
+assert(not pcall(timed,5000,0) and not pcall(new,read,function()end,function()end,{seed=1,limit=1,difficulty=10,rules=Rules.new({required={[1]=true}}),clock=1}))
 job=make();job:step(function()end);job:cancel('User cancelled');before=calls
 assert(job:step(function()end)=='cancelled' and calls==before)
 local frozen=reads(read,function()end,{entries=1,bytes=1})

@@ -76,7 +76,7 @@ up(advance,'transaction',nil,true);session.finish('publication_failed')
 -- publish again after a completed attempt without a process restart.
 reset();MissionRerollerExperiment.dialog_enabled=true
 p.missions={{native_type=28,seed=1,level_index=1}};actual.missions=p.missions
-job.required={[4]=true}
+job.rules={required={[4]=true}}
 local prior=writes
 match(job,0);advance('tick',1);assert(writes==prior+1 and MissionRerollerExperiment.status=='publication_test_passed')
 live=before;canonical=11
@@ -84,17 +84,17 @@ match(job,2);advance('tick',3);assert(writes==prior+2 and MissionRerollerExperim
 local existing=up(up(tick,'on_prediction_ready'),'on_existing_match')
 session.advance('waiting_for_stable_inputs');existing(after,p,4);advance('tick',4)
 assert(writes==prior+2 and MissionRerollerExperiment.status=='publication_test_passed','Existing match must select without seed writes')
-reset();job.modifiers={[0x1101e25c]='require'}
+reset();job.rules.modifiers={[0x1101e25c]='require'}
 match(job,0);assert(writes==prior+2 and MissionRerollerExperiment.status=='publication_blocked','Publication must enforce custom modifier rules')
-job.modifiers={[0x1101e25c]='exclude'}
+job.rules.modifiers={[0x1101e25c]='exclude'}
 match(job,0);advance('tick',1);assert(writes==prior+3 and MissionRerollerExperiment.status=='publication_test_passed')
-reset();job.modifiers=nil;job.constellations={groups={[4]={[4]='accept'}}}
+reset();job.rules.modifiers=nil;job.rules.constellations={groups={[4]={[4]='accept'}}}
 match(job,0);assert(writes==prior+3 and MissionRerollerExperiment.status=='publication_blocked','Unresolved constellations must not publish')
 p.missions[1].tags={[2]=true}
 match(job,0);assert(writes==prior+3 and MissionRerollerExperiment.status=='publication_blocked','Publication must enforce constellation rules')
 p.missions[1].tags={[4]=true}
 match(job,0);advance('tick',1);assert(writes==prior+4 and MissionRerollerExperiment.status=='publication_test_passed')
-job.constellations=nil;p.missions[1].tags=nil;prior=prior+1
+job.rules.constellations=nil;p.missions[1].tags=nil;prior=prior+1
 reset();job.scope={region=1};local unchanged=writes
 match(job,0);assert(writes==unchanged and MissionRerollerExperiment.status=='publication_blocked','Publication must enforce the city')
 job.scope=nil

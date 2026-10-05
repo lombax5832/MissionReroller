@@ -7,20 +7,6 @@
 -- the paths are built restarts them; one while the inputs are read lets the
 -- read finish for the new request.
 return function(SeedSolver)
-    -- Equal requests, equal text.
-    local function canon(v)
-        if type(v)~='table' then return tostring(v)end
-        local keys={}
-        for k in pairs(v)do keys[#keys+1]=k end
-        table.sort(keys,function(a,b)return tostring(a)<tostring(b)end)
-        local parts={}
-        for _,k in ipairs(keys)do parts[#parts+1]=tostring(k)..'='..canon(v[k])end
-        return '{'..table.concat(parts,',')..'}'
-    end
-    local function has_rules(groups)
-        for _,rules in pairs(groups and groups.groups or {})do if next(rules)then return true end end
-        return false
-    end
     -- o: bind(read, s) -> planet model (planet_model.lua) of s's planet,
     -- read, clock, slice (seconds per frame), options (Search.options),
     -- row_of, identity (operation_identity.lua), rate() (walk steps per
@@ -45,10 +31,10 @@ return function(SeedSolver)
             end
             w.stage='paths'
             if not cached.solver then return {unavailable=cached.input}end
-            local request=w.request
+            local rules=w.rules
             local source,why=SeedSolver.source({solver=cached.solver,input=cached.input,identity=o.identity,
-                difficulty=w.difficulty,required=request.required or {},options=o.options,
-                constellations=request.constellations,objectives=request.objectives,scope=w.scope,
+                difficulty=w.difficulty,required=rules.required,options=o.options,
+                constellations=rules.constellations,objectives=rules.objectives,scope=w.scope,
                 daynight=w.daynight,row_of=o.row_of,checkpoint=pause,estimate_only=true})
             if not source then
                 -- No path, or no operation ID Day / Night passes, and no
@@ -68,23 +54,24 @@ return function(SeedSolver)
             local e=source.estimate
             return {match=e.match,steps=e.steps}
         end
-        -- s: the snapshot; request: filter_request.lua to_request; daynight:
-        -- {key, accepts} while a side is chosen. Works for one slice.
-        function self.update(s,difficulty,scope,request,daynight)
-            local seeded=has_rules(request.constellations) or has_rules(request.objectives)
+        -- s: the snapshot; rules: the request's filter rules
+        -- (src/filter_rules.lua); daynight: {key, accepts} while a side is
+        -- chosen. Works for one slice.
+        function self.update(s,difficulty,scope,rules,daynight)
+            local seeded=rules:seeded()
             local ikey=table.concat({s.fingerprint,difficulty,scope and scope.region or 'planet',seeded and 'seeded' or 'missions'},':')
             -- Inputs and results of an earlier snapshot or view are dropped.
             local view=table.concat({s.fingerprint,difficulty,scope and scope.region or 'planet'},':')
             if view~=inputs_key then inputs,results,inputs_key={},{},view end
-            key=ikey..'|'..canon(request)..'|'..(daynight and daynight.key or '')
+            key=ikey..'|'..rules:key()..'|'..(daynight and daynight.key or '')
             if results[key]then return end
             if worker and worker.key~=key then
                 if worker.stage=='inputs' and worker.inputs_key==ikey then
-                    worker.key,worker.request,worker.daynight=key,request,daynight and daynight.accepts
+                    worker.key,worker.rules,worker.daynight=key,rules,daynight and daynight.accepts
                 else worker=nil end
             end
             if not worker then
-                local w={key=key,inputs_key=ikey,s=s,difficulty=difficulty,scope=scope,seeded=seeded,request=request,
+                local w={key=key,inputs_key=ikey,s=s,difficulty=difficulty,scope=scope,seeded=seeded,rules=rules,
                     daynight=daynight and daynight.accepts,spent=0}
                 w.thread=coroutine.create(function()
                     local ok,value=pcall(work,w)
