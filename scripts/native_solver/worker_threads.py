@@ -3,7 +3,7 @@
 Research only (docs/NATIVE_SOLVER_RESEARCH.md). The DLL is loaded into this
 process only; the game is never started or touched.
 
-    python -B scripts/native_solver/worker_threads.py <capture.lua> [mode] [steps] [thread counts] [thread|pool]
+    python -B scripts/native_solver/worker_threads.py <capture.lua> [mode] [steps] [thread counts] [thread|pool] [worker GC pause, collecting after set-up]
 """
 import ctypes as c
 import os
@@ -20,6 +20,7 @@ def main():
     steps = sys.argv[3] if len(sys.argv) > 3 else '1000000'
     counts = sys.argv[4] if len(sys.argv) > 4 else '1,2,3,4,6,12'
     start = sys.argv[5] if len(sys.argv) > 5 else 'thread'
+    gc_pause = sys.argv[6] if len(sys.argv) > 6 else ''
     dll_path = os.environ.get('HD2_LUA51_DLL') or str(Path(os.environ['HD2_GAME_ROOT']) / 'bin/lua51.dll')
     dll = c.CDLL(dll_path)
     dll.luaL_newstate.restype = c.c_void_p
@@ -32,7 +33,7 @@ def main():
     state = dll.luaL_newstate()
     dll.luaL_openlibs(state)
     script = HERE / 'worker_threads.lua'
-    args = [script.as_posix(), REPO.as_posix(), capture.as_posix(), mode, steps, counts, start]
+    args = [script.as_posix(), REPO.as_posix(), capture.as_posix(), mode, steps, counts, start, gc_pause]
     chunk = ('arg = {' + ', '.join('[%d] = %r' % (i, a) for i, a in enumerate(args)) + '}\n').encode()
     chunk += script.read_bytes()
     status = dll.luaL_loadbuffer(state, chunk, len(chunk), b'@worker_threads.lua')

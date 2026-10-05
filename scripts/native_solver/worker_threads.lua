@@ -10,6 +10,7 @@
 -- started at an FFI callback the worker created in itself. Results come
 -- back through FFI memory; candidates must equal this VM's.
 local repo,capture,mode,limit,counts,start=arg[1],arg[2],arg[3] or 'both',tonumber(arg[4]) or 1000000,arg[5] or '1,2,4,8',arg[6] or 'thread'
+local gc_pause=tonumber(arg[7])
 local ffi=require('ffi')
 ffi.cdef[[
 typedef struct lua_State lua_State;
@@ -26,6 +27,9 @@ uint32_t WaitForMultipleObjects(uint32_t n, void *const *handles, int all, uint3
 int CloseHandle(void *h);
 int TrySubmitThreadpoolCallback(void *callback, void *context, void *environment);
 void Sleep(uint32_t ms);
+typedef struct { void *base; void *alloc_base; uint32_t alloc_protect; uint16_t partition; size_t size;
+    uint32_t state; uint32_t protect; uint32_t type; } MEMORY_BASIC_INFORMATION;
+size_t VirtualQuery(const void *address, MEMORY_BASIC_INFORMATION *info, size_t length);
 ]]
 local C=ffi.C
 
@@ -36,6 +40,20 @@ local qpc,qpf=ffi.new('int64_t[1]'),ffi.new('int64_t[1]')
 C.QueryPerformanceFrequency(qpf)
 local function now()C.QueryPerformanceCounter(qpc);return tonumber(qpc[0])/tonumber(qpf[0])end
 
+-- Address space below 2 GB, where a non-GC64 LuaJIT keeps every heap:
+-- reserved or committed MB, free MB and the largest free block in MB.
+local function low_memory()
+    local info=ffi.new('MEMORY_BASIC_INFORMATION')
+    local at,used,free,largest=0x10000,0,0,0
+    while at<0x80000000 do
+        if C.VirtualQuery(ffi.cast('void *',at),info,ffi.sizeof(info))==0 then break end
+        local base=tonumber(ffi.cast('intptr_t',info.base))
+        local size=math.min(tonumber(info.size),0x80000000-base)
+        if info.state==0x10000 then free=free+size;largest=math.max(largest,size)else used=used+size end
+        at=base+tonumber(info.size)
+    end
+    return string.format('used %.1f MB, free %.1f MB (largest %.1f MB)',used/2^20,free/2^20,largest/2^20),used
+end
 local function read(path)local f=assert(io.open(path,'rb'));local s=f:read('*a');f:close();return s end
 local here=repo..'/'
 local root=here..'src'
@@ -91,6 +109,7 @@ local function serialize(v,out)
 end
 local function text(v)local out={};serialize(v,out);return table.concat(out)end
 local paths_text=text(paths)
+print(string.format('paths: %d, as text %.0f KB per worker',#paths,#paths_text/1024))
 
 -- One job run here for `limit` steps: steps, candidates, seed sum.
 local function run(chain_module,path_list,job)
@@ -118,13 +137,15 @@ print(string.format('main VM (game lua51.dll, %s): %d jobs, %d steps in %.3f s =
 
 -- The worker: its own VM, given module sources, the paths and its jobs.
 local WORKER=[==[
-local math_source,chain_source,paths_text,jobs,planet,limit,out,done_address,index=...
+local math_source,chain_source,paths_text,jobs,planet,limit,out,done_address,index,peak_address=...
 local ffi=require('ffi')
 local Math=assert(loadstring(math_source,'=seed_solver_math.lua'))()
 local Chain=assert(loadstring(chain_source,'=seed_solver_chain.lua'))()(Math)
 local paths=assert(loadstring('return '..paths_text))()
 local results=ffi.cast('double *',out)
+local peaks=ffi.cast('double *',peak_address)
 local function body()
+    peaks[index]=collectgarbage('count')
     for _,job in ipairs(jobs)do
         local chain=Chain.new({paths={paths[job.path]},rows={{row=job.row,seed_position=job.seed_position}},
             planet=planet,random=function()return job.s0 end})
@@ -133,6 +154,8 @@ local function body()
         while j.steps<limit do
             local seed,done=j.next(math.min(4096,limit-j.steps))
             if seed then n=n+1;sum=(sum+seed)%4294967296 elseif done then break end
+            local kb=collectgarbage('count')
+            if kb>peaks[index]then peaks[index]=kb end
         end
         results[job.k*3],results[job.k*3+1],results[job.k*3+2]=j.steps,n,sum
     end
@@ -162,6 +185,8 @@ for threads in counts:gmatch('%d+')do
     threads=tonumber(threads)
     local results=ffi.new('double[?]',#jobs*3+3)
     local done=ffi.new('int32_t[?]',threads)
+    local peaks=ffi.new('double[?]',threads)
+    local low_before,used_before=low_memory()
     local states,handles={},ffi.new('void *[?]',threads)
     local t_setup=now()
     heap_kb=0
@@ -174,17 +199,23 @@ for threads in counts:gmatch('%d+')do
         assert(L~=nil,'luaL_newstate failed')
         C.luaL_openlibs(L)
         -- The worker chunk with its arguments bound as a prelude.
-        local prelude=string.format('local args={%q,%q,%q,%s,%d,%d,%.17g,%.17g,%d}\nreturn (function(...)\n',
-            math_source,chain_source,paths_text,text(mine),Cap.planet,limit,tonumber(ffi.cast('intptr_t',results)),tonumber(ffi.cast('intptr_t',done)),t-1)
+        local prelude=string.format('local args={%q,%q,%q,%s,%d,%d,%.17g,%.17g,%d,%.17g}\nreturn (function(...)\n',
+            math_source,chain_source,paths_text,text(mine),Cap.planet,limit,tonumber(ffi.cast('intptr_t',results)),tonumber(ffi.cast('intptr_t',done)),t-1,tonumber(ffi.cast('intptr_t',peaks)))
         local chunk=prelude..WORKER..'\nend)(unpack(args))'
         check(L,C.luaL_loadbuffer(L,chunk,#chunk,'=worker'),'worker load')
         check(L,C.lua_pcall(L,0,2,0),'worker setup')
+        if gc_pause then
+            -- Drop the set-up's garbage (the chunk, the path text) and
+            -- collect sooner: LUA_GCCOLLECT, then LUA_GCSETPAUSE.
+            C.lua_gc(L,2,0);C.lua_gc(L,6,gc_pause)
+        end
         local entry=ffi.cast('void *',ffi.cast('intptr_t',C.lua_tonumber(L,-2)))
         local pool=ffi.cast('void *',ffi.cast('intptr_t',C.lua_tonumber(L,-1)))
         states[t]={L=L,entry=entry,pool=pool}
         heap_kb=(heap_kb or 0)+C.lua_gc(L,3,0)
     end
     t_setup=now()-t_setup
+    local _,used_setup=low_memory()
     local t1=now()
     if start=='pool' then
         for t=1,threads do assert(C.TrySubmitThreadpoolCallback(states[t].pool,nil,nil)~=0,'TrySubmitThreadpoolCallback failed')end
@@ -203,12 +234,19 @@ for threads in counts:gmatch('%d+')do
         C.WaitForMultipleObjects(threads,handles,1,0xffffffff)
     end
     local seconds=now()-t1
+    local _,used_walk=low_memory()
     local after_kb=0
     for t=1,threads do
         after_kb=after_kb+C.lua_gc(states[t].L,3,0)
         if start~='pool' then C.CloseHandle(handles[t-1])end
         C.lua_close(states[t].L)
     end
+    collectgarbage()
+    local _,used_closed=low_memory()
+    local peak=0
+    for t=0,threads-1 do peak=math.max(peak,peaks[t])end
+    print(string.format('   below 2 GB before: %s; workers added %.1f MB after set-up, %.1f MB after the walk, %.1f MB still held after closing; peak worker heap %.0f KB',
+        low_before,(used_setup-used_before)/2^20,(used_walk-used_before)/2^20,(used_closed-used_before)/2^20,peak))
     local mismatches=0
     for k,e in ipairs(expected)do
         local i=(k-1)*3
