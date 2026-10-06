@@ -378,6 +378,16 @@ do
     for _,item in ipairs(m.items)do
         if item.id=='objective:2:'..artillery then assert(item.enabled and item.reason:find('Too many'),item.reason)end
     end
+    -- A right click goes to excluded first, then skips the impossible requirement.
+    local function back(a)assert(o:toggle(a,c,true)==true,a)end
+    back('objective:2:'..artillery);assert(o.objectives[2][artillery]=='exclude','Reverse excludes first')
+    back('objective:2:'..artillery);assert(o.objectives[2][artillery]==nil,'Reverse skips the impossible requirement')
+    -- An exclusion the seed solver refuses is skipped to required.
+    o:model(c,fresh({reachable={ok=true,tag=function()return true end,
+        objective=function(_,row,mode)return not (row==broadcast and mode=='exclude')end}}))
+    back('objective:2:'..broadcast);assert(o.objectives[2][broadcast]=='require','Reverse skips a refused exclusion')
+    back('objective:2:'..broadcast);assert(o.objectives[2][broadcast]==nil,'Required goes back to any')
+    o:model(c,fresh())
     act('objective:2:'..artillery);assert(o.objectives[2][artillery]=='exclude','Skips the impossible requirement')
     act('objective:2:'..broadcast);assert(o.objectives[2][broadcast]=='require','Tactical slot is separate')
     o:validate(c)
@@ -416,4 +426,41 @@ do
     m=any:model(terminids,fresh({reachable={ok=true,tag=function()return false end,objective=function()return false end}}))
     for _,item in ipairs(m.items)do assert(item.enabled,'The any-mission group is not solved')end
 end
-print('Filter request: toggles, conflicts, groups, pruning, pages, request copy, status precedence, side objectives, reachability and time of day passed')
+-- A right click (reverse) cycles any, excluded, required (accepted),
+-- skipping a mode that is ruled out the same way as a left click.
+do
+    local x=R.new(options,C,labels)
+    local function back(action)assert(x:toggle(action,terminids,true)==true,tostring(action))end
+    back(2);assert(x.excluded[2] and not x.selected[2],'Any goes back to excluded')
+    back(2);assert(x.selected[2] and not x.excluded[2],'Excluded goes back to required')
+    back(2);assert(not x.selected[2] and not x.excluded[2],'Required goes back to any')
+    -- Democracy, in every operation, cannot be excluded: required instead.
+    back(4);assert(x.selected[4] and not x.excluded[4],'An unexcludable mission skips to required')
+    back(4);assert(not x.selected[4])
+    -- With Nursery required, Survey can be excluded but not required again.
+    x:toggle(9,terminids);back(2);assert(x.excluded[2])
+    back(2);assert(not x.selected[2] and not x.excluded[2],'Excluded skips a required that cannot join')
+    x:toggle('clear',terminids)
+    -- Unchecking a mission backwards discards its rules and marks the section.
+    x:toggle(2,terminids);x:toggle('constellation:2:2',terminids);back(2)
+    assert(not x.selected[2] and x.constellations[2]==nil and x.changed.enemies,'A reverse uncheck marks the section')
+    x:toggle('clear',terminids)
+    local modifier='modifier:'..spores
+    back(modifier);assert(x.modifiers[spores]=='exclude')
+    back(modifier);assert(x.modifiers[spores]=='require')
+    back(modifier);assert(x.modifiers[spores]==nil)
+    x:toggle(2,terminids)
+    back('constellation:2:4');assert(x.constellations[2][4]=='exclude')
+    back('constellation:2:4');assert(x.constellations[2][4]=='accept')
+    back('constellation:2:4');assert(x.constellations[2]==nil)
+    -- A mode the seed solver rules out is skipped backwards too.
+    x:navigate('section:enemies')
+    x:model(terminids,fresh({reachable={ok=true,objective=function()return true end,
+        tag=function(_,tag,mode)return not (tag==4 and mode=='exclude')end}}))
+    back('constellation:2:4');assert(x.constellations[2][4]=='accept','An unreachable exclusion skips to accepted')
+    back('constellation:2:4');assert(x.constellations[2]==nil)
+    x:model(terminids,fresh({reachable={ok=true,objective=function()return true end,
+        tag=function(_,tag,mode)return not (tag==4 and mode=='accept')end}}))
+    back('constellation:2:4');back('constellation:2:4');assert(x.constellations[2]==nil,'Excluded skips an unreachable acceptance')
+end
+print('Filter request: toggles, reverse cycles, conflicts, groups, pruning, pages, request copy, status precedence, side objectives, reachability and time of day passed')

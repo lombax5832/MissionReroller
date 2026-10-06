@@ -171,15 +171,24 @@ function R:can_tag(group,tag,mode)return reachable(self,'tag',group,tag,mode)end
 -- same way, skipping a mode the catalogue rules out; a constellation cycles
 -- accept, exclude, any, skipping a mode the seed solver rules out. A mission click that
 -- discards enemy or side-objective rules marks those sections changed.
+-- reverse (a right click) cycles a row the other way: any, excluded,
+-- required (accepted), skipping a mode that is ruled out the same way.
 -- Returns whether the action was an edit.
-function R:toggle(action,catalogue)
+function R:toggle(action,catalogue,reverse)
     if action=='clear' then
         self.selected={};self.excluded={};self.modifiers={};self.constellations={};self.objectives={};self.time=nil;self.changed={}
     elseif action=='time:any' then self.time=nil
     elseif action=='time:day' or action=='time:night' then self.time=action:sub(6)
     elseif type(action)=='number' then
         local selected,excluded=self.selected,self.excluded
-        if excluded[action]then excluded[action]=nil
+        if reverse then
+            if selected[action]then selected[action]=nil
+            elseif excluded[action]then
+                excluded[action]=nil
+                if self:can_require(action,catalogue)then selected[action]=true end
+            elseif self:can_exclude(action,catalogue)then excluded[action]=true
+            elseif self:can_require(action,catalogue)then selected[action]=true end
+        elseif excluded[action]then excluded[action]=nil
         else
             -- Unchecking drops the mission's constellations before the next step is tried.
             local was=selected[action];selected[action]=nil
@@ -192,13 +201,16 @@ function R:toggle(action,catalogue)
     elseif type(action)=='string' and action:match('^modifier:')then
         local id=tonumber(action:sub(10))
         local modifiers=self.modifiers
-        modifiers[id]=modifiers[id]==nil and 'require' or modifiers[id]=='require' and 'exclude' or nil
+        local mode=modifiers[id]
+        if reverse then modifiers[id]=mode==nil and 'exclude' or mode=='exclude' and 'require' or nil
+        else modifiers[id]=mode==nil and 'require' or mode=='require' and 'exclude' or nil end
     elseif type(action)=='string' and action:match('^constellation:')then
         local target,id=action:match('^constellation:(%d+):(%d+)$')
         target,id=tonumber(target),tonumber(id)
         local tags=self.constellations[target] or {}
         local mode=tags[id]
         local order=mode==nil and {'accept','exclude'} or mode=='accept' and {'exclude'} or {}
+        if reverse then order=mode==nil and {'exclude','accept'} or mode=='exclude' and {'accept'} or {} end
         tags[id]=nil
         for _,next_mode in ipairs(order)do
             if self:can_tag(target,id,next_mode)then tags[id]=next_mode;break end
@@ -210,6 +222,7 @@ function R:toggle(action,catalogue)
         local rows=self.objectives[target] or {}
         local mode=rows[row]
         local order=mode==nil and {'require','exclude'} or mode=='require' and {'exclude'} or {}
+        if reverse then order=mode==nil and {'exclude','require'} or mode=='exclude' and {'require'} or {} end
         rows[row]=nil
         for _,next_mode in ipairs(order)do
             if self:can_objective(target,row,next_mode,catalogue)then rows[row]=next_mode;break end

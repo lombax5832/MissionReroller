@@ -98,15 +98,23 @@ b=P.layout(1920,1080,model('objectives',roles(list(3,'objective:2:'),3),{groups=
 assert(#b.labels==1 and b.labels[1].text=='TACTICAL','Only tactical objectives')
 b=P.layout(1920,1080,model('missions',list(4)));assert(#b.labels==0,'Missions have no labels')
 -- The header after an open section follows its last row by the same space,
--- unless the enemy section has note lines to show.
+-- unless the enemy section has note lines to show. Its cycle hint is one
+-- whenever it has rows.
 local function gap(m)
     local b=P.layout(1920,1080,m);local row=b.rows[#b.rows]
     for i,section in ipairs(b.headers)do if section.id=='section:'..m.section then return row.y-(b.headers[i+1].y+b.headers[i+1].h)end end
 end
 local plain=gap(model('modifiers',list(3,'modifier:')))
-assert(gap(model('enemies',list(3,'constellation:2:'),{groups=three}))==plain,'No gap under enemies without notes')
-assert(gap(model('enemies',list(3,'constellation:2:'),{groups=three,forced='Predator Strain'}))==plain+28,'One note line')
-assert(gap(model('enemies',list(3,'constellation:0:'),{groups=three,forced='Predator Strain',note='Check a mission'}))==plain+48,'Two note lines')
+assert(gap(model('enemies',list(3,'constellation:2:'),{groups=three}))==plain+28,'The cycle hint line')
+assert(gap(model('enemies',list(3,'constellation:2:'),{groups=three,forced='Predator Strain'}))==plain+48,'One note line')
+assert(gap(model('enemies',list(3,'constellation:0:'),{groups=three,forced='Predator Strain',note='Check a mission'}))==plain+68,'Two note lines')
+-- Only filter rows are cycle targets, the ones a right click acts on.
+for _,m in ipairs({model('missions',list(4)),model('modifiers',list(3,'modifier:')),model('enemies',list(3,'constellation:2:'),{groups=three}),
+    model('objectives',list(3,'objective:2:'),{groups=three})})do
+    b=P.layout(1920,1080,m)
+    local rows={};for _,t in ipairs(b.rows)do rows[t]=true end
+    for _,t in ipairs(b.targets)do assert((t.cycle==true)==(rows[t]==true),m.section..': '..tostring(t.id))end
+end
 -- The time of day is no dropdown: three tiles right of its title, inside
 -- its header, at every choice the same.
 b=P.layout(1920,1080,model(nil,{}))
@@ -202,8 +210,8 @@ r.updates=0;panel:show({},{},face,{x=spot.x+5,y=spot.y+5},m);assert(r.updates>0,
 r.updates=0;panel:show({},{},face,{x=spot.x+6,y=spot.y+6},m);assert(r.updates==0,'Movement inside one row does not')
 m.items[1].enabled=false;m.items[1].reason='Incompatible with selected missions or modifier rules'
 panel:show({},{},face,{x=spot.x+5,y=spot.y+5},m)
-assert(r.find('INCOMPATIBLE WITH SELECTED MISSIONS OR MODIFIER RULES') and not r.find('CLICK TO CYCLE: ANY, REQUIRED, EXCLUDED'))
-panel:show({},{},face,nowhere,m);assert(r.find('CLICK TO CYCLE: ANY, REQUIRED, EXCLUDED'),'The reason leaves with the pointer')
+assert(r.find('INCOMPATIBLE WITH SELECTED MISSIONS OR MODIFIER RULES') and not r.find('LEFT/RIGHT CLICK TO CYCLE: ANY, REQUIRED, EXCLUDED'))
+panel:show({},{},face,nowhere,m);assert(r.find('LEFT/RIGHT CLICK TO CYCLE: ANY, REQUIRED, EXCLUDED'),'The reason leaves with the pointer')
 -- A search: the strip appears, only the counter changes per frame, the strip goes again.
 running(m);m.status='Searching seeds';m.tone='busy';m.detail='12 of 1,000,000 seeds searched'
 panel:show({},{},face,nowhere,m)
@@ -221,6 +229,7 @@ m=model('enemies',list(11,'constellation:2:','Constellation'),{groups=three,forc
 panel:show({},{[2]=true},face,nowhere,m)
 assert(r.destroyed==old+1 and not r.find('MODIFIER 2') and r.find('CONSTELLATION 11'),'A section switch removes the old rows')
 assert(r.find('ALWAYS PRESENT:') and r.find('PREDATOR STRAIN, GLOOM STRAIN') and r.find('GEOLOGICAL SURVEY') and #r.triangles==12)
+assert(r.find('LEFT/RIGHT CLICK TO CYCLE: ANY, ACCEPTED, EXCLUDED'),'The enemy rows have their cycle hint')
 local cut
 for _,o in ipairs(r.live)do if o.kind=='text' and o.value:find('^NEUTRALIZE') then cut=o end end
 assert(cut and cut.value:find('%.%.%.$') and #cut.value<#'NEUTRALIZE GROUND-TO-ORBIT DEFENSES','Long names are cut to their button')
@@ -229,6 +238,7 @@ m.groups={three[1],three[2]};panel:show({},{[2]=true},face,nowhere,m);assert(r.d
 m=model('enemies',{},{groups={{id=0,name='Any mission',selected=true}},note='Check a mission to set its own enemies'})
 panel:show({},{},face,nowhere,m)
 assert(r.find('NO ENEMY FORCES CAN BE CHOSEN HERE') and r.find('CHECK A MISSION TO SET ITS OWN ENEMIES') and r.find('ANY MISSION'))
+assert(not r.find('LEFT/RIGHT CLICK TO CYCLE: ANY, ACCEPTED, EXCLUDED'),'No rows, no cycle hint')
 m=model('missions',list(24,nil,'Mission'),{page=1,pages=2,checked=2});panel:show({},{[3]=true,[7]=true},face,nowhere,m)
 assert(r.find('PAGE 1/2   2 OF 3 SLOTS') and r.find('<') and r.find('>') and r.find('MISSION 24'))
 m=model('missions',{},{faction=false,locked=true,can_start=false,can_clear=false,status='Open a planet on the war table first',tone='warn'})
@@ -373,7 +383,7 @@ do
         {checked=1,summaries={missions='Geological Survey, not Nuke Nursery',modifiers='Any',enemies='Any'}})
     panel:show({},{[2]=true},face,nowhere,m)
     assert(label('GEOLOGICAL SURVEY')=='255,232,10' and label('NUKE NURSERY')=='255,107,90' and label('SPREAD DEMOCRACY')=='237,241,245')
-    assert(r.find('GEOLOGICAL SURVEY, NOT NUKE NURSERY') and r.find('CLICK TO CYCLE: ANY, REQUIRED, EXCLUDED') and r.find('1 OF 3 SLOTS'))
+    assert(r.find('GEOLOGICAL SURVEY, NOT NUKE NURSERY') and r.find('LEFT/RIGHT CLICK TO CYCLE: ANY, REQUIRED, EXCLUDED') and r.find('1 OF 3 SLOTS'))
     local dashes=0
     for _,o in ipairs(drawn('rect',995))do
         if o.color[2]==255 and o.color[3]==107 then dashes=dashes+1;assert(o.size[2]<o.size[1],'The excluded mark is a dash')end

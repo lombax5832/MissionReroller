@@ -20,6 +20,8 @@ local ICONS={material='57fcf14ad069020b',slot='3aa8b87e',page='18edbed388a3d706'
 local FACTIONS={[2]={'TERMINIDS',255,179,0},[3]={'AUTOMATONS',255,90,79},[4]={'ILLUMINATE',197,139,255}}
 local STEPS={'1 CHECK PLANET','2 SEARCH SEEDS','3 REFRESH BOARD','4 OPEN OPERATION'}
 local WORDS={require='REQUIRED',accept='ACCEPTED',exclude='EXCLUDED'}
+-- The hint of a section whose rows cycle; a right click cycles backwards.
+local CYCLE,CYCLE_ENEMIES='LEFT/RIGHT CLICK TO CYCLE: ANY, REQUIRED, EXCLUDED','LEFT/RIGHT CLICK TO CYCLE: ANY, ACCEPTED, EXCLUDED'
 -- The enemy tooltip: width, gap to the panel, window margin, padding, and
 -- Know Your Constellation's meter of ten 8-unit ticks 3 units apart.
 local TIP={w=440,gap=12,margin=16,pad=16,ticks=10,tick=8,space=3}
@@ -30,14 +32,15 @@ function P.layout(width,height,model)
     local b={s=s,w=W*s,h=H*s,targets={},headers={},rows={},groups={},pager={},labels={},times={}}
     -- Hang off the real right edge, also on screens wider than 16:9.
     b.x,b.y=width-(EDGE+W)*s,(height-H*s)/2
-    local function target(id,left,top,w,h,enabled)
-        local t={id=id,x=b.x+left*s,y=b.y+(H-top-h)*s,w=w*s,h=h*s,enabled=enabled and true or false}
+    -- A cycle target is a filter row, the only kind a right click acts on.
+    local function target(id,left,top,w,h,enabled,cycle)
+        local t={id=id,x=b.x+left*s,y=b.y+(H-top-h)*s,w=w*s,h=h*s,enabled=enabled and true or false,cycle=cycle or nil}
         b.targets[#b.targets+1]=t;return t
     end
     local items,top=model.items or {},107
-    -- The enemy section's note lines below its rows: the planet-wide forces
-    -- and the hint, each only when there is one.
-    local lines=((model.forced or '')~='' and 1 or 0)+(model.note and 1 or 0)
+    -- The enemy section's note lines below its rows: the planet-wide forces,
+    -- the note and the cycle hint, each only when there is one.
+    local lines=((model.forced or '')~='' and 1 or 0)+(model.note and 1 or 0)+(model.section=='enemies' and #items>0 and 1 or 0)
     local notes=lines>0 and 8+20*lines or 0
     local function usable(item)return not model.locked and item.enabled~=false end
     for i,section in ipairs(SECTIONS)do
@@ -80,17 +83,17 @@ function P.layout(width,height,model)
                     if block.role then b.labels[#b.labels+1]={text=block.role=='side' and 'SIDE' or 'TACTICAL',top=y};y=y+label end
                     for i=0,block.count-1 do
                         local n=block.first+i
-                        b.rows[n]=target(items[n].id,LEFT+math.floor(i/block.rows)*308,y+(i%block.rows)*pitch,302,pitch-3,usable(items[n]))
+                        b.rows[n]=target(items[n].id,LEFT+math.floor(i/block.rows)*308,y+(i%block.rows)*pitch,302,pitch-3,usable(items[n]),true)
                     end
                     y=y+block.rows*pitch
                 end
                 last=y-3
             elseif #items>0 then
                 local h=math.min(38,math.floor((FOOT-14-below-first-(#items-1)*4)/#items))
-                for n,item in ipairs(items)do b.rows[n]=target(item.id,LEFT,first+(n-1)*(h+4),INNER,h,usable(item))end
+                for n,item in ipairs(items)do b.rows[n]=target(item.id,LEFT,first+(n-1)*(h+4),INNER,h,usable(item),true)end
                 last=first+#items*(h+4)-4
             end
-            if section.id=='enemies' then b.notes={last+17,last+37};last=last+notes end
+            if section.id=='enemies' then b.notes={last+17,last+37,last+57};last=last+notes end
             top=last+14
         end
     end
@@ -428,7 +431,7 @@ function P.new(e)
                     or (b.pager[1] and 'PAGE '..tostring(model.page)..'/'..tostring(model.pages)..'   ' or '')
                         ..(model.checked or 0)..' OF '..tostring(model.slots)..' SLOTS'
                 local used_width=text('meta_right',note,limit,at(b.meta),15,muted,'right',300*s)
-                text('meta',hint or empty or 'CLICK TO CYCLE: ANY, REQUIRED, EXCLUDED',left+2*s,at(b.meta),15,hint and white or muted,nil,limit-left-used_width-18*s)
+                text('meta',hint or empty or CYCLE,left+2*s,at(b.meta),15,hint and white or muted,nil,limit-left-used_width-18*s)
             elseif section=='objectives' then
                 for n,t in ipairs(b.groups)do
                     local chosen=groups[n].selected
@@ -438,7 +441,7 @@ function P.new(e)
                 for n,l in ipairs(b.labels)do text('role'..n,l.text,left+2*s,at(l.top+9),14,muted)end
                 local note=empty and '' or model.objective_slots or model.objective_note or ''
                 local used_width=text('meta_right',note,right-2*s,at(b.meta),15,muted,'right',300*s)
-                text('meta',hint or empty or 'CLICK TO CYCLE: ANY, REQUIRED, EXCLUDED',left+2*s,at(b.meta),15,hint and white or muted,nil,INNER*s-used_width-18*s)
+                text('meta',hint or empty or CYCLE,left+2*s,at(b.meta),15,hint and white or muted,nil,INNER*s-used_width-18*s)
             elseif section=='enemies' then
                 for n,t in ipairs(b.groups)do
                     local chosen=groups[n].selected
@@ -452,7 +455,8 @@ function P.new(e)
                     text('forced',model.forced,left+8*s+lead,at(b.notes[1]),15,tint,nil,INNER*s-lead-10*s)
                     line=2
                 end
-                if model.note then text('note',model.note,left+2*s,at(b.notes[line]),15,muted,nil,INNER*s)end
+                if model.note then text('note',model.note,left+2*s,at(b.notes[line]),15,muted,nil,INNER*s);line=line+1 end
+                if #b.rows>0 then text('cycle',CYCLE_ENEMIES,left+2*s,at(b.notes[line]),15,muted,nil,INNER*s)end
             end
             for n,t in ipairs(b.rows)do
                 local item,over,off,cy=items[n],hover==t.id,not t.enabled,t.y+t.h/2

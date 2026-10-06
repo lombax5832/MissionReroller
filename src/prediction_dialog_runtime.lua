@@ -423,7 +423,9 @@ do
         end
         -- Losing input ownership closes the dialog and restores the window;
         -- it does not stop the mod. A running search continues, as on focus loss.
-        local ok,action=pcall(router.step,router,x,y,user32.GetAsyncKeyState(1)<0,Panel.layout(width,height,model).targets)
+        -- The right button (2) cycles a filter row backwards.
+        local ok,action,reverse=pcall(router.step,router,x,y,user32.GetAsyncKeyState(1)<0,Panel.layout(width,height,model).targets,
+            user32.GetAsyncKeyState(2)<0)
         if not ok then
             emit('MODAL_INPUT_LOST '..tostring(action)..(gate.reason and ' ('..gate.reason..')' or ''))
             if not pcall(router.abort,router) and gate.forget then gate:forget()end
@@ -438,7 +440,7 @@ do
             report,report_tone='Search cancelled','idle'
         elseif action=='start' then
             if model.can_start then if s then begin(s)else gap.queued=now end end
-        elseif not filters:navigate(action) and not model.locked and filters:toggle(action,catalogue)then report=nil end
+        elseif not filters:navigate(action) and not model.locked and filters:toggle(action,catalogue,reverse)then report=nil end
         if not router.opened and not router.closing then dialog_release('closed');return end
         local temp=stingray.Script.temp_byte_count()
         local ok,err=pcall(function()panel:show(Search.options,filters.selected,face(),{x=x,y=y},model)end)
