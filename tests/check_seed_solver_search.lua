@@ -90,7 +90,7 @@ H.natives(update,{api={pointer=pointer,time=clock},game=game,ffi=ffi})
 set(ready,'read',read)
 -- The dialog validates its own requests (tests/test_dialog.py); none here.
 up(ready,'hooks').validate_search_request=nil
-set(ready,'snapshot',function()return snapshot end);set(ready,'emit',emit);set(ready,'reroll_session',reroll_session)
+set(ready,'snapshot',function()return snapshot end);set(ready,'log',{debug=emit,info=emit,warn=emit,error=emit});set(ready,'reroll_session',reroll_session)
 set(advance,'on_search_match',nil)
 up(ready,'M').dialog_enabled=false
 

@@ -46,21 +46,21 @@ local function units(report)
     for i,name in ipairs(report.small)do assert(type(name)=='string','Invalid enemy name');small[i]=name end
     return large,small
 end
--- new(emit,globals,bundled): one per dialog. tip(item,catalogue,forced) is the
+-- new(log,globals,bundled): one per dialog. tip(item,catalogue,forced) is the
 -- tooltip of an enemy row, or nil: {title, with, large={{name,ticks}},
 -- small={name}, footer, note, credit}, every part but the title optional. A roster
 -- that fails turns unit tooltips off for the session; an input that cannot be
 -- read leaves only that tooltip without units.
-function F.new(emit,globals,bundled)
+function F.new(log,globals,bundled)
     local self={}
     local said,broken,key,last
-    local function say(line)if line~=said then said=line;emit(line)end end
+    local function say(level,line)if line~=said then said=line;log[level](line)end end
     -- Checked on every use: Know Your Constellation may stop itself after
     -- this mod's first frame.
     function self:roster()
         if broken then return nil end
         local r,why=F.roster(globals,bundled)
-        say('KYC_ROSTER '..(r and 'ready ' or 'off: ')..why)
+        say('info','KYC_ROSTER '..(r and 'ready ' or 'off: ')..why)
         return r
     end
     function self:tip(item,catalogue,forced)
@@ -71,7 +71,7 @@ function F.new(emit,globals,bundled)
         local tip={title=item.title or item.name,note=item.stamped and F.STAMP_NOTE or nil}
         if r and catalogue and catalogue.forecast then
             local ok,input=pcall(catalogue.forecast,item.tag)
-            if not ok then say('KYC_ROSTER_INPUT '..tostring(input))
+            if not ok then say('warn','KYC_ROSTER_INPUT '..tostring(input))
             else
                 local done,value=pcall(function()
                     local tags={}
@@ -83,7 +83,7 @@ function F.new(emit,globals,bundled)
                     if (forced or '')~='' then tip.with=forced end
                 else
                     broken=true
-                    say('KYC_ROSTER_FAILED '..tostring(value)..'; unit tooltips off for this session')
+                    say('warn','KYC_ROSTER_FAILED '..tostring(value)..'; unit tooltips off for this session')
                 end
             end
         end

@@ -6,8 +6,17 @@ import build_core as build
 VERSION = '0.8.0'
 
 
-def config(search=False,publish=False,dialog=False,version=None):
-    """The build's mode, as data the adapter and the runtimes read (host.config)."""
+# The adapter's log levels, lowest first (src/experiment_adapter.lua).
+LOG_LEVELS=('debug','info','warn','error')
+
+
+def config(search=False,publish=False,dialog=False,version=None,log_level='debug'):
+    """The build's mode, as data the adapter and the runtimes read (host.config).
+
+    log_level is the lowest level the log keeps: 'info' for a tagged release,
+    'debug' for development and research builds.
+    """
+    assert log_level in LOG_LEVELS,log_level
     if dialog:
         banner='Mission Reroller '+version+' docked dialog'
     elif publish:
@@ -27,6 +36,7 @@ def config(search=False,publish=False,dialog=False,version=None):
         'mode':'supervised live publication' if publish else 'read-only',
         'shortcut':'F7 on the galactic map' if dialog else 'Ctrl+Shift+F9',
         'armed':'search then publish one verified seed' if publish else 'no refresh or selection will occur',
+        'log_level':log_level,
         'search_outcome':'publishes a verified match and selects its operation' if publish else 'no refresh or selection',
     }
 
@@ -70,7 +80,7 @@ def lua_long_string(text):
     return '['+'='*level+'[\n'+text+']'+'='*level+']'
 
 
-def source(search=False,publish=False,dialog=False,version=None):
+def source(search=False,publish=False,dialog=False,version=None,log_level='debug'):
     assert not publish or search
     assert not dialog or publish
     assert bool(version)==bool(dialog),'the dialog build names its release version'
@@ -175,13 +185,13 @@ def source(search=False,publish=False,dialog=False,version=None):
     # host (the adapter's services and the build's config), lib (the modules
     # above) and hooks (entry points of the other runtimes, nil for a runtime
     # the build leaves out). No source text is rewritten.
-    parts.append('local config='+lua_table(config(search,publish,dialog,version)))
+    parts.append('local config='+lua_table(config(search,publish,dialog,version,log_level)))
     parts.append('local host='+factory(root,'experiment_adapter.lua',ADAPTER,ADAPTER))
     # The adapter returns nothing when another copy already runs or the loader
     # is too old, after setting M.status; the addon then stays inert.
     parts.append('if not host then return end')
     # The one writer of M.status (src/reroll_session.lua), shared by every runtime.
-    parts.append('host.reroll_session=make_reroll_session(host.M,host.emit)')
+    parts.append('host.reroll_session=make_reroll_session(host.M,host.log)')
     # The one guarded memory write (src/guarded_write.lua), only in the builds
     # that publish; the read-only builds carry no write.
     if publish:

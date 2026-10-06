@@ -46,7 +46,7 @@ local logs={}
 local names={[0x77]='f8',[0x09]='tab'}
 local keyboard={button_name=function(vk)return names[vk]end}
 local function make()
-    return B.new({read=read,pointer=pointer,u=u,game=game,emit=function(s)logs[#logs+1]=s end,keyboard=keyboard,
+    return B.new({read=read,pointer=pointer,u=u,game=game,log=setmetatable({},{__index=function()return function(s)logs[#logs+1]=s end end}),keyboard=keyboard,
         menu=function()return present and menu or nil end})
 end
 local b=make()

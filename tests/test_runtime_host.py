@@ -47,7 +47,12 @@ def main():
         # No chunk-wide forward declarations for the runtimes to assign.
         assert b'local on_prediction_ready,advance_prediction_search,on_search_match' not in source
     release = build.source()
-    assert release == probe.source(**variants['release'][0])
+    assert release == probe.source(**variants['release'][0], log_level=build.LOG_LEVEL)
+    # A tagged release keeps info and above; development and research builds keep debug too.
+    assert build.LOG_LEVEL == ('info' if build.TAGGED else 'debug')
+    assert ("log_level='" + build.LOG_LEVEL + "'").encode() in release
+    assert b"log_level='info'" in build.source(log_level='info')
+    assert b"log_level='debug'" in probe.source(search=True)
     # The earlier builds' names for the mode are gone from the release.
     for stale in (b'0.8.0', b'independent seed prediction', b'Ctrl+Shift+F9', b'read_only=true',
                   b'no refresh or selection'):

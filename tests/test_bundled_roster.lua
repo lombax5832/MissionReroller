@@ -47,11 +47,12 @@ assert(r==nil and why=='not installed; bundled roster build 1 is not game build 
 -- A tooltip from the bundled roster, and the note alone without any roster.
 local logs={}
 local function emit(line)logs[#logs+1]=line end
+local log={debug=emit,info=emit,warn=emit,error=emit}
 local catalogue={forecast=function(tag)return {faction=2,difficulty=10,tags={8,tag}}end}
 local item={id='constellation:2:3',title='Predator Strain',tag=3,stamped=true}
-local tip=F.new(emit,{},R):tip(item,catalogue)
+local tip=F.new(log,{},R):tip(item,catalogue)
 assert(tip.large[1].name==forecast.large[1].name and tip.credit==F.CREDIT and tip.note==F.STAMP_NOTE)
 assert(logs[1]=='KYC_ROSTER ready bundled v4.0 build '..O.build..' (not installed)',logs[1])
-tip=F.new(emit,{},nil):tip(item,catalogue)
+tip=F.new(log,{},nil):tip(item,catalogue)
 assert(tip.note and not tip.large and logs[#logs]=='KYC_ROSTER off: not installed','A note-only tooltip')
 print('Bundled roster: api 1, tag IDs, forecast, fallback order and tooltips passed')

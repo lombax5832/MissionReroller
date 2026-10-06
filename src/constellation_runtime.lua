@@ -1,7 +1,7 @@
 -- Constellation tags for predicted or displayed operations, and a read-only
 -- observer that compares a prediction with the loaded mission preview.
 -- A runtime factory: the assembler runs this file as function(host,lib,hooks).
-local M,emit,read,pointer,u=host.M,host.emit,host.read,host.pointer,host.u
+local M,log,read,pointer,u=host.M,host.log,host.read,host.pointer,host.u
 local reroll_session=host.reroll_session
 local map,O=host.map,host.O
 local Constellations,Planet=lib.Constellations,lib.Planet
@@ -119,7 +119,7 @@ do
         end
         local totals={};for tag,count in pairs(counts)do totals[#totals+1]=tag..':'..count end
         table.sort(totals)
-        emit(string.format('CONSTELLATION_STAMP_SURVEY sets=%d records=%d tagged=%d tags=[%s] examples=[%s] truncated=%s',
+        log.debug(string.format('CONSTELLATION_STAMP_SURVEY sets=%d records=%d tagged=%d tags=[%s] examples=[%s] truncated=%s',
             sets,records,tagged,table.concat(totals,','),table.concat(examples,','),tostring(truncated)))
         return true
     end
@@ -149,22 +149,22 @@ do
         local predicted=Constellations.resolve(seed,settings,campaign,record,inputs.disabled)
         local head=string.format('CONSTELLATION_CHECK planet=%d row=%d type=%d seed=%u difficulty=%d faction=%d effect=%u campaign=[%s] predicted=[%s]',
             planet,row,kind,seed,difficulty,faction,effect,join(campaign),Constellations.describe(predicted.list))
-        if not level then emit(head..' level=unavailable agree=unknown');return end
+        if not level then log.debug(head..' level=unavailable agree=unknown');return end
         if not level.valid then
-            emit(string.format('%s level=%x explicit=[%s] stamps=%d stamp=%s later_tagged=[%s] full=unresolved agree=unknown',head,
+            log.debug(string.format('%s level=%x explicit=[%s] stamps=%d stamp=%s later_tagged=[%s] full=unresolved agree=unknown',head,
                 level.offset,join(level.explicit),level.stamps,level.stamp,level.later))
             return
         end
         local initial={};for _,tag in ipairs(campaign)do initial[#initial+1]=tag end
         for _,tag in ipairs(level.tags)do initial[#initial+1]=tag end
         local full=Constellations.resolve(seed,settings,initial,record,inputs.disabled)
-        emit(string.format('%s level=%x explicit=[%s] stamps=%d stamp=%s later_tagged=[%s] full=[%s] agree=%s',head,level.offset,
+        log.debug(string.format('%s level=%x explicit=[%s] stamps=%d stamp=%s later_tagged=[%s] full=[%s] agree=%s',head,level.offset,
             join(level.explicit),level.stamps,level.stamp,level.later,Constellations.describe(full.list),
             tostring(join(full.list)==join(predicted.list))))
         if not surveyed then
             surveyed=true
             local ok,err=pcall(survey,controller)
-            if not ok then emit('CONSTELLATION_STAMP_SURVEY_BLOCKED '..tostring(err))
+            if not ok then log.warn('CONSTELLATION_STAMP_SURVEY_BLOCKED '..tostring(err))
             elseif not err then surveyed=false end
         end
     end
@@ -173,8 +173,8 @@ do
         if now-last<0.5 or logged>=64 or reroll_session.view().running then return end
         last=now
         local ok,err=pcall(observe)
-        if not ok and not reported then reported=true;emit('CONSTELLATION_CHECK_BLOCKED '..tostring(err))end
+        if not ok and not reported then reported=true;log.warn('CONSTELLATION_CHECK_BLOCKED '..tostring(err))end
     end
 end
-emit('Constellations: accept or exclude per checked mission, else for the operation; hover a mission to log CONSTELLATION_CHECK')
+log.debug('Constellations: accept or exclude per checked mission, else for the operation; hover a mission to log CONSTELLATION_CHECK')
 return {bind_constellations=bind_constellations,observe_constellations=observe_constellations}

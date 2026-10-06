@@ -32,6 +32,15 @@ The release entry runs in the game's LuaJIT VM with FFI:
   `CowboyBingusModLoader.open_log`, which returns a file in
   `%LOCALAPPDATA%\CowboyBingus\Helldivers2\Logs` or nil; wrap every write in
   `pcall`. The first frame logs the version and every loaded Lua mod.
+  Runtimes write through `host.log.debug/info/warn/error`, which prefixes
+  the level. A tagged release (`build.LOG_LEVEL`) keeps `info` and above,
+  development and research builds keep `debug` too. Pick the level by who
+  reads the line: `info` for the story of a session a player sends with a
+  bug report (startup, the request, the outcome, every write), `warn` for a
+  feature that turned off or a mismatch, `error` for `STOPPED:` and failed
+  restores, `debug` for everything else. A line the README tells players
+  to send must be `info` or above. Tests that read `debug` lines build with
+  `build.source(log_level='debug')`.
 - **Memory access is in-process only**, through `ReadProcessMemory` /
   `WriteProcessMemory` on the game's own process via FFI. Writes go only to
   existing private read/write pages (check with `VirtualQuery`), never to code.

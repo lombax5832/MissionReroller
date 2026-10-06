@@ -2,7 +2,7 @@
 local make=dofile(arg[1])
 local function new(strict)
     local M,logs={status='initializing'},{}
-    return make(M,function(line)logs[#logs+1]=line end,{strict=strict}),M,logs
+    return make(M,setmetatable({},{__index=function(_,level)return function(line)logs[#logs+1]=level..' '..line end end}),{strict=strict}),M,logs
 end
 local function refused(fn,...)
     local ok,err=pcall(fn,...)
@@ -95,18 +95,18 @@ local ok,err=pcall(session.settle);assert(not ok and err:find('abandoned at sear
 local logs
 session,M,logs=new(false)
 session.start({});session.advance('waiting_for_stable_inputs')
-assert(not session.advance('mystery_phase') and #logs==1 and logs[1]=='SESSION_REJECTED unknown phase mystery_phase')
+assert(not session.advance('mystery_phase') and #logs==1 and logs[1]=='error SESSION_REJECTED unknown phase mystery_phase')
 view=session.view()
 assert(not view.running and view.outcome=='session_failed' and M.status=='session_failed' and M.cancel_requested==nil)
 assert(session.take_cancel() and not session.take_cancel(),'A rejection asks the pipeline to cancel, once')
 assert(view.caption=='Reroll stopped unexpectedly; see the log' and view.tone=='bad')
 assert(not session.finish('cancelled') and session.view().outcome=='session_failed','The cancellation it asked for keeps the failure')
-assert(not session.advance('search_running') and logs[2]=='SESSION_REJECTED search_running outside a run')
+assert(not session.advance('search_running') and logs[2]=='error SESSION_REJECTED search_running outside a run')
 assert(session.take_cancel())
 assert(session.start({}) and session.view().running,'The next run starts normally')
-session.advance('publication_pending');assert(not session.advance('search_running') and logs[3]=='SESSION_REJECTED search_running after publication_pending')
+session.advance('publication_pending');assert(not session.advance('search_running') and logs[3]=='error SESSION_REJECTED search_running after publication_pending')
 session.start({});session.advance('search_running')
-assert(session.settle() and logs[4]=='SESSION_UNFINISHED phase=search_running' and session.view().outcome=='session_failed')
+assert(session.settle() and logs[4]=='warn SESSION_UNFINISHED phase=search_running' and session.view().outcome=='session_failed')
 
 -- Cancel: the dialog asks, the pipeline answers. A later cleanup step
 -- names the outcome more precisely but never reopens the run.

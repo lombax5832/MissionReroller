@@ -7,7 +7,7 @@ import zipfile
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'scripts'))
 import build
-source=build.source()
+source=build.source(log_level='debug')
 for forbidden in (b'VirtualProtect',b'VirtualAlloc',b'OpenProcess',b'CreateRemoteThread',b'io.open',b'os.execute',b'io.popen',b'candidate_path'):
     assert forbidden not in source,forbidden
 # The dialog build draws the docked panel; older builds keep the centred one.
@@ -48,7 +48,7 @@ with tempfile.TemporaryDirectory() as folder:
     archive=build.main(Path(folder)/'dialog.zip')
     with zipfile.ZipFile(archive) as z:
         assert len(z.namelist())==4
-        assert source in z.read(next(n for n in z.namelist() if n.endswith('.patch_0')))
+        assert build.source() in z.read(next(n for n in z.namelist() if n.endswith('.patch_0')))
 for test,module in [('test_docked_panel.lua','docked_panel.lua'),('test_keybind_hint.lua','keybind_hint.lua'),('test_mod_inventory.lua','mod_inventory.lua'),('test_mod_binding.lua','mod_binding.lua'),('test_escape_gate.lua','escape_gate.lua'),('test_modal_pointer.lua','modal_pointer.lua'),('test_window_mouse_gate.lua','window_mouse_gate.lua'),('test_window_cursor.lua','window_cursor.lua'),('test_external_edits.lua','external_edits.lua'),('test_solver_estimate.lua','solver_estimate.lua'),('test_seed_solver_plan.lua','seed_solver_search.lua'),('test_worker_warmth.lua','worker_warmth.lua')]:
     subprocess.run([lua,str(ROOT/'tests'/test),str(ROOT/'src'/module)],check=True)
 print('Dialog package, docked panel, native cursor gate and click routing passed')

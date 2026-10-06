@@ -5,6 +5,21 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
+**Validated in game 2026-10-05: log levels.** The development build wrote
+444 prefixed lines over 11 searches (365 `DEBUG`, 79 `INFO`); a local
+tagged v0.35.2 build wrote 27 `INFO` lines and nothing else for one search
+and publication, from `INFO  Mission Reroller 0.35.2 docked dialog` to
+`INFO  PUBLICATION_STATE_VERIFIED seed=1498312448 row=27`. Every log line starts with
+`DEBUG`, `INFO`, `WARN` or `ERROR`; runtimes write through
+`host.log.<level>` instead of `host.emit`. A tagged release keeps `INFO`
+and above, a development build keeps `DEBUG` too. The 84-line development
+log of one search and publication on 2026-10-05 keeps 27 lines at release
+level, 16 of them the mod list; the modal, Escape, estimate, worker,
+solver, day/night and hover-check lines became `DEBUG`. Every line the
+README tells players to send stays `INFO` or above, which moved
+`BINDING_REGISTERED` to `INFO` and an `ESCAPE_HELD mappings=0` to `WARN`.
+Test plan: [LOG_LEVELS_TEST.md](LOG_LEVELS_TEST.md).
+
 **Not yet validated in game: v0.35.1.** Releases the warm worker VMs on
 the ship (made when the galactic map is open, closed and replaced after
 each search, cooled 10 s after the map closes or on a loading gate), the

@@ -2,7 +2,7 @@
 -- observer that compares a prediction with the hovered mission's preview
 -- descriptor, which carries the game's own objective list.
 -- A runtime factory: the assembler runs this file as function(host,lib,hooks).
-local emit,read,pointer,u=host.emit,host.read,host.pointer,host.u
+local log,read,pointer,u=host.log,host.read,host.pointer,host.u
 local reroll_session,map,O=host.reroll_session,host.map,host.O
 local SideObjectives,Planet=lib.SideObjectives,lib.Planet
 local Board=lib.Board
@@ -60,7 +60,7 @@ do
         local predicted={difficulty=difficulty,missions={{native_type=kind,seed=seed}}}
         local context=annotate(predicted,hovered.category,hovered.operation_id)
         local ids={};for _,o in ipairs(predicted.missions[1].objective_list)do ids[#ids+1]=o.id end
-        emit(string.format('SIDE_OBJECTIVE_CHECK planet=%d row=%d type=%d seed=%u difficulty=%d modifiers=[%s] predicted_modifiers=[%s] predicted=[%s] live=[%s] modifiers_agree=%s agree=%s',
+        log.debug(string.format('SIDE_OBJECTIVE_CHECK planet=%d row=%d type=%d seed=%u difficulty=%d modifiers=[%s] predicted_modifiers=[%s] predicted=[%s] live=[%s] modifiers_agree=%s agree=%s',
             planet,row,kind,seed,difficulty,hex(modifiers),hex(context.modifiers),SideObjectives.describe(predicted.missions[1].objective_list),
             hex(live),tostring(hex(modifiers)==hex(context.modifiers)),tostring(hex(ids)==hex(live))))
     end
@@ -69,8 +69,8 @@ do
         if now-last<0.5 or logged>=64 or reroll_session.view().running then return end
         last=now
         local ok,err=pcall(observe)
-        if not ok and not reported then reported=true;emit('SIDE_OBJECTIVE_CHECK_BLOCKED '..tostring(err))end
+        if not ok and not reported then reported=true;log.warn('SIDE_OBJECTIVE_CHECK_BLOCKED '..tostring(err))end
     end
 end
-emit('Side objectives: require or exclude per checked mission, else for the operation; hover a mission to log SIDE_OBJECTIVE_CHECK')
+log.debug('Side objectives: require or exclude per checked mission, else for the operation; hover a mission to log SIDE_OBJECTIVE_CHECK')
 return {bind_objectives=bind_objectives,observe_objectives=observe_objectives}

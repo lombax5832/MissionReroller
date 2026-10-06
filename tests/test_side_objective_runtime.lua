@@ -41,7 +41,8 @@ local tags={effect_id=function(category,id,planet)assert(category==4 and id==5 a
 local model={index=268,objective_inputs=function()return inputs end,constellation_inputs=function()return tags end}
 local logs,on_top,running={},true,false
 local binders={}
-local host={emit=function(s)logs[#logs+1]=s end,read=read,pointer=pointer,u=u,O=O,
+local function emit(s)logs[#logs+1]=s end
+local host={log={debug=emit,info=emit,warn=emit,error=emit},read=read,pointer=pointer,u=u,O=O,
     reroll_session={view=function()return {running=running}end},map={on_top=function()return on_top end},
     when_initialized=function(bind)binders[#binders+1]=bind end}
 local lib={SideObjectives=SideObjectives,Board=H.board(src),Planet={bind=function(_,_,_,_,b,planet)assert(b==board and planet==268);return model end}}

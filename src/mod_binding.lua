@@ -17,7 +17,7 @@ B.INPUT_OWNER,B.BINDING_MAP,B.BUCKETS,B.BUCKET=O.rva.input_owner,O.input_owner.b
 B.KEYBOARD,B.MOUSE,B.BUTTON,B.KEYBOARD_BASE=3,4,4,49
 -- env: read(address,n) and pointer(address) that fail by raising, u(bytes,offset),
 -- game (module base), menu() returning the ModBindingsMenu global or nil,
--- keyboard (stingray.Keyboard or nil), emit(line).
+-- keyboard (stingray.Keyboard or nil), log (debug, info, warn, error: each takes a line).
 function B.new(env)
     local self={status='absent',reason=nil,ready=false}
     local code,bucket,last_blob,last_keys
@@ -46,10 +46,10 @@ function B.new(env)
             self.status='registered'
             local found,value=pcall(registry_code,menu)
             code=found and value or nil
-            env.emit('BINDING_REGISTERED '..B.ID..(code and ' action '..math.floor(code/65536)..':'..code%65536 or ' action unknown'))
+            env.log.info('BINDING_REGISTERED '..B.ID..(code and ' action '..math.floor(code/65536)..':'..code%65536 or ' action unknown'))
         else
             self.status,self.reason='failed',tostring(ok and reason or accepted)
-            env.emit('BINDING_FAILED '..self.reason)
+            env.log.warn('BINDING_FAILED '..self.reason)
         end
     end
     -- Whether the binding is activated this frame. Registers on the first
@@ -60,7 +60,7 @@ function B.new(env)
         if self.status=='absent' then register(menu) end
         if self.status~='registered' then return false end
         local ok,down=pcall(menu.is_down,B.ID)
-        if not ok then self.status,self.reason='failed',tostring(down);env.emit('BINDING_FAILED '..self.reason);return false end
+        if not ok then self.status,self.reason='failed',tostring(down);env.log.warn('BINDING_FAILED '..self.reason);return false end
         self.ready=down~=nil
         return down==true
     end

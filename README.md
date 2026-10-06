@@ -160,7 +160,9 @@ OPERATIONS`. Tell your lobby before you reroll. Tested with two players.
 ## Troubleshooting
 
 The mod's log is `MissionRerollerExperiment.log` in
-`%LOCALAPPDATA%\CowboyBingus\Helldivers2\Logs`.
+`%LOCALAPPDATA%\CowboyBingus\Helldivers2\Logs`. Each line starts with its
+level: `INFO`, `WARN` or `ERROR`. A development build (Operation Reroller Dev)
+also writes `DEBUG` lines.
 
 | Symptom | Where to look |
 | --- | --- |

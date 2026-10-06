@@ -46,9 +46,18 @@ GUID = build_core.RELEASE_GUID if TAGGED else DEVELOPMENT_GUID
 NAME = RELEASE_NAME if TAGGED else DEVELOPMENT_NAME
 
 
-def source():
-    """The single plaintext entry the loader runs, assembled from src/."""
-    return probe.source(search=True, publish=True, dialog=True, version=VERSION)
+# A tagged release logs info and above; a development build also logs debug.
+LOG_LEVEL = 'info' if TAGGED else 'debug'
+
+
+def source(log_level=None):
+    """The single plaintext entry the loader runs, assembled from src/.
+
+    log_level overrides LOG_LEVEL, so tests that read debug lines get them
+    whether or not RELEASE_TAG is set.
+    """
+    return probe.source(search=True, publish=True, dialog=True, version=VERSION,
+                        log_level=log_level or LOG_LEVEL)
 
 
 def manifest():
