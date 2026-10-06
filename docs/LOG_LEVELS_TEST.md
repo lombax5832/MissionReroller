@@ -1,6 +1,9 @@
 # Log levels test
 
-In-game check of the log levels. **Not yet run in game.**
+In-game check of the log levels. **Run in game 2026-10-05: both tests
+passed.** The development build's 444 lines were all prefixed (365 `DEBUG`,
+79 `INFO`) over 11 searches; the tagged v0.35.2 build wrote 27 `INFO` lines
+for one search and publication, no other level.
 
 ## What changed
 
@@ -53,9 +56,8 @@ the four levels and the log has the same lines as before with the prefix:
    `releases/Operation-Reroller-v<version>.zip`, launch.
 2. Repeat the search of test 1.
 
-Passes when the log has no `DEBUG` line, and has, in order: the banner, the
-`build=... verified` line, `LOADER`, `MODS`, one `MOD` line per mod,
-`KYC_ROSTER`, `BINDING_REGISTERED` (with Mod Bindings Menu), then the
+Passes when the log has no `DEBUG` line, and has, in order: the banner, `LOADER`,
+`MODS`, one `MOD` line per mod, the `build=... verified` line, `KYC_ROSTER`, `BINDING_REGISTERED` (with Mod Bindings Menu), then the
 search request lines, `LUA_SEARCH_STARTED`, `LUA_SEARCH_MATCH`,
 `PUBLISH_BEGIN` and `PUBLICATION_STATE_VERIFIED`. Fails on any `DEBUG`
 line, or a missing line from that list.

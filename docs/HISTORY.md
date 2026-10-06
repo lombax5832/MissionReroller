@@ -5,7 +5,11 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
-**Not yet validated in game: log levels.** Every log line starts with
+**Validated in game 2026-10-05: log levels.** The development build wrote
+444 prefixed lines over 11 searches (365 `DEBUG`, 79 `INFO`); a local
+tagged v0.35.2 build wrote 27 `INFO` lines and nothing else for one search
+and publication, from `INFO  Mission Reroller 0.35.2 docked dialog` to
+`INFO  PUBLICATION_STATE_VERIFIED seed=1498312448 row=27`. Every log line starts with
 `DEBUG`, `INFO`, `WARN` or `ERROR`; runtimes write through
 `host.log.<level>` instead of `host.emit`. A tagged release keeps `INFO`
 and above, a development build keeps `DEBUG` too. The 84-line development
