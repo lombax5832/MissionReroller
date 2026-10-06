@@ -10,16 +10,16 @@ CowboyBingusModLoader={api=1,version=18,modules={
 update=function()return 1,nil,3 end
 dofile(entry)
 local loaded=#logs
-for _,line in ipairs(logs)do assert(not line:find('^MODS? ') and not line:find('^LOADER '),'nothing is listed before the first frame')end
+for _,line in ipairs(logs)do assert(not line:find('^INFO  MODS? ') and not line:find('^INFO  LOADER '),'nothing is listed before the first frame')end
 -- Mods that load after this one are started by the first frame.
 CowboyBingusModLoader.modules['mods/ipodalexei/mission_reroller_experiment']='loaded'
 ModBindingsMenu={api=1,version='2.0'}
 local a,b,c=update()
 assert(a==1 and b==nil and c==3,'the wrapped update keeps its results')
-local want={'LOADER Bingus Shared Loader version=18 api=1\n','MODS started=2 other=0\n',
-    'MOD mods/cowboybingus/mod_bindings_menu version=2.0 status=loaded\n',
-    'MOD mods/ipodalexei/mission_reroller_experiment version='..version..' status=loaded\n'}
+local want={'INFO  LOADER Bingus Shared Loader version=18 api=1\n','INFO  MODS started=2 other=0\n',
+    'INFO  MOD mods/cowboybingus/mod_bindings_menu version=2.0 status=loaded\n',
+    'INFO  MOD mods/ipodalexei/mission_reroller_experiment version='..version..' status=loaded\n'}
 for i,line in ipairs(want)do assert(logs[loaded+i]==line,tostring(logs[loaded+i])..' ~= '..line)end
 local count=#logs;update()
-for i=count+1,#logs do assert(not logs[i]:find('^MODS? '),'listed once')end
+for i=count+1,#logs do assert(not logs[i]:find('^INFO  MODS? '),'listed once')end
 print('test_mod_inventory_entry: first-frame mod list passed')

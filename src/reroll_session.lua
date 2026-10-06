@@ -50,7 +50,7 @@ local phases={
     session_failed={kind='outcome',caption='Reroll stopped unexpectedly; see the log'},
     stopped={kind='outcome'},
 }
-return function(M,emit,options)
+return function(M,log,options)
     local strict=options and options.strict
     local phase=phases[M.status] and M.status or 'initializing'
     local running,outcome,detail,run=false,nil,nil,0
@@ -66,7 +66,7 @@ return function(M,emit,options)
     local function sealed()return outcome=='stopped' end
     local function reject(message)
         if strict then error('Reroll session: '..message,3)end
-        emit('SESSION_REJECTED '..message)
+        log.error('SESSION_REJECTED '..message)
         cancelling=true
         close('session_failed',message)
         return false
@@ -108,7 +108,7 @@ return function(M,emit,options)
         if sealed() or not running then return false end
         if phases[phase].kind=='checkpoint' then close(phase,detail);return true end
         if strict then error('Reroll session: run abandoned at '..phase,2)end
-        emit('SESSION_UNFINISHED phase='..phase)
+        log.warn('SESSION_UNFINISHED phase='..phase)
         close('session_failed','abandoned at '..phase)
         return true
     end

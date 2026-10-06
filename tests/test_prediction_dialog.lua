@@ -198,7 +198,7 @@ assert(last_model.items[1].name=='Constellation 2 *' and last_model.items[2].nam
     and last_model.items[1].title=='Constellation 2','The game tag is not displayed; tags a map stamp can add are marked')
 do
     -- Without Know Your Constellation the bundled copy of its roster gives the units.
-    local function logged(prefix)for _,line in ipairs(logs)do if line:sub(1,#prefix)==prefix then return line end end end
+    local function logged(prefix)for _,line in ipairs(logs)do local text=line:gsub('^%u+ +','',1);if text:sub(1,#prefix)==prefix then return line end end end
     assert(logged('KYC_ROSTER ready bundled v4.0 build 25480438 (not installed)'),'The first frame logs the bundled roster')
     local tip=assert(last_model.tooltip(last_model.items[1]))
     assert(tip.title=='Constellation 2' and tip.note and #tip.large>0 and #tip.small>0
@@ -318,7 +318,7 @@ local opened=acquired
 click('close');frame();frame();assert(not held)
 pointed=1;toggle();assert(acquired==opened+1)
 assert(catalogue_scope==1 and last_model.scope=='city' and last_model.section=='missions',last_model.scope)
-assert(logs[#logs]=='MODAL_OPEN scope=region 1 key=F7 screens=15\n',logs[#logs])
+assert(logs[#logs]=='DEBUG MODAL_OPEN scope=region 1 key=F7 screens=15\n',logs[#logs])
 click('start');assert(requested() and options().scope.region==1 and options().required[4])
 take();session.finish('cancelled');frame()
 pointed=nil;frame();assert(catalogue_scope==1,'The city is fixed while the dialog stays open')
@@ -338,7 +338,7 @@ in_progress=record(29,10,planet);frame();assert(last_model.ready,'An operation o
 in_progress=record(49,10,planet+1);frame();assert(last_model.ready,'An operation on another planet does not block it')
 in_progress=nil;frame()
 click('close');frame();frame();toggle()
-assert(catalogue_scope==nil and logs[#logs]=='MODAL_OPEN scope=planet key=F7 screens=15\n','Reopening without a city returns to the planet')
+assert(catalogue_scope==nil and logs[#logs]=='DEBUG MODAL_OPEN scope=planet key=F7 screens=15\n','Reopening without a city returns to the planet')
 click('close');frame();frame();pointed=3;toggle()
 assert(catalogue_scope==nil and last_model.scope=='planet','A city of another planet is ignored')
 click('start');assert(requested() and options().scope==nil);take();session.finish('cancelled');frame()
@@ -387,7 +387,7 @@ assert(shown('CANCEL SEARCH') and shown('1 CHECK PLANET') and shown('CHECKING PL
 local searches=#logs
 unavailable=false;frame()
 assert(requested() and options().required[4] and options().difficulty==10,'Fresh data starts the waiting search')
-assert(#logs==searches+1 and logs[#logs]=='DIALOG_SEARCH planet=269 region=all difficulty=10 players=3\n' and last_model.running)
+assert(#logs==searches+1 and logs[#logs]=='DEBUG DIALOG_SEARCH planet=269 region=all difficulty=10 players=3\n' and last_model.running)
 take();session.finish('cancelled');frame()
 -- Cancel, close, another planet and a lasting gap each drop a waiting start.
 unavailable=true;frame();click('start');frame();assert(last_model.running)
@@ -478,7 +478,7 @@ frame();assert(stepped==before+1)
 map.back_hint=function()return map_top and map_anchor or nil end
 local logged=#logs
 map_top,stack=false,{15,26};toggle();assert(not held,'F7 ignored off the map')
-assert(#logs==logged+1 and logs[#logs]=='SHORTCUT_IGNORED screens=15,26\n',logs[#logs])
+assert(#logs==logged+1 and logs[#logs]=='INFO  SHORTCUT_IGNORED screens=15,26\n',logs[#logs])
 pulse=true;frame();pulse=false;frame();assert(not held and #logs==logged+1,'The binding is ignored off the map, logged once')
 map_top,stack=true,{15};toggle();assert(held,'Back on the map F7 opens it')
 map_top=false;toggle();assert(held,'Off the map F7 does not close it either')
@@ -526,10 +526,10 @@ function escape_gate:release()if not self.held then return 0,0 end;self.held=fal
 up(up(dialog,'restore_escape'),'escape',escape_gate,true)
 local logged=#logs
 toggle();assert(held and escape_gate.held and holds==1,'Opening takes Escape from the game')
-assert(logs[logged+1]=='ESCAPE_HELD mappings=1 actions=1:9\n' and logs[logged+2]:find('MODAL_OPEN',1,true),logs[logged+1])
+assert(logs[logged+1]=='DEBUG ESCAPE_HELD mappings=1 actions=1:9\n' and logs[logged+2]:find('MODAL_OPEN',1,true),logs[logged+1])
 esc=true;frame();frame();assert(not held,'Escape closes the dialog')
 frame();assert(escape_gate.held and releases==0,'Escape stays away from the game while it is down')
-esc=false;frame();assert(not escape_gate.held and releases==1 and logs[#logs]=='ESCAPE_RESTORED buckets=1\n','Released, Escape goes back to the game')
+esc=false;frame();assert(not escape_gate.held and releases==1 and logs[#logs]=='DEBUG ESCAPE_RESTORED buckets=1\n','Released, Escape goes back to the game')
 esc=true;frame();esc=false;frame();assert(not held and holds==1,'Escape does nothing with the dialog closed')
 esc=true;toggle();assert(held,'Escape held while opening does not close it');esc=false;frame();assert(held)
 esc=true;frame();frame();esc=false;frame();assert(not held and not escape_gate.held and holds==2)

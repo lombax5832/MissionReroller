@@ -14,7 +14,7 @@ import build_identity_probe as build
 
 
 def main():
-    source = build.source()
+    source = build.source(log_level='debug')
     assert source.startswith(('-- HD2-Addon: '+build.build.RELEASE_MODULE+'\n').encode())
     for forbidden in (b'WriteProcessMemory', b'VirtualProtect', b'VirtualAlloc', b'OpenProcess',
                       b'CreateRemoteThread', b'os.execute', b'io.popen', b'ffi.cast(\'void (*)',

@@ -2,7 +2,7 @@
 -- A runtime factory: the assembler runs this file as function(host,lib,hooks).
 -- hooks: bind_constellations, bind_objectives, on_existing_match, on_search_match, and
 -- validate_search_request, which the assembler adds once the dialog exists.
-local M,emit,read,u,snapshot,config=host.M,host.emit,host.read,host.u,host.snapshot,host.config
+local M,log,read,u,snapshot,config=host.M,host.log,host.read,host.u,host.snapshot,host.config
 local reroll_session,O,map=host.reroll_session,host.O,host.map
 local Search,Planet,make_search_job,DayNight=lib.Search,lib.Planet,lib.make_search_job,lib.DayNight
 local FilterRules=lib.FilterRules
@@ -31,10 +31,10 @@ local function pool()
     local ok,made,why=pcall(SeedSolverWorkers.pool,ffi)
     if ok and made then
         worker_pool=made
-        emit(string.format('SEED_SOLVER_WORKERS_READY max_workers=%d processors=%d',made.max_workers,made.processors))
+        log.debug(string.format('SEED_SOLVER_WORKERS_READY max_workers=%d processors=%d',made.max_workers,made.processors))
     else
         worker_pool_off=tostring(ok and why or made)
-        emit('SEED_SOLVER_WORKERS_OFF reason='..worker_pool_off)
+        log.warn('SEED_SOLVER_WORKERS_OFF reason='..worker_pool_off)
     end
     return worker_pool
 end
@@ -62,10 +62,10 @@ local function tick_workers(now)
         local action,reason=warmth.update(now,{map=on_top,loading=loading,searching=current_search~=nil})
         if action=='warm' and pool() then
             worker_pool.warm(true);warm_logged=false
-            emit(string.format('SEED_SOLVER_WORKERS_WARM reason=%s %s',reason,detail))
+            log.debug(string.format('SEED_SOLVER_WORKERS_WARM reason=%s %s',reason,detail))
         elseif action=='cold' and worker_pool then
             local closed=worker_pool.warm(false)
-            emit(string.format('SEED_SOLVER_WORKERS_COLD reason=%s closed=%d %s',reason,closed,detail))
+            log.debug(string.format('SEED_SOLVER_WORKERS_COLD reason=%s closed=%d %s',reason,closed,detail))
         end
     end
     if not worker_pool then return end
@@ -77,7 +77,7 @@ local function tick_workers(now)
     if not warm_logged and state.warm and state.retired==0 and current_search==nil
         and (state.idle>=worker_pool.max_workers or state.full)then
         warm_logged=true
-        emit(string.format('SEED_SOLVER_WORKERS_WARMED idle=%d max_workers=%d%s',state.idle,worker_pool.max_workers,
+        log.debug(string.format('SEED_SOLVER_WORKERS_WARMED idle=%d max_workers=%d%s',state.idle,worker_pool.max_workers,
             worker_pool.warm_error and ' error='..worker_pool.warm_error or ''))
     end
 end
@@ -117,10 +117,10 @@ on_prediction_ready=function(s,definitions,now)
     local scope=Search.scope(request.scope)
     reroll_session.report(nil)
     if constellations and not bind_constellations then
-        reroll_session.finish('search_failed');emit('FILTER_BLOCKED Constellation filters unavailable');return
+        reroll_session.finish('search_failed');log.warn('FILTER_BLOCKED Constellation filters unavailable');return
     end
     if objectives and not bind_objectives then
-        reroll_session.finish('search_failed');emit('FILTER_BLOCKED Side objective filters unavailable');return
+        reroll_session.finish('search_failed');log.warn('FILTER_BLOCKED Side objective filters unavailable');return
     end
     -- The Day / Night filter checks the viewed planet's sky (src/day_night.lua).
     local daynight
@@ -129,18 +129,18 @@ on_prediction_ready=function(s,definitions,now)
         if not ok or not planet then
             local reason=ok and why or tostring(planet)
             reroll_session.finish('search_failed');reroll_session.report(reason)
-            emit('FILTER_BLOCKED day/night '..reason);return
+            log.warn('FILTER_BLOCKED day/night '..reason);return
         end
         daynight=DayNight.checker(planet,request.time)
         daynight.planet=planet
         daynight.refresh(DayNight.war_time(read,s.board))
-        emit(string.format('DAYNIGHT_SEARCH side=%s day_s=%.0f buffer_s=%.0f band_min=%d margin_s=%d slack_s=%d',
+        log.debug(string.format('DAYNIGHT_SEARCH side=%s day_s=%.0f buffer_s=%.0f band_min=%d margin_s=%d slack_s=%d',
             request.time,planet.day_length,planet.buffer,DayNight.BAND,DayNight.MARGIN,DayNight.SLACK))
     end
     local validate_search_request=hooks.validate_search_request
     if validate_search_request then
         local ok,err=pcall(validate_search_request,s,request,rules)
-        if not ok then reroll_session.finish('search_failed');emit('FILTER_BLOCKED '..tostring(err));return end
+        if not ok then reroll_session.finish('search_failed');log.warn('FILTER_BLOCKED '..tostring(err));return end
     end
     if M.dialog_enabled and on_existing_match then
         if constellations or objectives then
@@ -157,7 +157,7 @@ on_prediction_ready=function(s,definitions,now)
                     end
                 end
             end)
-            if not ok then reroll_session.finish('search_failed');emit('FILTER_BLOCKED '..tostring(err));return end
+            if not ok then reroll_session.finish('search_failed');log.warn('FILTER_BLOCKED '..tostring(err));return end
         end
         -- An operation another mod edited (s.external) holds missions no seed
         -- gives; it is never offered as the match.
@@ -170,7 +170,7 @@ on_prediction_ready=function(s,definitions,now)
     local fixed_row,fixed_difficulty=Search.active_row(s)
     if scope and fixed_row and fixed_difficulty==request.difficulty and Search.in_scope(fixed_row,scope)then
         reroll_session.finish('search_failed');reroll_session.report('This operation is in progress; its missions are fixed')
-        emit('FILTER_BLOCKED operation in progress row='..fixed_row..'; its missions cannot be rerolled');return
+        log.info('FILTER_BLOCKED operation in progress row='..fixed_row..'; its missions cannot be rerolled');return
     end
     local function baseline(frozen_read)
         local key=frozen_read(s.board+O.board.campaign+0x1c+s.planet*O.campaign.definition_stride,4)
@@ -214,19 +214,19 @@ on_prediction_ready=function(s,definitions,now)
             local ms=(search_clock()-started)*1000
             local r=worker_report or {}
             if ok and result and result.workers>0 then
-                emit(string.format('SEED_SOLVER_WORKERS workers=%d warm=%d text_kb=%.0f setup_ms=%.1f free_mb=%.1f largest_mb=%.1f processors=%d',
+                log.debug(string.format('SEED_SOLVER_WORKERS workers=%d warm=%d text_kb=%.0f setup_ms=%.1f free_mb=%.1f largest_mb=%.1f processors=%d',
                     result.workers,r.warm or 0,r.text_kb or 0,r.setup_ms or 0,r.free_mb or 0,r.largest_mb or 0,r.processors or 0))
             elseif ok and result then
-                emit('SEED_SOLVER_WORKERS workers=0 reason='..tostring(result.workers_off or worker_pool_off)..'; walking on the main thread')
+                log.debug('SEED_SOLVER_WORKERS workers=0 reason='..tostring(result.workers_off or worker_pool_off)..'; walking on the main thread')
             end
             if ok and result then
                 source=result
                 result.setup=ms/1000
-                emit(string.format('SEED_SOLVER paths=%d rows=%d setup_ms=%.0f match=1/%.0f expected_steps=%.0f%s',result.paths,
+                log.debug(string.format('SEED_SOLVER paths=%d rows=%d setup_ms=%.0f match=1/%.0f expected_steps=%.0f%s',result.paths,
                     result.rows,ms,1/math.max(result.estimate.match,1e-12),result.estimate.steps,
                     result.ids and string.format(' daynight_ids=%d/%d',result.valid,result.ids) or ''))
             else
-                emit(string.format('SEED_SOLVER_OFF reason=%s setup_ms=%.0f; scanning seeds in order',
+                log.warn(string.format('SEED_SOLVER_OFF reason=%s setup_ms=%.0f; scanning seeds in order',
                     tostring(ok and why or result),ms))
             end
         end
@@ -277,10 +277,10 @@ on_prediction_ready=function(s,definitions,now)
     wait_started=nil;wait_total=0;last_wait_poll=-math.huge
     local names={};for id,opt in ipairs(Search.options)do if required[id]then names[#names+1]=opt.name end end
     local modifier_rules={};for id,mode in pairs(rules.modifiers)do modifier_rules[#modifier_rules+1]=string.format('%u:%s',id,mode)end
-    table.sort(modifier_rules);emit('LUA_SEARCH_MODIFIERS '..table.concat(modifier_rules,','))
+    table.sort(modifier_rules);log.info('LUA_SEARCH_MODIFIERS '..table.concat(modifier_rules,','))
     if rules.excluded then
         local list={};for id,opt in ipairs(Search.options)do if rules.excluded[id]then list[#list+1]=opt.name end end
-        emit('LUA_SEARCH_EXCLUDED_MISSIONS '..table.concat(list,' + '))
+        log.info('LUA_SEARCH_EXCLUDED_MISSIONS '..table.concat(list,' + '))
     end
     if constellations then
         local tag_rules={}
@@ -294,7 +294,7 @@ on_prediction_ready=function(s,definitions,now)
                 ..'=accept '..(#accepted>0 and table.concat(accepted,'|') or 'any')
                 ..(#excluded>0 and ' exclude '..table.concat(excluded,'|') or '')
         end
-        table.sort(tag_rules);emit('LUA_SEARCH_CONSTELLATIONS '..table.concat(tag_rules,', '))
+        table.sort(tag_rules);log.info('LUA_SEARCH_CONSTELLATIONS '..table.concat(tag_rules,', '))
     end
     if objectives then
         local rules={}
@@ -309,9 +309,9 @@ on_prediction_ready=function(s,definitions,now)
                 ..'=require '..(#wanted>0 and table.concat(wanted,'+') or 'none')
                 ..(#unwanted>0 and ' exclude '..table.concat(unwanted,'|') or '')
         end
-        table.sort(rules);emit('LUA_SEARCH_OBJECTIVES '..table.concat(rules,', '))
+        table.sort(rules);log.info('LUA_SEARCH_OBJECTIVES '..table.concat(rules,', '))
     end
-    emit(string.format('LUA_SEARCH_STARTED planet=%d region=%s baseline_seed=%u first_seed=%u resumed=%s difficulty=%d required=%s limit=%d read_only='..tostring(M.read_only),
+    log.info(string.format('LUA_SEARCH_STARTED planet=%d region=%s baseline_seed=%u first_seed=%u resumed=%s difficulty=%d required=%s limit=%d read_only='..tostring(M.read_only),
         s.planet,scope and scope.region or 'all',s.seed,first,tostring(resumed==true),request.difficulty,table.concat(names,' + '),limit))
 end
 advance_prediction_search=function(action,now)
@@ -367,17 +367,17 @@ advance_prediction_search=function(action,now)
     if job.status=='running' then
         if job.waiting then
             reroll_session.advance('search_waiting_backend')
-            if not wait_started then wait_started=now;emit('LUA_SEARCH_WAIT '..tostring(job.wait_reason))end
+            if not wait_started then wait_started=now;log.debug('LUA_SEARCH_WAIT '..tostring(job.wait_reason))end
         else
             reroll_session.advance('search_running')
             if wait_started then
                 wait_total=wait_total+now-wait_started;wait_started=nil
-                emit(string.format('LUA_SEARCH_RESUMED wait_seconds=%.3f; revalidating captured inputs',wait_total))
+                log.debug(string.format('LUA_SEARCH_RESUMED wait_seconds=%.3f; revalidating captured inputs',wait_total))
             end
         end
         if now-last_progress>=5 then
             last_progress=now
-            emit(string.format('LUA_SEARCH_PROGRESS attempts=%d seeds_per_second=%.0f phase=%s max_slice_ms=%.3f %s',job.attempts,job.attempts/elapsed,job.phase,max_slice,timing))
+            log.debug(string.format('LUA_SEARCH_PROGRESS attempts=%d seeds_per_second=%.0f phase=%s max_slice_ms=%.3f %s',job.attempts,job.attempts/elapsed,job.phase,max_slice,timing))
         end
     else
         -- Just before the write the match must hold for the whole buffer from
@@ -389,13 +389,13 @@ advance_prediction_search=function(action,now)
                 times[#times+1]=string.format('level%d@%.0f',mission.level_index,job.daynight.time_of_day(mission.level_index,T))
             end
             local held=job.daynight.confirm(job.operation,T)
-            emit(string.format('DAYNIGHT_MATCH side=%s row=%d seed=%u war_time=%.1f buffer_s=%.0f holds=%s minutes=%s',
+            log.debug(string.format('DAYNIGHT_MATCH side=%s row=%d seed=%u war_time=%.1f buffer_s=%.0f holds=%s minutes=%s',
                 job.daynight.side,job.operation.row,job.seed,T,job.daynight.planet.buffer,tostring(held),table.concat(times,',')))
             if not held then
                 resume={key=job.key,planet=job.baseline.planet,baseline=job.baseline.seed,next=(job.seed+1)%4294967296}
                 release_source(job)
                 current_search=nil
-                emit('DAYNIGHT_WINDOW_CLOSED row='..job.operation.row..' seed='..job.seed..'; searching on')
+                log.debug('DAYNIGHT_WINDOW_CLOSED row='..job.operation.row..' seed='..job.seed..'; searching on')
                 on_prediction_ready(job.baseline,job.definitions,now)
                 return true
             end
@@ -411,16 +411,16 @@ advance_prediction_search=function(action,now)
                     table.sort(list);tags[#tags+1]=table.concat(list,'+')
                 end
                 for i,mission in ipairs(job.operation.missions)do tags[i]=mission.native_type..':'..tags[i]end
-                emit('LUA_SEARCH_MATCH_CONSTELLATIONS row='..job.operation.row..' missions='..table.concat(tags,','))
+                log.debug('LUA_SEARCH_MATCH_CONSTELLATIONS row='..job.operation.row..' missions='..table.concat(tags,','))
             end
             if job.rules.objectives then
                 local lists={}
                 for _,mission in ipairs(job.operation.missions)do
                     lists[#lists+1]=mission.native_type..':['..SideObjectives.describe(mission.objective_list or {})..']'
                 end
-                emit('LUA_SEARCH_MATCH_OBJECTIVES row='..job.operation.row..' missions='..table.concat(lists,' '))
+                log.debug('LUA_SEARCH_MATCH_OBJECTIVES row='..job.operation.row..' missions='..table.concat(lists,' '))
             end
-            emit(string.format('LUA_SEARCH_MATCH seed=%u row=%d attempts=%d seeds_per_second=%.0f ranges=%d bytes=%d max_slice_ms=%.3f %s missions=%s read_only='..tostring(M.read_only)..' published=false selected=false',
+            log.info(string.format('LUA_SEARCH_MATCH seed=%u row=%d attempts=%d seeds_per_second=%.0f ranges=%d bytes=%d max_slice_ms=%.3f %s missions=%s read_only='..tostring(M.read_only)..' published=false selected=false',
                 job.seed,job.operation.row,job.attempts,job.attempts/elapsed,job.ranges,job.bytes,max_slice,timing,table.concat(missions,',')))
             if on_search_match then on_search_match(job,now)end
         else
@@ -431,12 +431,12 @@ advance_prediction_search=function(action,now)
             if job.status=='exhausted' or job.error=='Search time limit reached' then
                 reroll_session.report('No match in '..job.attempts..' seeds; search again to continue')
             end
-            emit(string.format('LUA_SEARCH_%s attempts=%d seeds_per_second=%.0f next_seed=%u reason=%s max_slice_ms=%.3f %s',string.upper(job.status),job.attempts,
+            log[job.status=='failed' and 'warn' or 'info'](string.format('LUA_SEARCH_%s attempts=%d seeds_per_second=%.0f next_seed=%u reason=%s max_slice_ms=%.3f %s',string.upper(job.status),job.attempts,
                 job.attempts/elapsed,job.next_seed,tostring(job.error or 'candidate budget reached'),max_slice,timing))
         end
         if job.source and job.source.report then
             local r=job.source.report()
-            emit(string.format('SEED_SOLVER_WORKERS_END workers=%d walk_steps=%.0f failed=%d capped=%d worker_heap_kb=%.0f peak_worker_heap_kb=%.0f%s',
+            log.debug(string.format('SEED_SOLVER_WORKERS_END workers=%d walk_steps=%.0f failed=%d capped=%d worker_heap_kb=%.0f peak_worker_heap_kb=%.0f%s',
                 r.workers,job.source.steps(),r.failed,r.capped,r.setup_kb,r.peak_kb,r.error and ' error='..r.error or ''))
         end
         release_source(job)
@@ -444,7 +444,7 @@ advance_prediction_search=function(action,now)
     end
     return true
 end
-emit('Lua search checkpoint: ICBM + Geological Survey + Eradicate, difficulty 10; same shortcut cancels; alt-tab supported; '..config.search_outcome)
+log.debug('Lua search checkpoint: ICBM + Geological Survey + Eradicate, difficulty 10; same shortcut cancels; alt-tab supported; '..config.search_outcome)
 return {on_prediction_ready=on_prediction_ready,advance_prediction_search=advance_prediction_search,
     search_clock=search_clock,default_limit=default_limit,solver_rate=function()return solver_rate end,
     -- When the mod stops on an error, its frame no longer runs: no idle
@@ -456,6 +456,6 @@ return {on_prediction_ready=on_prediction_ready,advance_prediction_search=advanc
     shutdown_search_workers=function(seconds)
         if not worker_pool then return 0 end
         local left=worker_pool.shutdown(seconds or 3)
-        if left>0 then emit('SEED_SOLVER_WORKERS_SHUTDOWN left_open='..left)end
+        if left>0 then log.warn('SEED_SOLVER_WORKERS_SHUTDOWN left_open='..left)end
         return left
     end}

@@ -32,7 +32,8 @@ local make_map_screen=factory('map_screen.lua','...',{})(O)
 local Board=factory('board_records.lua','...',{})(O)
 local function fake_host(config)
     local M,emit={status='initializing'},function(s)lines[#lines+1]=s end
-    return {M=M,config=config,emit=emit,reroll_session=make_reroll_session(M,emit,{strict=true}),
+    local log={debug=emit,info=emit,warn=emit,error=emit}
+    return {M=M,config=config,log=log,reroll_session=make_reroll_session(M,log,{strict=true}),
         hex=function()return '' end,u=function()return 0 end,read=function()error('no memory')end,
         pointer=function()error('no memory')end,page=function()end,participants=function()end,
         snapshot=function()return nil,'open galactic map' end,initialize=function()end,O=O,verify_code=function()end,
@@ -51,9 +52,24 @@ local g={CowboyBingusModLoader={api=1,version=18,open_log=function()return nil e
 local host=factory('experiment_adapter.lua',ADAPTER,g)({},config,make_map_screen,offsets,O,sha256,Board)
 local M=g.MissionRerollerExperiment
 assert(host and host.M==M and host.config==config and M.read_only==false and M.preview_prediction==true and M.version=='9.9.9')
-for _,name in ipairs({'emit','hex','u','read','pointer','page','participants','snapshot','initialize','when_initialized','close_log'})do
+for _,name in ipairs({'hex','u','read','pointer','page','participants','snapshot','initialize','when_initialized','close_log'})do
     assert(type(host[name])=='function','host.'..name)
 end
+-- host.log writes each line behind its level, and drops levels below the
+-- build's log_level: info (the default, a tagged release) keeps no debug.
+local function logged(log_level)
+    local written={}
+    local file={write=function(_,s)written[#written+1]=s end,flush=function()end,close=function()end}
+    local env={CowboyBingusModLoader={api=1,version=18,open_log=function()return file end}}
+    local c={};for k,v in pairs(config)do c[k]=v end;c.log_level=log_level
+    local h=factory('experiment_adapter.lua',ADAPTER,env)({},c,make_map_screen,offsets,O,sha256,Board)
+    for _,level in ipairs({'debug','info','warn','error'})do h.log[level](level..' line')end
+    return table.concat(written)
+end
+assert(logged(nil)=='INFO  info line\nWARN  warn line\nERROR error line\n',logged(nil))
+assert(logged('debug')=='DEBUG debug line\nINFO  info line\nWARN  warn line\nERROR error line\n',logged('debug'))
+assert(logged('warn')=='WARN  warn line\nERROR error line\n',logged('warn'))
+assert(not pcall(logged,'verbose'),'An unknown log_level stops the build')
 for _,name in ipairs({'stack','screens','on_top','ui','viewed','rows_address','processed_row','pointed_row','back_hint'})do
     assert(type(host.map[name])=='function','host.map.'..name)
 end

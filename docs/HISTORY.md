@@ -5,6 +5,17 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
+**Not yet validated in game: log levels.** Every log line starts with
+`DEBUG`, `INFO`, `WARN` or `ERROR`; runtimes write through
+`host.log.<level>` instead of `host.emit`. A tagged release keeps `INFO`
+and above, a development build keeps `DEBUG` too. The 84-line development
+log of one search and publication on 2026-10-05 keeps 27 lines at release
+level, 16 of them the mod list; the modal, Escape, estimate, worker,
+solver, day/night and hover-check lines became `DEBUG`. Every line the
+README tells players to send stays `INFO` or above, which moved
+`BINDING_REGISTERED` to `INFO` and an `ESCAPE_HELD mappings=0` to `WARN`.
+Test plan: [LOG_LEVELS_TEST.md](LOG_LEVELS_TEST.md).
+
 **Not yet validated in game: v0.35.1.** Releases the warm worker VMs on
 the ship (made when the galactic map is open, closed and replaced after
 each search, cooled 10 s after the map closes or on a loading gate), the

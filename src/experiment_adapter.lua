@@ -98,9 +98,20 @@ if not loader or (loader.api or 0)<1 or (loader.version or 0)<16 then
 end
 local log
 pcall(function() log=loader.open_log('MissionRerollerExperiment.log') end)
-local function emit(s)
-    if log then pcall(function() log:write(s..'\n'); log:flush() end) end
+-- Log levels. config.log_level is the lowest level the build writes: info
+-- for a tagged release, debug for development and research builds. Each line
+-- starts with its level, padded so the tags line up.
+local LEVELS={debug='DEBUG ',info='INFO  ',warn='WARN  ',error='ERROR '}
+local ORDER={debug=1,info=2,warn=3,error=4}
+local threshold=assert(ORDER[config.log_level or 'info'],'unknown log_level')
+local function writer(level)
+    local prefix=LEVELS[level]
+    if ORDER[level]<threshold then return function()end end
+    return function(s)
+        if log then pcall(function() log:write(prefix..s..'\n'); log:flush() end) end
+    end
 end
+local logger={debug=writer('debug'),info=writer('info'),warn=writer('warn'),error=writer('error')}
 local function hex(b) return (b:gsub('.',function(c)return string.format('%02x',c:byte())end)) end
 local function u(b,o)
     local a,c,d,e=b:byte(o+1,o+4); assert(e,'short read')
@@ -240,7 +251,7 @@ local function initialize()
     user32=import_user32(ffi)
     initialized=true
     for _,bind in ipairs(binders)do bind({api=api,game=game,ffi=ffi,kernel=kernel,user32=user32})end
-    emit('build='..O.build..' hashes=verified signatures='..signatures..' anchors='..anchors..' verified')
+    logger.info('build='..O.build..' hashes=verified signatures='..signatures..' anchors='..anchors..' verified')
 end
 local function snapshot(viewed_planet)
     if viewed_planet then assert(M.read_only or M.preview_prediction,'Preview snapshots are read-only')end
@@ -305,7 +316,7 @@ end
 -- Runtime host: what the runtimes may use of the adapter. build_identity_probe
 -- wraps this file as function(core,config,make_map_screen,offsets,O,sha256,Board)
 -- and passes the table to each runtime.
-return {M=M,config=config,emit=emit,hex=hex,u=u,read=read,pointer=pointer,page=page,participants=participants,
+return {M=M,config=config,log=logger,hex=hex,u=u,read=read,pointer=pointer,page=page,participants=participants,
     snapshot=snapshot,initialize=initialize,map=map_screen,O=O,verify_code=verify_code,
     -- The native handles exist once initialize() has run on the first frame;
     -- it passes them to every function registered here.

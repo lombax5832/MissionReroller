@@ -30,7 +30,7 @@ def main():
         return
     with tempfile.TemporaryDirectory() as folder:
         entry = Path(folder) / 'entry.lua'
-        entry.write_bytes(build.source())
+        entry.write_bytes(build.source(log_level='debug'))
         for name in ('planet-live', 'city-live'):
             capture = PR.artifacts() / name / 'capture.lua'
             if not capture.exists():

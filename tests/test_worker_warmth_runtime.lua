@@ -33,9 +33,9 @@ map.gates=function()return gate,'loading_gate='..(gate and 1 or 0)..' transition
 -- The map on top warms the pool; it then fills over the next frames.
 tick_workers(1)
 assert(fake.calls[1]==true,'the map warms the pool')
-assert(logged('^SEED_SOLVER_WORKERS_WARM reason=galactic map open screens=15 loading_gate=0'),'warm line')
+assert(logged('^DEBUG SEED_SOLVER_WORKERS_WARM reason=galactic map open screens=15 loading_gate=0'),'warm line')
 tick_workers(1.01)
-assert(fake.idle==2 and logged('^SEED_SOLVER_WORKERS_WARMED idle=2 max_workers=2'),'warmed line once full')
+assert(fake.idle==2 and logged('^DEBUG SEED_SOLVER_WORKERS_WARMED idle=2 max_workers=2'),'warmed line once full')
 local lines=#logs
 for t=1.3,3,0.3 do tick_workers(t)end
 assert(#logs==lines and #fake.calls==1,'nothing more while warm and full')
@@ -44,12 +44,12 @@ assert(#logs==lines and #fake.calls==1,'nothing more while warm and full')
 local function count(pattern)local n=0;for _,line in ipairs(logs)do if line:find(pattern)then n=n+1 end end;return n end
 fake.idle=0
 tick_workers(3.1);tick_workers(3.2)
-assert(fake.idle==2 and count('^SEED_SOLVER_WORKERS_WARMED idle=2')==2,'warmed again after a search')
+assert(fake.idle==2 and count('^DEBUG SEED_SOLVER_WORKERS_WARMED idle=2')==2,'warmed again after a search')
 -- A set gate cools it at once, with the idle workers it closed.
 gate=true;on_top=false
 tick_workers(4)
 assert(fake.calls[2]==false,'a gate cools the pool')
-assert(logged('^SEED_SOLVER_WORKERS_COLD reason=loading or transition gate set closed=2 screens=3 loading_gate=1'),'cold line')
+assert(logged('^DEBUG SEED_SOLVER_WORKERS_COLD reason=loading or transition gate set closed=2 screens=3 loading_gate=1'),'cold line')
 -- Back on the ship, then a failed read: counted as loading.
 gate=false;on_top=true
 tick_workers(5);assert(fake.calls[3]==true,'warm again')

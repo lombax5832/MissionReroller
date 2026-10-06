@@ -1,7 +1,7 @@
 -- Modal UI for the in-process predictor. Losing focus releases input ownership
 -- but never cancels the search. Only an explicit cancel/close cancels work.
 -- A runtime factory: the assembler runs this file as function(host,lib,hooks).
-local M,emit,read,pointer,page,u,hex,snapshot=host.M,host.emit,host.read,host.pointer,host.page,host.u,host.hex,host.snapshot
+local M,log,read,pointer,page,u,hex,snapshot=host.M,host.log,host.read,host.pointer,host.page,host.u,host.hex,host.snapshot
 local reroll_session=host.reroll_session
 local map,write,O,verify_code=host.map,host.write,host.O,host.verify_code
 local Panel,Hint,Binding,FilterCatalogue,EscapeGate=lib.Panel,lib.Hint,lib.Binding,lib.FilterCatalogue,lib.EscapeGate
@@ -71,17 +71,17 @@ do
         -- Still held from a close whose Escape has not been released.
         if not escape or escape_blocked or escape.held then return end
         local ok,value=pcall(escape.hold,escape)
-        if ok then emit('ESCAPE_HELD mappings='..value..' actions='..(escape.actions~='' and escape.actions or 'none'))return end
-        escape_blocked=true;emit('ESCAPE_BLOCKED '..tostring(value))
+        if ok then log[value==0 and 'warn' or 'debug']('ESCAPE_HELD mappings='..value..' actions='..(escape.actions~='' and escape.actions or 'none'))return end
+        escape_blocked=true;log.warn('ESCAPE_BLOCKED '..tostring(value))
         -- Put back whatever was written before the failure.
-        if escape.held then local restored=escape:release();emit('ESCAPE_RESTORED buckets='..restored)end
+        if escape.held then local restored=escape:release();log.debug('ESCAPE_RESTORED buckets='..restored)end
     end
     -- Raises when a bucket cannot be written back, which stops the mod.
     local function restore_escape(force)
         if not (escape and escape.held)then return end
         if not force and escape_key()then return end
         local restored,skipped=escape:release()
-        emit('ESCAPE_RESTORED buckets='..restored..(skipped>0 and ' changed='..skipped or ''))
+        log.debug('ESCAPE_RESTORED buckets='..restored..(skipped>0 and ' changed='..skipped or ''))
     end
     local function face()
         local function hash(a)local b=read(a,8);return string.format('%08x%08x',u(b,4),u(b,0))end
@@ -115,13 +115,13 @@ do
         -- A normal close waits for Escape to be released; every other
         -- release puts the mappings back now.
         local ok,err=pcall(restore_escape,reason~='closed')
-        if not ok then emit('ESCAPE_RESTORE_FAILED '..tostring(err))end
+        if not ok then log.error('ESCAPE_RESTORE_FAILED '..tostring(err))end
         local drifts=gate and gate.drifts or 0
-        emit('MODAL_RELEASE '..reason..(drifts>0 and ' reasserted='..drifts..' last='..tostring(gate.reason) or ''))
+        log.debug('MODAL_RELEASE '..reason..(drifts>0 and ' reasserted='..drifts..' last='..tostring(gate.reason) or ''))
     end
     local function init()
         exe=assert(api.module(nil));panel=Panel.new(assert(stingray));hint=Hint.new(stingray)
-        binding=Binding.new({read=read,pointer=pointer,u=u,game=game,emit=emit,keyboard=stingray.Keyboard,
+        binding=Binding.new({read=read,pointer=pointer,u=u,game=game,log=log,keyboard=stingray.Keyboard,
             menu=function()return rawget(_G,'ModBindingsMenu')end})
         cursor=make_cursor(ffi)
         gate=make_gate(stingray.Window,check_window)
@@ -142,7 +142,7 @@ do
         -- Searching and publishing repeat the checks and stop on a failure.
         local ok,s,why=pcall(snapshot,true)
         if not ok then
-            if tostring(s)~=snapshot_error then snapshot_error=tostring(s);emit('SNAPSHOT_BLOCKED '..snapshot_error)end
+            if tostring(s)~=snapshot_error then snapshot_error=tostring(s);log.warn('SNAPSHOT_BLOCKED '..snapshot_error)end
             return nil,'Planet data unavailable',view
         end
         snapshot_error=nil
@@ -156,8 +156,8 @@ do
         -- Mission and modifier filters survive a constellation or side-objective input failure.
         local result,err,failure=Planet.bind(read,u,api.pointer,game,s.board,s.planet).catalogue(s,d,
             only or within and function(row)return Search.in_scope(row,within)end)
-        if err and tostring(err)~=tag_error then tag_error=tostring(err);emit('CONSTELLATION_CATALOGUE_BLOCKED '..tag_error)end
-        if failure and tostring(failure)~=objective_error then objective_error=tostring(failure);emit('SIDE_OBJECTIVE_CATALOGUE_BLOCKED '..objective_error)end
+        if err and tostring(err)~=tag_error then tag_error=tostring(err);log.warn('CONSTELLATION_CATALOGUE_BLOCKED '..tag_error)end
+        if failure and tostring(failure)~=objective_error then objective_error=tostring(failure);log.warn('SIDE_OBJECTIVE_CATALOGUE_BLOCKED '..objective_error)end
         return result
     end
     -- rules: the request's filter rules (src/filter_rules.lua).
@@ -232,10 +232,10 @@ do
                     local line=estimate.match and string.format('ESTIMATE match=1/%.0f seconds=%s',1/math.max(estimate.match,1e-12),
                         estimate.seconds and string.format('%.1f',estimate.seconds) or 'unmeasured') or estimate.impossible and 'ESTIMATE none: no draw path'
                         or 'ESTIMATE unavailable: '..tostring(estimate.unavailable)
-                    if line~=logged then logged=line;emit(line)end
+                    if line~=logged then logged=line;log.debug(line)end
                 end
             end)
-            if not ok and tostring(err)~=failure then failure=tostring(err);emit('ESTIMATE_BLOCKED '..failure)end
+            if not ok and tostring(err)~=failure then failure=tostring(err);log.warn('ESTIMATE_BLOCKED '..failure)end
             kept=estimate
             return estimate,reach
         end
@@ -249,7 +249,7 @@ do
                 local planet,why=DayNight.load(read,u,s.board,s.planet,ref)
                 if not planet then sky_planet=nil;return {pending=why}end
                 sky_planet=planet
-                emit(string.format('DAYNIGHT_PLANET planet=%d day_s=%.0f buffer_s=%.0f band_min=%d',s.planet,planet.day_length,planet.buffer,DayNight.BAND))
+                log.debug(string.format('DAYNIGHT_PLANET planet=%d day_s=%.0f buffer_s=%.0f band_min=%d',s.planet,planet.day_length,planet.buffer,DayNight.BAND))
             end
             local planet=sky_planet
             -- How long the chosen side holds, for its tile on the panel.
@@ -270,7 +270,7 @@ do
             return {hold=hold,blocked=side..(scope and ' here' or ' at a city here')..' in '..DayNight.duration(wait)}
         end)
         if ok then sky_error=nil
-        elseif tostring(value)~=sky_error then sky_error=tostring(value);emit('DAYNIGHT_BLOCKED '..sky_error)end
+        elseif tostring(value)~=sky_error then sky_error=tostring(value);log.warn('DAYNIGHT_BLOCKED '..sky_error)end
         sky_state=ok and value or {pending='Day and night unavailable here'}
         sky_key,sky_at=key,now
         return sky_state
@@ -281,7 +281,7 @@ do
         if ok then
             running=reroll_session.start(filters:to_request(scope,difficulty))
             if running then report,report_tone='Checking planet data','idle' else report,report_tone=reroll_session.view().caption,'bad' end
-            emit('DIALOG_SEARCH planet='..s.planet..' region='..(scope and scope.region or 'all')..' difficulty='..difficulty
+            log.debug('DIALOG_SEARCH planet='..s.planet..' region='..(scope and scope.region or 'all')..' difficulty='..difficulty
                 ..' players='..tostring(s.sc))
         else report,report_tone=tostring(err),'bad' end
     end
@@ -289,7 +289,7 @@ do
         if not panel then init()end
         filters=filters or FilterRequest.new(Search.options,FilterCatalogue,Constellations.names,Constellations.stamped)
         -- Logs on the first frame whether unit tooltips can run; rechecked on every hover.
-        if not forecaster then forecaster=UnitForecast.new(emit,_G,BundledRoster);forecaster:roster()end
+        if not forecaster then forecaster=UnitForecast.new(log,_G,BundledRoster);forecaster:roster()end
         if not router then restore_escape(not focused)end
         local run=reroll_session.view()
         if running and not run.running then
@@ -304,7 +304,7 @@ do
         -- fully shown. Without a readable hint the top screen alone decides.
         -- The hint is cosmetic: a failure disables it for the session and is
         -- logged once, without stopping the mod.
-        local function block(err)hint_blocked=true;pcall(function()hint:clear()end);emit('HINT_BLOCKED '..tostring(err))end
+        local function block(err)hint_blocked=true;pcall(function()hint:clear()end);log.warn('HINT_BLOCKED '..tostring(err))end
         local anchor,on_map=nil,false
         if focused then
             if not hint_blocked then
@@ -335,7 +335,7 @@ do
         if pressed and not on_map then
             local ok,list=pcall(screens)
             local line='SHORTCUT_IGNORED screens='..(ok and list or '?')
-            if line~=screens_logged then screens_logged=line;emit(line)end
+            if line~=screens_logged then screens_logged=line;log.info(line)end
         elseif pressed then
             if router then close()
             else
@@ -346,7 +346,7 @@ do
                 -- An Escape held while opening does not close the dialog.
                 escape_down=true;hold_escape()
                 local ok,list=pcall(screens)
-                emit('MODAL_OPEN scope='..(scope and 'region '..scope.region or 'planet')..' key='..(keys or 'F7')
+                log.debug('MODAL_OPEN scope='..(scope and 'region '..scope.region or 'planet')..' key='..(keys or 'F7')
                     ..' screens='..(ok and list or '?'))
             end
         end
@@ -374,7 +374,7 @@ do
                     local removed=filters:prune(value,view~=catalogue_view)
                     catalogue=value;catalogue_key=key;catalogue_view=view
                     if removed then report,report_tone='Unavailable filters cleared for this planet/difficulty','warn' end
-                else catalogue=nil;catalogue_key=key;emit('FILTER_CATALOGUE_BLOCKED '..tostring(value))end
+                else catalogue=nil;catalogue_key=key;log.warn('FILTER_CATALOGUE_BLOCKED '..tostring(value))end
             end
             if not catalogue then why='Eligibility unavailable; reopen filters to retry';s=nil end
         end
@@ -427,7 +427,7 @@ do
         local ok,action,reverse=pcall(router.step,router,x,y,user32.GetAsyncKeyState(1)<0,Panel.layout(width,height,model).targets,
             user32.GetAsyncKeyState(2)<0)
         if not ok then
-            emit('MODAL_INPUT_LOST '..tostring(action)..(gate.reason and ' ('..gate.reason..')' or ''))
+            log.debug('MODAL_INPUT_LOST '..tostring(action)..(gate.reason and ' ('..gate.reason..')' or ''))
             if not pcall(router.abort,router) and gate.forget then gate:forget()end
             report,report_tone='Dialog closed: input ownership lost. Press the shortcut to reopen','warn'
             gap.queued=nil
@@ -448,10 +448,10 @@ do
         local icons=panel:icons()
         if icons~=nil and icons~=icons_logged then
             icons_logged=icons
-            emit(icons==true and 'TIME_ICONS drawn' or 'TIME_ICONS off reason='..tostring(icons))
+            log[icons==true and 'debug' or 'warn'](icons==true and 'TIME_ICONS drawn' or 'TIME_ICONS off reason='..tostring(icons))
         end
     end
     M.dialog_enabled=true
-    emit('Mission filters: F7 or the Reroll operations binding on the MODS tab, on the galactic map only; Escape closes; native cursor; docked panel; key hint beside BACK '..(HINT_WIDGET and 'at widget '..HINT_WIDGET or 'disabled')..'; alone or hosting a lobby; all checked families in one operation; map difficulty; constellations and side objectives per mission; repeat searches allowed')
+    log.debug('Mission filters: F7 or the Reroll operations binding on the MODS tab, on the galactic map only; Escape closes; native cursor; docked panel; key hint beside BACK '..(HINT_WIDGET and 'at widget '..HINT_WIDGET or 'disabled')..'; alone or hosting a lobby; all checked families in one operation; map difficulty; constellations and side objectives per mission; repeat searches allowed')
 end
 return {dialog_tick=dialog_tick,dialog_release=dialog_release,validate_search_request=validate_search_request}

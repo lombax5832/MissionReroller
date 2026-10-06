@@ -1,6 +1,6 @@
 -- Publish one verified Lua search result through the previously tested local path.
 -- A runtime factory: the assembler runs this file as function(host,lib,hooks).
-local M,emit,read,pointer,page,u,hex=host.M,host.emit,host.read,host.pointer,host.page,host.u,host.hex
+local M,log,read,pointer,page,u,hex=host.M,host.log,host.read,host.pointer,host.page,host.u,host.hex
 local reroll_session=host.reroll_session
 local map,write=host.map,host.write
 local snapshot,participants,verify_code,O=host.snapshot,host.participants,host.verify_code,host.O
@@ -77,26 +77,26 @@ local function select_match(s)
     assert(u(read(s.board+O.board.selected_mission,4),0)==4294967295,'Mission unexpectedly selected')
     assert(hex(read(s.board+O.board.active_operation,Board.OPERATION_SIZE))==s.active,'Active operation changed on selection')
     selector={started=api.time(),context=s.context,planets=s.selection:sub(1,8)}
-    emit('PREDICTION_VERIFIED selected_row='..candidate.row..' active_preserved=true')
+    log.debug('PREDICTION_VERIFIED selected_row='..candidate.row..' active_preserved=true')
 end
 local function cleanup(reason)
     if ui_selection then
         local ok,err=pcall(function()ui_selection:restore()end)
-        if not ok then emit('UI_RESTORE_FAILED '..tostring(err))end
+        if not ok then log.error('UI_RESTORE_FAILED '..tostring(err))end
     end
     if transaction and transaction.before then
         local ok,err=pcall(function()transaction:restore(reason)end)
-        if not ok then emit('RESTORE_FAILED '..tostring(err));error(err)end
+        if not ok then log.error('RESTORE_FAILED '..tostring(err));error(err)end
     end
     transaction=nil;selector=nil;ui_selection=nil
 end
 on_existing_match=function(s,op,now)
     candidate={seed=s.seed,planet=s.planet,row=op.row,difficulty=op.difficulty,operation_seed=op.seed}
     select_match(s);reroll_session.advance('selection_pending')
-    emit('EXISTING_MATCH row='..op.row..' seed='..s.seed..' publication=false')
+    log.info('EXISTING_MATCH row='..op.row..' seed='..s.seed..' publication=false')
 end
 on_search_match=function(job,now)
-    if publication_used and not M.dialog_enabled then reroll_session.finish('publication_blocked');emit('PUBLICATION_BLOCKED one publication per test session; restart to test again');return end
+    if publication_used and not M.dialog_enabled then reroll_session.finish('publication_blocked');log.warn('PUBLICATION_BLOCKED one publication per test session; restart to test again');return end
     local s=job.baseline;local match=job.operation
     candidate={seed=job.seed,planet=s.planet,row=match.row,difficulty=match.difficulty,operation_seed=match.seed,operations=job.operations,
         rules=job.rules or {required={[1]=true,[2]=true,[3]=true}},scope=job.scope,daynight=job.daynight}
@@ -109,7 +109,7 @@ on_search_match=function(job,now)
             assert(read(before.board+O.board.selection_context,8)==before.selection:sub(1,8),'Canonical map planet differs')
             assert(u(before.selection,4)==e.planet,'Viewed planet changed')
             local displayed_planet,displayed_difficulty=map.viewed()
-            emit(string.format('PUBLICATION_UI planet=%u expected_planet=%u difficulty=%u expected_difficulty=%u campaign_row=%u',displayed_planet,e.planet,displayed_difficulty,e.difficulty,u(before.selection,8)))
+            log.debug(string.format('PUBLICATION_UI planet=%u expected_planet=%u difficulty=%u expected_difficulty=%u campaign_row=%u',displayed_planet,e.planet,displayed_difficulty,e.difficulty,u(before.selection,8)))
             assert(displayed_planet==e.planet,'Keep the viewed planet open with operation icons visible until the search completes (UI planet='..displayed_planet..', expected='..e.planet..')')
             assert(displayed_difficulty==e.difficulty,'Display difficulty '..e.difficulty..' before starting (UI difficulty='..displayed_difficulty..')')
             check_selection('Selection signature changed')
@@ -125,10 +125,10 @@ on_search_match=function(job,now)
         publish=function(before,seed)
             assert(ownership(before.board)==before.owner_guard,'Owner changed')
             publication_used=true
-            emit(string.format('PUBLISH_BEGIN previous_seed=%u candidate_seed=%u primary_planet=%u viewed_planet=%u',before.seed,seed,u(before.selection,0),u(before.selection,4)))
+            log.info(string.format('PUBLISH_BEGIN previous_seed=%u candidate_seed=%u primary_planet=%u viewed_planet=%u',before.seed,seed,u(before.selection,0),u(before.selection,4)))
             write_seed(before.board,seed);notify(before.board)
             assert(hex(read(before.board+O.board.active_operation,Board.OPERATION_SIZE))==before.active,'Active operation changed')
-            emit('PUBLISH_RETURN active_preserved=true')
+            log.debug('PUBLISH_RETURN active_preserved=true')
         end,
         restore=function(before,seed)
             assert(ownership(before.board)==before.owner_guard,'Restore owner changed; refusing stale write')
@@ -136,11 +136,11 @@ on_search_match=function(job,now)
             local current=u(read(before.board+O.board.seed,4),0)
             assert(current==seed or current==before.seed,'External seed change; refusing overwrite')
             write_seed(before.board,before.seed);notify(before.board)
-            emit('RESTORE_SEED previous_seed='..before.seed)
+            log.warn('RESTORE_SEED previous_seed='..before.seed)
         end,
         matches=function(current,e)
             local ok,reason=verify_predicted_board(current,e.operations)
-            emit('PREDICTION_CHECK descriptors_match='..tostring(ok)..' reason='..tostring(reason))
+            log.debug('PREDICTION_CHECK descriptors_match='..tostring(ok)..' reason='..tostring(reason))
             return ok and current.active==s.active and current.selection:sub(1,8)==s.selection:sub(1,8)
         end,
     },candidate)
@@ -149,7 +149,7 @@ on_search_match=function(job,now)
         local attempted=transaction.used
         cleanup('Publication failed')
         reroll_session.finish(attempted and 'publication_failed' or 'publication_blocked')
-        emit('PUBLICATION_BLOCKED '..tostring(err));return
+        log.warn('PUBLICATION_BLOCKED '..tostring(err));return
     end
     reroll_session.advance('publication_pending')
 end
@@ -161,7 +161,7 @@ advance_live_publication=function(action,now)
         if s then local again=snapshot(true);if not again or again.fingerprint~=s.fingerprint then s=nil end end
         local state=transaction:poll(s,now)
         if state=='restored' then
-            emit('PUBLICATION_RESTORED '..tostring(transaction.reason));transaction=nil;reroll_session.finish('publication_restored');return true
+            log.warn('PUBLICATION_RESTORED '..tostring(transaction.reason));transaction=nil;reroll_session.finish('publication_restored');return true
         elseif state=='verified' then
             -- The regenerated board is correct. Selection failure must not undo
             -- a verified board; the user can still select its operation manually.
@@ -172,7 +172,7 @@ advance_live_publication=function(action,now)
                 local op
                 for _,value in ipairs(assert(s).decoded.operations)do if value.row==candidate.row then op=value end end
                 local ok,held=pcall(function()return op and candidate.daynight.confirm(op,DayNight.war_time(read,s.board))end)
-                emit('DAYNIGHT_VERIFIED row='..candidate.row..' holds='..tostring(ok and held or false)..(ok and '' or ' error='..tostring(held)))
+                log.debug('DAYNIGHT_VERIFIED row='..candidate.row..' holds='..tostring(ok and held or false)..(ok and '' or ' error='..tostring(held)))
                 if not (ok and held)then reroll_session.report('The operation may leave the chosen side within '..DayNight.duration(candidate.daynight.planet.buffer))end
             end
             select_match(assert(s));reroll_session.advance('selection_pending')
@@ -186,11 +186,11 @@ advance_live_publication=function(action,now)
             and s.decoded.highlighted_operation==candidate.row and ui_selection:confirmed(candidate.row)
             and u(s.selection,12)==4294967295 then
             ui_selection:commit();ui_selection=nil;selector=nil
-            emit('PUBLICATION_STATE_VERIFIED seed='..s.seed..' row='..candidate.row..' map_ui_row_confirmed=true mission_unselected=true')
+            log.info('PUBLICATION_STATE_VERIFIED seed='..s.seed..' row='..candidate.row..' map_ui_row_confirmed=true mission_unselected=true')
             reroll_session.finish('publication_test_passed')
         end
     end
     return true
 end
-emit('Live publication enabled: alone on ship; keep the viewed planet open; verified match opens automatically')
+log.debug('Live publication enabled: alone on ship; keep the viewed planet open; verified match opens automatically')
 return {on_existing_match=on_existing_match,on_search_match=on_search_match,advance_live_publication=advance_live_publication}
