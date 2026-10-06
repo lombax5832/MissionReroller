@@ -5,6 +5,12 @@ until v0.20.2 was published; the [README](../README.md) now describes the
 mod for players. Each entry records what was known when it was written, and
 the first two were brought up to date on 2026-09-29.
 
+**Not yet validated in game: v0.36.0.** Releases the log levels (below)
+and the right click that cycles filter rows backwards
+([RIGHT_CLICK_TEST.md](RIGHT_CLICK_TEST.md)). A local tagged v0.35.2 build
+of the same source was run in game on 2026-10-05; the right click has no
+recorded in-game result.
+
 **Validated in game 2026-10-05: log levels.** The development build wrote
 444 prefixed lines over 11 searches (365 `DEBUG`, 79 `INFO`); a local
 tagged v0.35.2 build wrote 27 `INFO` lines and nothing else for one search

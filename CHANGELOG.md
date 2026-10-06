@@ -6,6 +6,16 @@ GitHub release notes and, as one plain-text line each, the Nexus Mods
 changelog. How each change was
 made and tested is in the development log, [docs/HISTORY.md](docs/HISTORY.md).
 
+## v0.36.0 Right-click filters and a shorter log
+
+- A right click on a mission, modifier, enemy force or side objective row
+  now cycles it the other way: any, excluded, then required. A left click
+  works as before.
+- The mod's log is much shorter: it now records what you searched for, what
+  was found and anything that went wrong, and each line says whether it is
+  information, a warning or an error. Send it as before when reporting a
+  problem.
+
 ## v0.35.1 Searches ready before you start
 
 - While the galactic map is open on your ship, the background searchers are
