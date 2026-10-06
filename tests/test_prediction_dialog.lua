@@ -16,9 +16,9 @@ local function drop()requested();held_request=nil end
 local function take()assert(requested(),'No request to take');held_request=nil;session.advance('waiting_for_stable_inputs')end
 local function options()return session.view().request end
 local real_context=up(dialog,'context');local real_catalogue=up(dialog,'catalogue_for')
-local key,mouse,esc=false,false,false;local x,y=0,0
+local key,mouse,esc,right=false,false,false,false;local x,y=0,0
 local user={GetForegroundWindow=function()return nil end,
-    GetAsyncKeyState=function(k)return ((k==1 and mouse)or(k==0x76 and key)or(k==0x1B and esc))and -1 or 0 end}
+    GetAsyncKeyState=function(k)return ((k==1 and mouse)or(k==2 and right)or(k==0x76 and key)or(k==0x1B and esc))and -1 or 0 end}
 -- The native handles the runtimes get from the adapter on the first frame.
 H.natives(update,{user32=user,game=0,api={pointer=function()end}})
 -- The galactic map is the top screen with its BACK hint shown, unless a test
@@ -99,6 +99,11 @@ local function click(id)
     x=target.x+target.w/2;y=target.y+target.h/2
     mouse=false;frame();mouse=true;frame();mouse=false;frame()
 end
+local function right_click(id)
+    local target=assert(find(id),id)
+    x=target.x+target.w/2;y=target.y+target.h/2
+    right=false;frame();right=true;frame();right=false;frame()
+end
 local function ids()local out={};for i,item in ipairs(last_model.items)do out[i]=item.id end;return table.concat(out,' ')end
 local function tabs()
     local out={};for i,group in ipairs(last_model.groups)do out[i]=group.name..(group.selected and '*' or '')end
@@ -128,6 +133,12 @@ take();session.finish('cancelled');frame()
 -- Nursery back to any; Survey cycles through excluded to any.
 click(9);click(2);frame();assert(last_model.items[1].mode=='exclude' and not last_selected[2])
 click(2);frame();assert(not last_model.items[1].mode and not last_model.items[3].mode and last_model.rules==0)
+-- A right click cycles a row backwards and does nothing to the buttons.
+right_click(2);frame();assert(last_model.items[1].mode=='exclude','Right click: any to excluded')
+right_click(2);frame();assert(last_model.items[1].mode=='require' and last_selected[2],'Right click: excluded to required')
+right_click(2);frame();assert(not last_model.items[1].mode and last_model.rules==0,'Right click: required to any')
+right_click('close');right_click('section:modifiers');frame()
+assert(held and last_model.section=='missions','Right click ignores buttons and headers')
 click(2);click(4);frame()
 assert(last_model.can_start and last_model.can_clear and last_model.rules==2 and last_model.checked==2)
 assert(last_model.status=='Ready to search' and last_model.detail=='Rerolls every unstarted operation of the campaign')

@@ -84,6 +84,10 @@ the same GUID, so your manager treats it as the same mod.
      the map difficulty. The line under the buttons shows how many side and
      tactical objectives the mission has; a row that no longer fits, or that
      would leave nothing to draw, is dimmed, and pointing at it says why.
+   - **Right click.** A right click cycles a row backwards: ANY, EXCLUDED,
+     REQUIRED (ACCEPTED for enemy forces). It skips the same states a left
+     click skips, and a dimmed mission ignores it too. On anything else it
+     does nothing.
    - **Rules a mission click discards.** Enemy force and side objective
      rules belong to their mission. Checking the first mission discards the
      `ANY MISSION` rules, and unchecking a mission discards its own. The
