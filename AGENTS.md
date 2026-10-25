@@ -360,3 +360,20 @@ Installed under `../tools/`; versions and paths in `../tools/README.md`.
   protected `data/game/*.dl_bin` files and the game halts on modified copies,
   so change behaviour at runtime from Lua.
 - Resource names hash with Murmur64A seed 0 (`archive.py` `resource_hash`).
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues on `lombax5832/MissionReroller`, through the
+`gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The default five: `needs-triage`, `needs-info`, `ready-for-agent`,
+`ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` is the glossary and `docs/HISTORY.md` the
+decision record. See `docs/agents/domain.md`.
